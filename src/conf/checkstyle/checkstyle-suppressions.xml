@@ -30,4 +30,8 @@
   <suppress checks="UnnecessaryParentheses" files=".*[/\\]test[/\\].*" />
   <suppress checks="LineLength" files=".*[/\\]test.*.properties" />
   <suppress checks="LocalFinalVariableName" files=".*[/\\]HypergeometricDistributionTest.java" />
+  <suppress checks="ParameterNumber" files=".*[/\\]TTestTest.java" />
+  <suppress checks="ParameterNumber" files=".*[/\\]OneWayAnovaTest.java" />
+  <suppress checks="ParameterNumber" files=".*[/\\]KolmogorovSmirnovTestTest.java" />
+  <suppress checks="MethodLength" files=".*[/\\]WilcoxonSignedRankTestTest.java" />
 </suppressions>
