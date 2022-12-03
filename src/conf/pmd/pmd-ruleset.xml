@@ -72,14 +72,19 @@
   <rule ref="category/java/bestpractices.xml/ArrayIsStoredDirectly">
     <properties>
       <!-- Array is generated internally in this case. -->
-      <property name="violationSuppressXPath" value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='DistributionException']"/>
+      <property name="violationSuppressXPath" value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='DistributionException'
+        or @SimpleName='Array2DRealSquareMatrix' or @SimpleName='Array2DBigFractionSquareMatrix']"/>
     </properties>
   </rule>
 
   <rule ref="category/java/codestyle.xml/ShortMethodName">
     <properties>
-      <!-- Allow 'of' for factory constructors. -->
-      <property name="violationSuppressXPath" value="//ClassOrInterfaceDeclaration[matches(@SimpleName, '^.*Distribution$')]"/>
+      <!-- Allow 'of' for factory constructors.
+           Allow GTest.g; TTest.t -->
+      <property name="violationSuppressXPath"
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[matches(@SimpleName, '^.*Distribution$')
+          or @SimpleName='GTest' or @SimpleName='TTest' or @SimpleName='AnovaSummaryStatistics'
+          or @SimpleName='KolmogorovSmirnovTest']"/>
     </properties>
   </rule>
 
@@ -93,13 +98,16 @@
   <rule ref="category/java/design.xml/NPathComplexity">
     <properties>
       <property name="violationSuppressXPath"
-        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='AbstractContinuousDistribution']"/>
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='AbstractContinuousDistribution'
+          or @SimpleName='KolmogorovSmirnovTest']"/>
     </properties>
   </rule>
   <rule ref="category/java/design.xml/CyclomaticComplexity">
     <properties>
       <!-- Increase from default of 10. -->
       <property name="methodReportLevel" value="20"/>
+      <property name="violationSuppressXPath"
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='KolmogorovSmirnovTest']"/>
     </properties>
   </rule>
   <rule ref="category/java/design.xml/AvoidDeeplyNestedIfStmts">
@@ -112,21 +120,38 @@
     <properties>
       <!-- Method length is due to comments. -->
       <property name="violationSuppressXPath"
-        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='AbstractContinuousDistribution']"/>
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='AbstractContinuousDistribution'
+          or @SimpleName='KolmogorovSmirnovTest']"/>
     </properties>
   </rule>
   <rule ref="category/java/design.xml/CognitiveComplexity">
     <properties>
       <!-- Methods AbstractContinuousDistribution inverseProbability (21) and
-        searchPlateau (26) exceed threshold of 15. -->
+        searchPlateau (26) exceed threshold of 15.
+        Individual method names are from KolmogorovSmirnovTest. -->
       <property name="violationSuppressXPath"
-        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='AbstractContinuousDistribution']"/>
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='AbstractContinuousDistribution']
+         or ../MethodDeclaration[@Name='pelzGood' or @Name='createExactH' or @Name='createRoundedH']"/>
     </properties>
   </rule>
   <rule ref="category/java/design.xml/GodClass">
     <properties>
       <property name="violationSuppressXPath"
-        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='NaturalRanking']"/>
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='NaturalRanking'
+          or @SimpleName='KolmogorovSmirnovTest']"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/design.xml/LogicInversion">
+    <properties>
+      <!-- Logic inversion allows detection of NaN for parameters that are expected in a range -->
+      <property name="violationSuppressXPath"
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='InferenceUtils']"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/design.xml/ExcessiveClassLength">
+    <properties>
+      <property name="violationSuppressXPath"
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='KolmogorovSmirnovTest']"/>
     </properties>
   </rule>
 
@@ -142,6 +167,13 @@
       <!-- size() method return the list size. -->
       <property name="violationSuppressXPath"
         value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='IntList']"/>
+      <property name="violationSuppressRegex" value=".*INSTANCE.*"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/errorprone.xml/TestClassWithoutTestCases">
+    <properties>
+      <property name="violationSuppressRegex"
+        value=".*'BinomialTest'.*|.*'ChiSquareTest'.*|.*'GTest'.*|.*'KolmogorovSmirnovTest'.*|.*'MannWhitneyUTest'.*|.*'TTest'.*|.*'WilcoxonSignedRankTest'.*"/>
     </properties>
   </rule>
 

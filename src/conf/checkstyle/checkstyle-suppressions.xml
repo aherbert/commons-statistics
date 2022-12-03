@@ -22,6 +22,7 @@
   <!-- Allow variable to match known equations. -->
   <suppress checks="LocalFinalVariableName" files=".*[/\\]ZipfDistribution.java" />
   <suppress checks="LocalFinalVariableName" files=".*[/\\]HypergeometricDistribution.java" />
+  <suppress checks="ParameterNumber" files=".*[/\\]KolmogorovSmirnovTest.java" />
   <!-- Be more lenient on tests. -->
   <suppress checks="Javadoc" files=".*[/\\]test[/\\].*" />
   <suppress checks="MultipleStringLiterals" files=".*[/\\]test[/\\].*" />

@@ -67,4 +67,11 @@
     <Bug pattern="EQ_COMPARETO_USE_OBJECT_EQUALS" />
   </Match>
 
+  <!-- False positive -->
+  <Match>
+    <Class name="org.apache.commons.statistics.inference.KolmogorovSmirnovTest" />
+    <Method name="pelzGood" />
+    <Bug pattern="DLS_DEAD_LOCAL_STORE" />
+  </Match>
+
 </FindBugsFilter>
