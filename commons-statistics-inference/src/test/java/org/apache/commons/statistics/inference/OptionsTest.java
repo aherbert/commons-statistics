@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Test cases for {@link Options}.
+ * Test cases for {@link Options2}.
  */
 class OptionsTest {
 
@@ -58,13 +58,12 @@ class OptionsTest {
     @Test
     void testOrElse() {
         final Object[] options = {A.ONE, B.TWO, C.THREE, D.FOUR, E.FIVE};
-        Assertions.assertSame(A.ONE, Options.orElse(A.TWO, options));
-        Assertions.assertSame(B.TWO, Options.orElse(B.ONE, options));
-        Assertions.assertSame(C.THREE, Options.orElse(C.ONE, options));
-        Assertions.assertSame(D.FOUR, Options.orElse(D.ONE, options));
-        Assertions.assertSame(E.FIVE, Options.orElse(E.ONE, options));
-        Assertions.assertSame(F.ONE, Options.orElse(F.ONE, options));
-        Assertions.assertSame(F.ONE, Options.orElse(F.ONE));
+        Assertions.assertSame(A.ONE, Options2.orElse(A.TWO, options));
+        Assertions.assertSame(B.TWO, Options2.orElse(B.ONE, options));
+        Assertions.assertSame(C.THREE, Options2.orElse(C.ONE, options));
+        Assertions.assertSame(D.FOUR, Options2.orElse(D.ONE, options));
+        Assertions.assertSame(E.FIVE, Options2.orElse(E.ONE, options));
+        Assertions.assertSame(F.ONE, Options2.orElse(F.ONE, options));
     }
 
     @Test
@@ -76,12 +75,21 @@ class OptionsTest {
         final EE e = new EE();
         final FF f = new FF();
         final Object[] options = {a, b, c, d, e};
-        Assertions.assertSame(a, Options.orElse(new AA(), options));
-        Assertions.assertSame(b, Options.orElse(new BB(), options));
-        Assertions.assertSame(c, Options.orElse(new CC(), options));
-        Assertions.assertSame(d, Options.orElse(new DD(), options));
-        Assertions.assertSame(e, Options.orElse(new EE(), options));
-        Assertions.assertSame(f, Options.orElse(f, options));
-        Assertions.assertSame(f, Options.orElse(f));
+        Assertions.assertSame(a, Options2.orElse(new AA(), options));
+        Assertions.assertSame(b, Options2.orElse(new BB(), options));
+        Assertions.assertSame(c, Options2.orElse(new CC(), options));
+        Assertions.assertSame(d, Options2.orElse(new DD(), options));
+        Assertions.assertSame(e, Options2.orElse(new EE(), options));
+        Assertions.assertSame(f, Options2.orElse(f, options));
+    }
+
+    @Test
+    void testIsPresent() {
+        final Object[] options = {A.ONE, D.THREE, D.FOUR};
+        Assertions.assertEquals(true, Options2.isPresent(A.ONE, options));
+        Assertions.assertEquals(false, Options2.isPresent(A.TWO, options));
+        Assertions.assertEquals(false, Options2.isPresent(D.TWO, options));
+        Assertions.assertEquals(true, Options2.isPresent(D.THREE, options));
+        Assertions.assertEquals(true, Options2.isPresent(D.FOUR, options));
     }
 }

@@ -330,11 +330,12 @@ class KolmogorovSmirnovTestTest {
                 KolmogorovSmirnovTest.test(x, y) :
                 KolmogorovSmirnovTest.test(x, y, b.build());
 
-            Assertions.assertEquals(hasTies, r.hasTies(), () -> h + " has ties");
             if (!hasTies) {
-                Assertions.assertEquals(false, r.hasSignificantTies(), () -> h + " has significant ties");
-            } else if (statistic[i] == 0) {
-                // Ties are always significant if the statistic is 0
+                // No ties; the upper bound should be the same
+                Assertions.assertEquals(r.getStatistic(), r.getUpperD(), () -> h + " upperD");
+                Assertions.assertEquals(r.getPValue(), r.getUpperPValue(), () -> h + " upperPValue");
+            } else if (i == 0 && statistic[0] == 0) {
+                // Ties are always significant if the two-sided statistic is 0
                 Assertions.assertEquals(true, r.hasSignificantTies(), () -> h + " has significant ties");
             }
 
@@ -885,7 +886,10 @@ class KolmogorovSmirnovTestTest {
         Arrays.sort(y);
         final boolean hasTies =
             Arrays.stream(x).filter(v -> Arrays.binarySearch(y, v) >= 0).findAny().isPresent();
-        Assertions.assertEquals(hasTies, r.hasTies(), "has ties");
+        if (hasTies && r.getStatistic() == 0) {
+            // Ties are always significant if the two-sided statistic is 0
+            Assertions.assertEquals(true, r.hasSignificantTies(), "has significant ties");
+        }
 
         // Should be the same if the ranking order is the same.
         final double[] combined = DoubleStream.concat(Arrays.stream(x), Arrays.stream(y)).toArray();
@@ -896,7 +900,8 @@ class KolmogorovSmirnovTestTest {
         final TwoResult r2 = KolmogorovSmirnovTest.test(rx, ry);
         Assertions.assertEquals(r.getStatistic(), r2.getStatistic(), "statistic");
         Assertions.assertEquals(r.getPValue(), r2.getPValue(), "p-value");
-        Assertions.assertEquals(r.hasTies(), r2.hasTies(), "has ties");
+        Assertions.assertEquals(r.getUpperD(), r2.getUpperD(), "upper D");
+        Assertions.assertEquals(r.getUpperPValue(), r2.getUpperPValue(), "upper P");
         Assertions.assertEquals(r.hasSignificantTies(), r2.hasSignificantTies(), "has significant ties");
 
         // Should be deterministic
@@ -1085,8 +1090,12 @@ class KolmogorovSmirnovTestTest {
         TestUtils.assertRelativelyEquals(0.0640394088669951, r.getStatistic(), 1e-15, "statistic");
         TestUtils.assertRelativelyEquals(0.9659836534406034, r.getPValue(), 1e-15, "p-value");
 
-        Assertions.assertEquals(true, r.hasTies(), "has ties");
         Assertions.assertEquals(true, r.hasSignificantTies(), "has significant ties");
+
+        // upper D == 0.6891891891891891
+        // upper P == 2.1202536288385873E-25
+        Assertions.assertTrue(r.getUpperD() > r.getStatistic(), "upper D");
+        Assertions.assertTrue(r.getUpperPValue() < r.getPValue(), "upper D");
 
         // XXX extract to a test for estimateP
 //        // The p-value is not close to p(D=0.0640) due to random tie resolution.
@@ -1591,30 +1600,50 @@ class KolmogorovSmirnovTestTest {
         Assertions.assertTrue(0 <= p && p <= 1, () -> "Invalid p-value: " + p);
     }
 
-//    @Test
-//    // XXX update to use estimateP with random walks
-//    void testMath1246() {
-//        final double[] x = {4, 5, 6, 7};
-//        final double[] y = {1, 2, 3, 4};
-//        final boolean strict = true;
-//        final double d1 = KolmogorovSmirnovTest.statistic(x, y);
-//        final double d2 = KolmogorovSmirnovTest.statistic(y, x);
-//        final double p1 = KolmogorovSmirnovTest.twoSampleExactP((long) (d1 * x.length * y.length), x.length, y.length, strict, true);
-//        Assertions.assertEquals(d1, d2);
-//
-//        // This will use the exactP method but resolve ties with random ordering
-//        final double p2 = KolmogorovSmirnovTest.test(x, y, strict);
-//        final double p3 = KolmogorovSmirnovTest.test(y, x, strict);
-//        Assertions.assertEquals(p2, p3, "tie resolution should be stable to argument order");
-//
-//        // Possible variations
-//        y[3] = 4.1;
-//        final double p4 = KolmogorovSmirnovTest.test(x, y, strict);
-//        y[3] = 3.9;
-//        final double p5 = KolmogorovSmirnovTest.test(x, y, strict);
-//        Assertions.assertNotEquals(p4, p5);
-//
-//        Assertions.assertTrue(p1 == p4 || p1 == p5, "statistic p-value");
-//        Assertions.assertTrue(p2 == p4 || p2 == p5, "test p-value");
-//    }
+    @Test
+    void testMath1246() {
+        final double[] x = {4, 5, 6, 7};
+        final double[] y = {1, 2, 3, 4};
+        final boolean strict = Options.defaults().isStrictInequality();
+        final Options.Builder b = Options.builder();
+        boolean significantTies = false;
+        for (final AlternativeHypothesis h : AlternativeHypothesis.values()) {
+            final Options opt = b.setAlternative(h).build();
+            final boolean twoSided = h == AlternativeHypothesis.TWO_SIDED;
+            final double d1 = KolmogorovSmirnovTest.statistic(x, y, h);
+            if (twoSided) {
+                final double d2 = KolmogorovSmirnovTest.statistic(y, x, h);
+                Assertions.assertEquals(d1, d2, "statistic should be stable to argument order");
+            }
+            final int gcd = 4;
+            final double p1 = KolmogorovSmirnovTest.twoSampleExactP(
+                (long) (d1 * x.length * y.length), x.length, y.length, gcd, strict, twoSided);
+
+            final TwoResult r1 = KolmogorovSmirnovTest.test(x, y, opt);
+            Assertions.assertEquals(p1, r1.getPValue(), "unexpected p-value");
+            if (twoSided) {
+                final TwoResult r2 = KolmogorovSmirnovTest.test(y, x, opt);
+                Assertions.assertEquals(r1.getPValue(), r2.getPValue(), "p-value should be stable to argument order");
+            }
+
+            // Possible variations for the tie
+            final double v = y[3];
+            y[3] = 4.1;
+            final double s4 = KolmogorovSmirnovTest.statistic(x, y, h);
+            final double p4 = KolmogorovSmirnovTest.test(x, y, opt).getPValue();
+            y[3] = 3.9;
+            final double s5 = KolmogorovSmirnovTest.statistic(x, y, h);
+            final double p5 = KolmogorovSmirnovTest.test(x, y, opt).getPValue();
+            // reset
+            y[3] = v;
+
+            significantTies |= s4 != s5;
+            Assertions.assertEquals(s4 != s5, r1.hasSignificantTies());
+
+            Assertions.assertEquals(Math.max(s4, s5), r1.getUpperD(), "upper D");
+            Assertions.assertEquals(Math.max(p4, p5), r1.getPValue(), "statistic p-value");
+            Assertions.assertEquals(Math.min(p4, p5), r1.getUpperPValue(), "upper D p-value");
+        }
+        Assertions.assertTrue(significantTies, "Test never created a significant tie");
+    }
 }

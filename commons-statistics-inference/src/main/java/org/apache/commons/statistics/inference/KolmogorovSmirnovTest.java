@@ -19,11 +19,9 @@ package org.apache.commons.statistics.inference;
 
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.SplittableRandom;
 import java.util.function.DoubleSupplier;
 import java.util.function.DoubleUnaryOperator;
 import java.util.function.IntToDoubleFunction;
-
 import org.apache.commons.numbers.combinatorics.BinomialCoefficientDouble;
 import org.apache.commons.numbers.combinatorics.Factorial;
 import org.apache.commons.numbers.core.ArithmeticUtils;
@@ -49,7 +47,7 @@ import org.apache.commons.rng.UniformRandomProvider;
  * follows:
  *
  * <ul>
- * <li>When both sample sizes are less than 10000, the method presented in [5]
+ * <li>When both sample sizes are less than 10000, the methods presented in [5,6]
  * is used to compute the exact p-value for the 2-sample test. The estimation of the p-value
  * can be expressed using strict or non-strict inequality.
  * <li>When the sample sizes, m and n, are larger the asymptotic
@@ -58,26 +56,30 @@ import org.apache.commons.rng.UniformRandomProvider;
  * distribution.
  * </ul>
  *
- * <p>For small samples (former case), if the data contains ties, these can be resolved
- * using random ordering of tied values. This effectively changes tied values so that
- * they are considered different. This is to be used when samples should not match but do
- * due to the limited precision of their {@code double} representation. Alternatively,
- * the {@link #estimateP(double[], double[], UniformRandomProvider, int, AlternativeHypothesis, boolean)}
+ * <p>For the two-sample test if the data contains ties there is no defined ordering in the tied
+ * region to use for the difference between the two empirical distributions. Each ordering of
+ * the tied region may create a different D statistic. All possible orderings generate a distribution
+ * for the D value. In this case the path with the minimum change on the D statistic is used.
+ * The path with the greatest change on the D statistic is also computed. If these two values
+ * are different then the tied region is known to generate a distribution for the D statistic;
+ * this occurrence is identified in the result. The
+ * {@link #estimateP(double[], double[], UniformRandomProvider, int, AlternativeHypothesis, boolean)}
  * method, modeled after <a href="http://sekhon.berkeley.edu/matching/ks.boot.html">ks.boot</a>
- * in the R Matching package [3], can be used if ties are known to be present in the data.
+ * in the R Matching package [3], can be used if significant ties are known to be present in the
+ * data.
  *
  * <p>In the two-sample case, \(D_{n,m}\) has a discrete distribution. This makes the p-value
- * associated with the null hypothesis \(H_0 : D_{n,m} &gt; d \) differ from \(H_0 : D_{n,m} \ge d \)
- * by the mass of the observed value \(d\). To distinguish these, the two-sample tests use a boolean
- * {@code strict} parameter. This parameter is ignored for large samples.
+ * associated with the null hypothesis \(H_0 : D_{n,m} \gt d \) differ from \(H_0 : D_{n,m} \ge d \)
+ * by the mass of the observed value \(d\). To distinguish these, the two-sample tests can use
+ * a strict equality parameter. This is ignored for large samples.
  *
  * <p>References:
  * <ol>
  * <li>
- * Marsaglia, G., Tsang, W. W., & Wang, J. (2003).
+ * Marsaglia, G., Tsang, W. W., &amp; Wang, J. (2003).
  * <a href="https://doi.org/10.18637/jss.v008.i18">Evaluating Kolmogorov's Distribution.</a>
  * Journal of Statistical Software, 8(18), 1–4.
- * <li>Simard, R., & L’Ecuyer, P. (2011).
+ * <li>Simard, R., &amp; L’Ecuyer, P. (2011).
  * <a href="https://doi.org/10.18637/jss.v039.i11">Computing the Two-Sided Kolmogorov-Smirnov Distribution.</a>
  * Journal of Statistical Software, 39(11), 1–18.
  * <li>Sekhon, J. S. (2011).
@@ -334,50 +336,105 @@ public final class KolmogorovSmirnovTest {
      * <p>This class is immutable.
      */
     public static final class TwoResult extends OneResult {
-        /** Flag to indicate that ties were present in the data. */
-        private final boolean ties;
-        /** Flag to indicate that ties were present in the data that can produce
-         * a more extreme D value. */
-        private final boolean significantTies;
+        /** Upper bound of the D statistic from all possible paths through regions with ties. */
+        private final double upperD;
+        /** The p-value of the upper D value. */
+        private final double upperP;
 
         /**
          * Create an instance.
          *
          * @param statistic Test statistic.
          * @param sign Sign of the statistic.
-         * @param ties Flag to indicate a tied region was present.
-         * @param significantTies Flag to indicate a tied region was present that could change the D value.
          * @param p Result p-value.
+         * @param upperD Upper bound of the D statistic from all possible paths through regions with ties.
+         * @param upperP The p-value of the upper D value.
          */
-        TwoResult(double statistic, int sign, boolean ties, boolean significantTies, double p) {
+        TwoResult(double statistic, int sign, double p, double upperD, double upperP) {
             super(statistic, sign, p);
-            this.ties = ties;
-            this.significantTies = significantTies;
+            this.upperD = upperD;
+            this.upperP = upperP;
         }
 
         /**
-         * Returns {@code true} if there were ties between samples.
+         * {@inheritDoc}
          *
-         * @return true if there were ties
-         * @see #hasSignificantTies()
+         * <p><strong>Ties</strong>
+         *
+         * <p>The presence of ties in the data creates a distribution for the D values generated
+         * by all possible orderings of the tied regions. This statistic is computed using the
+         * path with the <em>minimum</em> effect on the D statistic.
+         *
+         * <p>For a one-sided statistic D+ or D-, this is the lower bound of the D statistic.
+         *
+         * <p>For a two-sided statistic D, this may be <em>below</em> the lower bound of the
+         * distribution of all possible D values. This case occurs when the number of ties
+         * is very high and is identified by a {@link #getPValue() p-value} of 1.
+         *
+         * <p>If the two-sided statistic is zero this only occurs in the presence of ties:
+         * either the two arrays are identical, are 'identical' data of a single value
+         * (sample sizes may be different), or have a sequence of ties of 'identical' data
+         * with a net zero effect on the D statistic, e.g.
+         * <pre>
+         *  [1,2,3]           vs [1,2,3]
+         *  [0,0,0,0]         vs [0,0,0]
+         *  [0,0,0,0,1,1,1,1] vs [0,0,0,1,1,1]
+         * </pre>
          */
-        public boolean hasTies() {
-            return ties;
+        @Override
+        public double getStatistic() {
+            // Note: This method is here for documentation
+            return super.getStatistic();
         }
 
         /**
          * Returns {@code true} if there were ties between samples that occurred
-         * in a region which could change the D statistic if the ties were resolved.
+         * in a region which could change the D statistic if the ties were resolved to
+         * a defined order.
          *
          * <p>Ties between the data can be interpreted as if the values were different
          * but within machine epsilon. In this case the order within the tie region is not known.
          * If the most extreme ordering of any tied regions could create a larger D statistic
          * this method will return {@code true}.
          *
+         * <p>If there were no ties, or all possible orderings of tied regions create the same
+         * D statistic, this method returns {@code false}.
+         *
          * @return true if the D statistic could be changed by resolution of ties
          */
         public boolean hasSignificantTies() {
-            return significantTies;
+            return upperD > getStatistic();
+        }
+
+        /**
+         * Return the upper bound of the D statistic from all possible paths through regions with ties.
+         *
+         * <p>This will return a value equal to or greater than {@link #getStatistic()}.
+         *
+         * @return the upper bound of D
+         * @see #hasSignificantTies()
+         */
+        public double getUpperD() {
+            return upperD;
+        }
+
+        /**
+         * Return the p-value of the upper bound of the D statistic.
+         *
+         * <p>This will return a value equal to or less than {@link #getPValue()}. It
+         * may be orders of magnitude smaller.
+         *
+         * <p>Note: This p-value corresponds to the most extreme p-value from all possible
+         * orderings of tied regions. It is <strong>not</strong> recommended to use this to
+         * reject the null hypothesis. The upper bound of D and the corresponding p-value
+         * provide information that must be interpreted in the context of the sample data and
+         * used to inform a decision on the suitability of the test to the data.
+         *
+         * @return the p-value of the upper bound of D
+         * @see #getUpperD()
+         */
+        public double getUpperPValue() {
+            return upperP;
         }
     }
 
@@ -493,12 +550,55 @@ public final class KolmogorovSmirnovTest {
      * @see #statistic(double[], DoubleUnaryOperator, AlternativeHypothesis)
      */
     public static OneResult test(double[] x, DoubleUnaryOperator cdf, Options options) {
-        final AlternativeHypothesis alternative = options.getAlternative();
+        return test(x, cdf, options.getAlternative(), options.getPValueMethod());
+    }
+
+    /**
+     * Performs a one-sample Kolmogorov-Smirnov test evaluating the null hypothesis
+     * that {@code x} conforms to the distribution cumulative density function ({@code cdf}).
+     *
+     * <p>The test is defined by the {@link AlternativeHypothesis}:
+     * <ul>
+     * <li>Two-sided evaluates the null hypothesis that the two distributions are
+     * identical, \(F_n(i) = F(i)\) for all \( i \); the alternative is that the are not
+     * identical. The statistic is \( max(D_n^+, D_n^-) \) and the sign of \( D \) is provided.
+     * <li>Greater evaluates the null hypothesis that the \(F_n(i) &lt;= F(i)\) for all \( i \);
+     * the alternative is \(F_n(i) &gt; F(i)\) for at least one \( i \). The statistic is \( D_n^+ \).
+     * <li>Less evaluates the null hypothesis that the \(F_n(i) &gt;= F(i)\) for all \( i \);
+     * the alternative is \(F_n(i) &lt; F(i)\) for at least one \( i \). The statistic is \( D_n^- \).
+     * </ul>
+     *
+     * <p>The p-value method defaults to exact. The one-sided p-value uses Smirnov's stable formula:
+     *
+     * <p>\[ P(D_n^+ \ge x) = x \sum_{j=0}^{\floor{n(1-x)}} \binom(n, j) (\frac{j}{n} + x)^{j-1} (1-x-\frac{j}{n})^{n-j} \]
+     *
+     * <p>The two-sided test p-value is computed using methods described in
+     * Simard &amp; L’Ecuyer (2011). The two-sided test supports an asymptotic p-value
+     * using Kolmogorov's formula:
+     *
+     * <p>\[ \lim_{n\to\infty} P(\sqrt{n}D_n &gt; z) = 2 \sum_{i=1}^\infty (-1)^(i-1) e^{-2 i^2 z^2} \]
+     *
+     * <p>Supports the following options (with defaults):
+     *
+     * <ul>
+     * <li>{@link AlternativeHypothesis AlternativeHypothesis = two-sided}
+     * <li>{@link PValueMethod PValueMethod = auto}
+     * </ul>
+     *
+     * @param x Sample being being evaluated.
+     * @param cdf Reference cumulative distribution function.
+     * @param options Test options.
+     * @return test result
+     * @throws IllegalArgumentException if {@code data} does not have length at least 2; or contains NaN values.
+     * @see #statistic(double[], DoubleUnaryOperator, AlternativeHypothesis)
+     */
+    public static OneResult test(double[] x, DoubleUnaryOperator cdf, Object... options) {
+        final AlternativeHypothesis alternative = Options2.orElse(AlternativeHypothesis.TWO_SIDED, options);
         final int[] sign = {0};
         final double d = computeStatistic(x, cdf, alternative, sign);
         double p;
         if (alternative == AlternativeHypothesis.TWO_SIDED) {
-            PValueMethod method = options.getPValueMethod();
+            PValueMethod method = Options2.orElse(PValueMethod.AUTO, options);
             if (method == PValueMethod.AUTO) {
                 // No switch to the asymptotic for large n
                 method = PValueMethod.EXACT;
@@ -579,17 +679,75 @@ public final class KolmogorovSmirnovTest {
      * @see #statistic(double[], double[], AlternativeHypothesis)
      */
     public static TwoResult test(double[] x, double[] y, Options options) {
+        return test(x, y, options.getAlternative(), options.getPValueMethod(),
+            options.isStrictInequality() ?  Inequality.STRICT : Inequality.NON_STRICT);
+    }
+
+    /**
+     * Performs a two-sample Kolmogorov-Smirnov test on samples {@code x} and {@code y}.
+     * Test the empirical distributions \(F_n\) and \(F_m\) where \(n\) is the length
+     * of {@code x}, \(m\) is the length of {@code y}, \(F_n\) is the empirical distribution
+     * that puts mass \(1/n\) at each of the values in {@code x} and \(F_m\) is the empirical
+     * distribution that puts mass \(1/\) of the {@code y} values.
+     *
+     * <p>The test is defined by the {@link AlternativeHypothesis}:
+     * <ul>
+     * <li>Two-sided evaluates the null hypothesis that the two distributions are
+     * identical, \(F_n(i) = F_m(i)\) for all \( i \); the alternative is that the are not
+     * identical. The statistic is \( max(D_n^+, D_n^-) \) and the sign of \( D \) is provided.
+     * <li>Greater evaluates the null hypothesis that the \(F_n(i) &lt;= F_m(i)\) for all \( i \);
+     * the alternative is \(F_n(i) &gt; F_m(i)\) for at least one \( i \). The statistic is \( D_n^+ \).
+     * <li>Less evaluates the null hypothesis that the \(F_n(i) &gt;= F_m(i)\) for all \( i \);
+     * the alternative is \(F_n(i) &lt; F_m(i)\) for at least one \( i \). The statistic is \( D_n^- \).
+     * </ul>
+     *
+     * <p>If the {@link PValueMethod p-value method} is auto, then an exact p computation
+     * is attempted if both sample sizes are less than 10000; otherwise an asymptotic p-value
+     * is returned.
+     *
+     * <p>The exact p-value can be computed using a strict inquality as
+     * \(P(D_{n,m} &gt; d)\); otherwise \(P(D_{n,m} \ge d)\). If the computation
+     * of the exact p-value fails due to large sample sizes, then the computation
+     * returns an asymptotic p-value.
+     *
+     * <p>This method detects ties in the input data. Any tied region is traversed entirely
+     * and the effect on the D value evaluated at the end of the tied region. However
+     * tied regions can be categorised as different values that are within machine epsilon
+     * and the ordering within the effectively tied region is unknown.
+     * The most extreme path through each tie region is evaluated to determine the
+     * effect of any ties. If this creates a statistic with a greater magnitude than
+     * the returned D statistic then it is possible that a resolution of ties can
+     * create a more extreme D value and the p-value is an over estimate for these cases.
+     * The presence of any significant tied regions is returned in the result.
+     * The method {@link #estimateP(double[], double[], UniformRandomProvider, int, AlternativeHypothesis, boolean) estimateP}
+     * can be used to generate p-value estimates for data that contains tied values.
+     *
+     * <p>Supports the following options (with defaults):
+     *
+     * <ul>
+     * <li>{@link AlternativeHypothesis AlternativeHypothesis = two-sided}
+     * <li>{@link PValueMethod PValueMethod = auto}
+     * <li>{@link Inequality Inequality = non-strict}
+     * </ul>
+     *
+     * @param x First sample.
+     * @param y Second sample.
+     * @param options Test options.
+     * @return test result
+     * @throws IllegalArgumentException if either {@code x} or {@code y} does not
+     * have length at least 2; or contain NaN values.
+     * @see #statistic(double[], double[], AlternativeHypothesis)
+     */
+    public static TwoResult test(double[] x, double[] y, Object... options) {
         final int n = checkArrayLength(x);
         final int m = checkArrayLength(y);
-        final AlternativeHypothesis alternative = options.getAlternative();
-        PValueMethod method = options.getPValueMethod();
+        final AlternativeHypothesis alternative = Options2.orElse(AlternativeHypothesis.TWO_SIDED, options);
+        PValueMethod method = Options2.orElse(PValueMethod.AUTO, options);
         final int[] sign = {0};
         final long[] tiesD = {0, 0};
 
         final long dnm = computeIntegralKolmogorovSmirnovStatistic(x.clone(), y.clone(),
                 alternative, sign, tiesD);
-        final boolean ties = tiesD[0] != 0;
-        final boolean significantTies = tiesD[1] > dnm;
 
         // Compute p-value. Note that the p-value is not invalidated by ties; it is the
         // D statistic that could be invalidated by resolution of the ties. So compute
@@ -601,19 +759,24 @@ public final class KolmogorovSmirnovTest {
                 PValueMethod.ASYMPTOTIC;
         }
         final int gcd = ArithmeticUtils.gcd(n, m);
-        // Note: Integer division using the gcd is intentional
-        final double statistic = (dnm / gcd) / ((double) n * (m / gcd));
+        final double d = computeD(dnm, n, m, gcd);
 
-        // Exact computation returns -1 if it cannot compute.
-        double p = -1;
+        final boolean exact = method == PValueMethod.EXACT;
+        final boolean strict = Options2.isPresent(Inequality.STRICT, options);
         final boolean twoSided = alternative == AlternativeHypothesis.TWO_SIDED;
-        if (method == PValueMethod.EXACT) {
-            p = twoSampleExactP(dnm, n, m, gcd, options.isStrictInequality(), twoSided);
+        final double p = twoSampleP(dnm, n, m, gcd, d, exact, strict, twoSided);
+
+        if (tiesD[1] > dnm) {
+            // Compute the upper bound on D.
+            // The p-value is also computed. The alternative is to save the options
+            // in the result with (upper dnm, n, m) and compute it on-demand.
+            // Note detection of whether the exact P computation is possible is based on
+            // n and m, thus this will use the same computation.
+            final double d2 = computeD(tiesD[1], n, m, gcd);
+            final double p2 = twoSampleP(tiesD[1], n, m, gcd, d2, exact, strict, twoSided);
+            return new TwoResult(d, sign[0], p, d2, p2);
         }
-        if (p < 0) {
-            p = twoSampleApproximateP(statistic, n, m, twoSided);
-        }
-        return new TwoResult(statistic, sign[0], ties, significantTies, p);
+        return new TwoResult(d, sign[0], p, d, p);
     }
 
     /**
@@ -895,91 +1058,6 @@ public final class KolmogorovSmirnovTest {
     }
 
     /**
-     * Computes the two-sample Kolmogorov-Smirnov test statistic.
-     *
-     * <p>This method corrects ties between samples. Any sequence of tied values is randomly
-     * shuffled and processed as if the randomly ordered tied values were unique.
-     *
-     * <p>Note: The input arrays are assumed to be sorted with no NaN values.
-     * This is for convenience to allow arrays sorted by previous computation to be reused
-     * when ties are detected.
-     *
-     * <p><strong>Warning: </strong>Note that the statistic is <em>signed</em>. Effectively it is
-     * {@code max(|D+|, |D-|)}. If the statistic is zero the two arrays are identical, or
-     * are 'identical' data of a single value (sample sizes may be different).
-     *
-     * @param sx First sorted sample
-     * @param sy Second sorted sample
-     * @param seed Random seed.
-     * @return signed test statistic \(n m D_{n,m}\) used to evaluate the null hypothesis that
-     * {@code x} and {@code y} represent samples from the same underlying distribution
-     */
-    // XXX - move this to an option in estimateP to walk up to n-random paths through tied sections
-    static long integralKolmogorovSmirnovStatisticRandomTies(double[] sx, double[] sy, long seed) {
-        final int n = sx.length;
-        final int m = sy.length;
-
-        // Small state size RNG for fast creation
-        final UniformRandomProvider rng = new SplittableRandom(seed)::nextLong;
-
-        int i = 0;
-        int j = 0;
-        long d = 0;
-        long plus = 0;
-        long minus = 0;
-        // Count length of tied data
-        int cx;
-        int cy;
-        do {
-            // No NaN values so compare using <= (not Double.compare)
-            final double z = sx[i] <= sy[j] ? sx[i] : sy[j];
-            cx = i;
-            cy = j;
-            while (i < n && sx[i] <= z) {
-                i++;
-            }
-            while (j < m && sy[j] <= z) {
-                j++;
-            }
-            // lengths
-            cx = i - cx;
-            cy = j - cy;
-
-            // Only cx or cy should be non-zero (not both), else there are ties between samples.
-            // Detect using sign bit xor of adjusted counts. If both are above -1
-            // the xor will be positive and ties are present.
-            if (((cx - 1) ^ (cy - 1)) >= 0) {
-                // Resolve tie randomly.
-                do {
-                    // A negative value picks x, else y.
-                    if (rng.nextInt(-cx, cy) < 0) {
-                        cx--;
-                        d += m;
-                        plus = d > plus ? d : plus;
-                    } else {
-                        cy--;
-                        d -= n;
-                        minus = d < minus ? d : minus;
-                    }
-                } while (((cx - 1) ^ (cy - 1)) >= 0);
-            }
-
-            // Here only 1 of cx or cy are non-zero.
-            // Handle ties within the same sample using a multiple of the count.
-            if (cx == 0) {
-                d -= (long) cy * n;
-                minus = d < minus ? d : minus;
-            } else {
-                d += (long) cx * m;
-                plus = d > plus ? d : plus;
-            }
-        } while (i < n && j < m);
-        // This returns the signed max difference
-        return -minus > plus ? minus : plus;
-    }
-
-
-    /**
      * Creates a sampler to sample randomly from the combined distribution of the two samples.
      *
      * @param x First sample.
@@ -1006,6 +1084,51 @@ public final class KolmogorovSmirnovTest {
             final int i = rng.nextInt(-n, m);
             return next[i >>> 31].applyAsDouble(i);
         };
+    }
+
+    /**
+     * Compute the D statistic from the integral D value.
+     *
+     * @param dnm Integral D-statistic value (in [0, n*m]).
+     * @param n First sample size.
+     * @param m Second sample size.
+     * @param gcd Greatest common divisor of n and m.
+     * @return D-statistic value (in [0, 1]).
+     */
+    private static double computeD(long dnm, int n, int m, int gcd) {
+        // Note: Integer division using the gcd is intentional
+        final long a = dnm / gcd;
+        final int b = m / gcd;
+        return a / ((double) n * b);
+    }
+
+    /**
+     * Computes \(P(D_{n,m} &gt; d)\) for the 2-sample Kolmogorov-Smirnov statistic.
+     *
+     * @param dnm Integral D-statistic value (in [0, n*m]).
+     * @param n First sample size.
+     * @param m Second sample size.
+     * @param gcd Greatest common divisor of n and m.
+     * @param d D-statistic value (in [0, 1]).
+     * @param exact whether to compute the exact probability; otherwise approximate.
+     * @param strict whether or not the probability to compute is expressed as a strict
+     * inequality.
+     * @param twoSided whether D refers to D or D+.
+     * @return probability
+     * @see #twoSampleExactP(long, int, int, int, boolean, boolean)
+     * @see #twoSampleApproximateP(double, int, int, boolean)
+     */
+    private static double twoSampleP(long dnm, int n, int m, int gcd, double d,
+                                     boolean exact, boolean strict, boolean twoSided) {
+        // Exact computation returns -1 if it cannot compute.
+        double p = -1;
+        if (exact) {
+            p = twoSampleExactP(dnm, n, m, gcd, strict, twoSided);
+        }
+        if (p < 0) {
+            p = twoSampleApproximateP(d, n, m, twoSided);
+        }
+        return p;
     }
 
     /**
@@ -1145,7 +1268,6 @@ public final class KolmogorovSmirnovTest {
         for (int i = 1; i <= n; i++) {
             im += m;
             final int lastStartJ = startJ;
-            final int lastLength = length;
 
             // Compute C_i,j for startJ <= j < endJ
             // startJ = floor((im - dnm) / n) + 1      in [0, m]
@@ -1177,6 +1299,7 @@ public final class KolmogorovSmirnovTest {
 
             // Must keep the remaining values in C_i,j as 1 to allow
             // cij[j - lastStartJ] * i == i when (j - lastStartJ) > lastLength
+            final int lastLength = length;
             length = endJ - startJ;
             for (int j = lastLength - length - 1; j >= 0; j--) {
                 cij[length + j] = 1;
@@ -1392,13 +1515,8 @@ public final class KolmogorovSmirnovTest {
         final double mm = Math.max(n, m);
         if (twoSided) {
             // Smirnov's asymptotic formula:
-            // P(sqrt(N) D_n > x) = 2 \sum_{i=1}^\infty (-1)^(i-1) e^{-2 i^2 x^2}
-            // x^2 = N * d * d
+            // P(sqrt(N) D_n > x)
             // N = m*n/(m+n)
-            // Comparison of twoSampleExactP(d*n*m, n, m, ...) with Two.sf or an implementation of
-            // the KS sum over a range of N and d where the p-value is a typical alpha threshold
-            // of 0.001 to 0.1 shows that the Two.sf has lower RMSD relative error except when N is
-            // very small (e.g. 4); here neither approximate p-value is close to the exact P.
             return KolmogorovSmirnovDistribution.Two.sf(d, (int) Math.round(mm * nn / (mm + nn)));
         }
         // one-sided

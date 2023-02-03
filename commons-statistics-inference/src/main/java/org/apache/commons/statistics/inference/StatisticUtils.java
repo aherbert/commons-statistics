@@ -31,6 +31,21 @@ final class StatisticUtils {
     private StatisticUtils() {}
 
     /**
+     * Compute {@code x - y}.
+     *
+     * <p>If {@code y} is zero the original array is returned, else a new array is created
+     * with the difference.
+     *
+     * @param x Array.
+     * @param y Value.
+     * @return x - y
+     * @throws NullPointerException if {@code x} is null and {@code y} is non-zero
+     */
+    static double[] subtract(double[] x, double y) {
+        return y == 0 ? x : Arrays.stream(x).map(v -> v - y).toArray();
+    }
+
+    /**
      * Compute the degrees of freedom as {@code n - 1 - m}.
      *
      * <p>This method is common functionality shared between the Chi-square test and
@@ -111,11 +126,11 @@ final class StatisticUtils {
      * Returns the arithmetic mean of the entries in the input array,
      * or {@code NaN} if the array is empty.
      *
-     * @param sample1 the input array
+     * @param x Values.
      * @return the mean of the values or NaN if length = 0
      */
-    static double mean(long[] sample1) {
-        final int n = sample1.length;
+    static double mean(long[] x) {
+        final int n = x.length;
         if (n == 0) {
             return Double.NaN;
         }
@@ -124,7 +139,7 @@ final class StatisticUtils {
         // so can be exactly represented in a double-double. Cumulative error in the sum
         // is (n-1) * 4eps with eps = 2^-106. The sum should be exact to double precision.
         final DD dd = DD.create();
-        for (final long v : sample1) {
+        for (final long v : x) {
             add(dd, v);
         }
 
@@ -142,11 +157,11 @@ final class StatisticUtils {
      * Journal of the American Statistical Association, Vol. 69, No. 348 (Dec., 1974), pp.
      * 859-866.
      *
-     * @param sample1 the input array
+     * @param x Values.
      * @return the mean of the values or NaN if length = 0
      */
-    static double mean(double[] sample1) {
-        final int n = sample1.length;
+    static double mean(double[] x) {
+        final int n = x.length;
         // No check for n == 0 -> return NaN.
         // This internal method is only called with non-zero length arrays.
         // The divide by zero creates NaN anyway.
@@ -157,10 +172,10 @@ final class StatisticUtils {
         // when summing differences which can create cancellation: x + -x => 0.
 
         // Compute initial estimate using definitional formula
-        final double xbar = Arrays.stream(sample1).sum() / n;
+        final double mean = Arrays.stream(x).sum() / n;
 
         // Compute correction factor in second pass
-        return xbar + Arrays.stream(sample1).map(x -> x - xbar).sum() / n;
+        return mean + Arrays.stream(x).map(v -> v - mean).sum() / n;
     }
 
     /**
@@ -171,15 +186,15 @@ final class StatisticUtils {
      * concatenated into a single array. Supports a combined length above the maximum array
      * size.
      *
-     * @param samples the input array
+     * @param samples Values.
      * @return the mean of the values or NaN if length = 0
      * @see #mean(double[])
      */
     static double mean(Collection<double[]> samples) {
         // See above for computation details
         final long n = samples.stream().mapToInt(x -> x.length).sum();
-        final double xbar = samples.stream().flatMapToDouble(Arrays::stream).sum() / n;
-        return xbar + samples.stream().flatMapToDouble(Arrays::stream).map(x -> x - xbar).sum() / n;
+        final double mean = samples.stream().flatMapToDouble(Arrays::stream).sum() / n;
+        return mean + samples.stream().flatMapToDouble(Arrays::stream).map(v -> v - mean).sum() / n;
     }
 
     /**
@@ -196,12 +211,12 @@ final class StatisticUtils {
      *
      * <p>Returns 0 for a single-value (i.e. length = 1) sample.
      *
-     * @param sample1 the input array
+     * @param x Values.
      * @param mean the mean of the input array
      * @return the variance of the values or NaN if the array is empty
      */
-    static double variance(double[] sample1, double mean) {
-        final int n = sample1.length;
+    static double variance(double[] x, double mean) {
+        final int n = x.length;
         // No check for n == 0 -> return NaN.
         // This internal method is only called with non-zero length arrays.
         // The input mean of NaN for zero length creates NaN anyway.
@@ -214,8 +229,8 @@ final class StatisticUtils {
         // This compensation term for the sum of deviations from the mean -> 0.
         // We sum the squares in standard precision as there is no cancellation of summands.
         final double[] sumSq = {0};
-        final double sum2 = Arrays.stream(sample1).map(x -> {
-            final double dx = x - mean;
+        final double sum2 = Arrays.stream(x).map(v -> {
+            final double dx = v - mean;
             sumSq[0] += dx * dx;
             return dx;
         }).sum();
@@ -231,27 +246,27 @@ final class StatisticUtils {
      * input arrays.
      *
      * <pre>
-     * sum(sample1[i] - sample2[i]) / sample1.length
+     * sum(x[i] - y[i]) / x.length
      * </pre>
      *
-     * <p>This computes the same result as creating an array {@code x = sample1 - sample2}
-     * and calling {@link #mean(double[]) mean(x)}, but without the intermediate array
+     * <p>This computes the same result as creating an array {@code z = x - y}
+     * and calling {@link #mean(double[]) mean(z)}, but without the intermediate array
      * allocation.
      *
-     * @param sample1 the first array
-     * @param sample2 the second array
+     * @param x First array.
+     * @param y Second array.
      * @return mean of paired differences
      * @throws IllegalArgumentException if the arrays do not have the same length.
      * @see #mean(double[])
      */
-    static double meanDifference(double[] sample1, double[] sample2) {
-        final int n = sample1.length;
-        if (n != sample2.length) {
-            throw new InferenceException(InferenceException.VALUES_MISMATCH, n, sample2.length);
+    static double meanDifference(double[] x, double[] y) {
+        final int n = x.length;
+        if (n != y.length) {
+            throw new InferenceException(InferenceException.VALUES_MISMATCH, n, y.length);
         }
         // See mean(double[]) for details.
-        final double xbar = IntStream.range(0, n).mapToDouble(i -> sample1[i] - sample2[i]).sum() / n;
-        return xbar + IntStream.range(0, n).mapToDouble(i -> (sample1[i] - sample2[i]) - xbar).sum() / n;
+        final double mean = IntStream.range(0, n).mapToDouble(i -> x[i] - y[i]).sum() / n;
+        return mean + IntStream.range(0, n).mapToDouble(i -> (x[i] - y[i]) - mean).sum() / n;
     }
 
     /**
@@ -259,25 +274,25 @@ final class StatisticUtils {
      * the input arrays.
      *
      * <pre>
-     * var(sample1[i] - sample2[i])
+     * var(x[i] - y[i])
      * </pre>
      *
-     * <p>This computes the same result as creating an array {@code x = sample1 - sample2}
-     * and calling {@link #variance(double[], double) variance(x, mean(x))}, but without the
+     * <p>This computes the same result as creating an array {@code z = x - y}
+     * and calling {@link #variance(double[], double) variance(z, mean(z))}, but without the
      * intermediate array allocation.
      *
-     * @param sample1 the first array
-     * @param sample2 the second array
+     * @param x First array.
+     * @param y Second array.
      * @param mean the mean difference between corresponding entries
      * @return variance of paired differences
      * @throws IllegalArgumentException if the arrays do not have the same length.
      * @see #meanDifference(double[], double[])
      * @see #variance(double[], double)
      */
-    static double varianceDifference(double[] sample1, double[] sample2, double mean) {
-        final int n = sample1.length;
-        if (n != sample2.length) {
-            throw new InferenceException(InferenceException.VALUES_MISMATCH, n, sample2.length);
+    static double varianceDifference(double[] x, double[] y, double mean) {
+        final int n = x.length;
+        if (n != y.length) {
+            throw new InferenceException(InferenceException.VALUES_MISMATCH, n, y.length);
         }
         // See variance(double[]) for details.
         if (n == 1) {
@@ -285,7 +300,7 @@ final class StatisticUtils {
         }
         final double[] sumSq = {0};
         final double sum2 = IntStream.range(0, n).mapToDouble(i -> {
-            final double dx = (sample1[i] - sample2[i]) - mean;
+            final double dx = (x[i] - y[i]) - mean;
             sumSq[0] += dx * dx;
             return dx;
         }).sum();

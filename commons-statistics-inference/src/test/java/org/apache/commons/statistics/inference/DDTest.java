@@ -1239,9 +1239,10 @@ class DDTest {
         // Javadoc for the method states accuracy is 1 ULP to be conservative.
         // If correctly performed in triple-double precision it should be exact except
         // for cases of final rounding error when converted to double-double.
-        // Test passes at: 0.5 * eps with eps = 2^-106.
+        // Test typically passes at: 0.5 * eps with eps = 2^-106.
         // Higher powers may have lower accuracy but are not tested.
-        TestUtils.assertScaledEquals(e, f, exp, 0x1.0p-107, () -> msg.get());
+        // Update tolerance to 1.0625 * eps as 1 case of rounding error has been observed.
+        TestUtils.assertScaledEquals(e, f, exp, 0x1.1p-107, () -> msg.get());
     }
 
     @ParameterizedTest
@@ -1451,6 +1452,13 @@ class DDTest {
         builder.add(Arguments.of(0.991455078125, 0.0, 64, 0x1.0p-53, 0x1.0p-100));
         builder.add(Arguments.of(0.9530029296875, 0.0, 379, 0x1.0p-53, 0x1.0p-100));
         builder.add(Arguments.of(0.9774169921875, 0.0, 179, 0x1.0p-53, 0x1.0p-100));
+        // Fails powScaled at 2^-107 due to a rounding error. Requires eps = 1.0047 * 2^-107.
+        // This is a possible error in intermediate triple-double multiplication or
+        // rounding of the triple-double to a double-double. A final rounding error could
+        // be fixed as the power function norm3 normalises intermediates back to
+        // a triple-double from a quad-double result. This discards rounding information
+        // that could be used to correctly round the triple-double to a double-double.
+        builder.add(Arguments.of(0.5319568842468022, -3.190137112420756E-17, 2473, 0x1.0p-51, 0x1.0p-94));
 
         return builder.build();
     }

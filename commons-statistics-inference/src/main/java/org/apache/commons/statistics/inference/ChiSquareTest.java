@@ -66,7 +66,7 @@ public final class ChiSquareTest {
              *
              * @param v Value.
              * @return a reference to {@code this}
-             * @throw IllegalArgumentException if the adjustment is negative.
+             * @throws IllegalArgumentException if the adjustment is negative.
              * @see Options#getDegreesOfFreedomAdjustment()
              */
             public Builder setDegreesOfFreedomAdjustment(int v) {
@@ -386,7 +386,32 @@ public final class ChiSquareTest {
      * the adjusted degrees of freedom are not strictly positive
      */
     public static SignificanceResult test(double[] expected, long[] observed, Options options) {
-        final int df = StatisticUtils.computeDegreesOfFreedom(observed.length, options.getDegreesOfFreedomAdjustment());
+        return test(expected, observed,
+            DegreesOfFreedomAdjustment.of(options.getDegreesOfFreedomAdjustment()));
+    }
+
+    /**
+     * Perform a Chi-square test evaluating the null hypothesis that the {@code observed}
+     * counts conform to the {@code expected} counts.
+     *
+     * <p>Supports the following options (with defaults):
+     *
+     * <ul>
+     * <li>{@link DegreesOfFreedomAdjustment DegreesOfFreedomAdjustment = 0}
+     * </ul>
+     *
+     * @param expected Expected frequency counts.
+     * @param observed Observed frequency counts.
+     * @param options Test options.
+     * @return test result
+     * @throws IllegalArgumentException if the sample size is less than 2; the array
+     * sizes do not match; {@code expected} has entries that are not strictly
+     * positive; {@code observed} has negative entries; all the the observations are zero; or
+     * the adjusted degrees of freedom are not strictly positive
+     */
+    public static SignificanceResult test(double[] expected, long[] observed, Object... options) {
+        final int df = StatisticUtils.computeDegreesOfFreedom(observed.length,
+                Options2.orElse(DegreesOfFreedomAdjustment.ZERO, options).intValue());
         final double chi2 = statistic(expected, observed);
         final double p = computeP(chi2, df);
         return new BaseSignificanceResult(chi2, p);

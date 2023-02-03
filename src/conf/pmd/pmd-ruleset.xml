@@ -101,6 +101,13 @@
         value="./ancestor-or-self::ClassOrInterfaceDeclaration[matches(@SimpleName, '^.*Builder$')]"/>
     </properties>
   </rule>
+  <rule ref="category/java/codestyle.xml/PrematureDeclaration">
+    <properties>
+      <!-- False positive as lastStartJ must be stored before startJ is recomputed -->
+      <property name="violationSuppressXPath"
+        value="./ancestor-or-self::MethodDeclaration[@Name='twoSampleTwoSidedPStabilizedInner']"/>
+    </properties>
+  </rule>
 
   <rule ref="category/java/documentation.xml/CommentSize">
     <properties>
@@ -171,6 +178,14 @@
       <property name="violationSuppressXPath"
         value="./ancestor-or-self::ClassOrInterfaceDeclaration[@SimpleName='KolmogorovSmirnovTest'
           or @SimpleName='KolmogorovSmirnovDistribution' or @SimpleName='DD']"/>
+    </properties>
+  </rule>
+  <rule ref="category/java/design.xml/UselessOverridingMethod">
+    <properties>
+      <!-- overridden in the inference module for documentation -->
+      <property name="violationSuppressXPath"
+        value="./ancestor-or-self::ClassOrInterfaceDeclaration[matches(@SimpleName, '^.*Options$') or
+          matches(@SimpleName, '^.*Result$')]"/>
     </properties>
   </rule>
 

@@ -17,7 +17,7 @@
 package org.apache.commons.statistics.inference;
 
 /**
- * Utility validation and computation methods.
+ * Utility validation methods.
  *
  * @since 1.1
  */

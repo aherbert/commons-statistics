@@ -75,7 +75,7 @@ public final class GTest {
              *
              * @param v Value.
              * @return a reference to {@code this}
-             * @throw IllegalArgumentException if the adjustment is negative.
+             * @throws IllegalArgumentException if the adjustment is negative.
              * @see Options#getDegreesOfFreedomAdjustment()
              */
             public Builder setDegreesOfFreedomAdjustment(int v) {

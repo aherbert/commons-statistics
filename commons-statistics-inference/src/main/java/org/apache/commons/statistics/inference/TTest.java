@@ -60,6 +60,8 @@ public final class TTest {
         private final AlternativeHypothesis alternative;
         /** Assume the two samples have the same population variance. */
         private final boolean equalVariances;
+        /** The true value of the mean (or difference in means for a two sample test). */
+        private final double mu;
 
         /**
          * Builder for the {@link Options}.
@@ -69,6 +71,8 @@ public final class TTest {
             private AlternativeHypothesis alternative;
             /** Assume the two samples have the same population variance. */
             private boolean equalVariances;
+            /** The true value of the mean (or difference in means for a two sample test). */
+            private double mu;
 
             /**
              * @param source Source to copy.
@@ -76,6 +80,7 @@ public final class TTest {
             Builder(Options source) {
                 alternative = source.alternative;
                 equalVariances = source.equalVariances;
+                mu = source.mu;
             }
 
             /**
@@ -103,6 +108,18 @@ public final class TTest {
             }
 
             /**
+             * Set the expected value of the mean (or difference in means for a two-sample test).
+             *
+             * @param v Value.
+             * @return a reference to {@code this}
+             * @see Options#getMu()
+             */
+            public Builder setMu(double v) {
+                mu = v;
+                return this;
+            }
+
+            /**
              * Builds the options.
              *
              * @return the options
@@ -118,6 +135,7 @@ public final class TTest {
         Options() {
             alternative = AlternativeHypothesis.TWO_SIDED;
             equalVariances = false;
+            mu = 0;
         }
 
         /**
@@ -126,6 +144,7 @@ public final class TTest {
         Options(Builder source) {
             alternative = source.alternative;
             equalVariances = source.equalVariances;
+            mu = source.mu;
         }
 
         /**
@@ -134,6 +153,7 @@ public final class TTest {
          * <ul>
          * <li>{@link #getAlternative getAlternative = two-sided}
          * <li>{@link #isEqualVariances() isEqualVariances = false}
+         * <li>{@link #getMu() getMu = 0}
          * </ul>
          *
          * @return the options
@@ -183,6 +203,15 @@ public final class TTest {
         public boolean isEqualVariances() {
             return equalVariances;
         }
+
+        /**
+         * Return the expected value of the mean (or difference in means for a two-sample test).
+         *
+         * @return the expected mean
+         */
+        public double getMu() {
+            return mu;
+        }
     }
 
     /**
@@ -226,7 +255,7 @@ public final class TTest {
      *
      * <p>\[ t = \frac{m - \mu}{ \sqrt{ \frac{v}{n} } \]
      *
-     * @param mu comparison constant
+     * @param mu Expected mean.
      * @param m Sample mean.
      * @param v Sample variance.
      * @param n Sample size.
@@ -237,48 +266,53 @@ public final class TTest {
     public static double statistic(double mu, double m, double v, long n) {
         InferenceUtils.checkNonNegative(v);
         checkSampleSize(n);
-        return computeT(mu, m, v, n);
+        return computeT(m - mu, v, n);
     }
 
     /**
      * Computes a one-sample t statistic comparing the mean of the sample to {@code mu}.
      *
-     * @param mu comparison constant
-     * @param sample Sample values.
+     * @param mu Expected mean.
+     * @param x Sample values.
      * @return t statistic
      * @throws IllegalArgumentException if the number of samples is {@code < 2}
      * @see #statistic(double, double, double, long)
      */
-    public static double statistic(double mu, double[] sample) {
-        final long n = checkSampleSize(sample.length);
-        final double m = StatisticUtils.mean(sample);
-        final double v = StatisticUtils.variance(sample, m);
-        return computeT(mu, m, v, n);
+    public static double statistic(double mu, double[] x) {
+        final long n = checkSampleSize(x.length);
+        final double m = StatisticUtils.mean(x);
+        final double v = StatisticUtils.variance(x, m);
+        return computeT(m - mu, v, n);
     }
 
     /**
-     * Computes a paired two-sample t-statistic.
+     * Computes a paired two-sample t-statistic comparing the mean difference between the
+     * samples to {@code mu}.
      *
      * <p>The t-statistic returned is equivalent to what would be returned by computing
-     * the one-sample t-statistic {@link #statistic(double, double[])}, with {@code mu = 0} and
+     * the one-sample t-statistic {@link #statistic(double, double[])}, with
      * the sample array consisting of the (signed) differences between corresponding
-     * entries in {@code sample1} and {@code sample2}.
+     * entries in {@code x} and {@code y}.
      *
-     * @param sample1 First sample values.
-     * @param sample2 Second sample values.
+     * @param mu Expected mean difference.
+     * @param x First sample values.
+     * @param y Second sample values.
      * @return t statistic
      * @throws IllegalArgumentException if the number of samples is {@code < 2}; or the
      * the size of the samples is not equal
      */
-    public static double pairedStatistic(double[] sample1, double[] sample2) {
-        final long n = checkSampleSize(sample1.length);
-        final double m = StatisticUtils.meanDifference(sample1, sample2);
-        final double v = StatisticUtils.varianceDifference(sample1, sample2, m);
-        return computeT(0, m, v, n);
+    public static double pairedStatistic(double mu, double[] x, double[] y) {
+        final long n = checkSampleSize(x.length);
+        // Update all x with mu
+        final double[] xx = StatisticUtils.subtract(x, mu);
+        final double m = StatisticUtils.meanDifference(xx, y);
+        final double v = StatisticUtils.varianceDifference(xx, y, m);
+        return computeT(m, v, n);
     }
 
     /**
-     * Computes a two-sample t statistic, comparing the means of the datasets.
+     * Computes a two-sample t statistic, comparing the difference in means of the
+     * datasets to {@code mu}.
      *
      * <p>Use the {@code equalVariances} flag to control the computation of the variance.
      * Use {@code false} to compare the means without the assumption of equal
@@ -287,16 +321,17 @@ public final class TTest {
      *
      * <p>The heteroscedastic t-statistic is:
      *
-     * <p>\[ t = \frac{m1 - m2}{ \sqrt{ \frac{v_1}{n_1} + \frac{v_2}{n_2} } \]
+     * <p>\[ t = \frac{m1 - m2 - \mu}{ \sqrt{ \frac{v_1}{n_1} + \frac{v_2}{n_2} } \]
      *
      * <p>The homoscedastic t-statistic is:
      *
-     * <p>\[ t = \frac{m1 - m2}{ \sqrt{v} \sqrt{ \frac{1}{n_1} + \frac{1}{n_2} } } \]
+     * <p>\[ t = \frac{m1 - m2 - \mu}{ \sqrt{v} \sqrt{ \frac{1}{n_1} + \frac{1}{n_2} } } \]
      *
      * <p>where \( v \) is the pooled variance estimate:
      *
      * <p>\[ v = \frac{(n_1-1)v_1 + (n_2-1)v_2}{n_1 + n_2 - 2} \]
      *
+     * @param mu Expected difference between means.
      * @param m1 First sample mean.
      * @param v1 First sample variance.
      * @param n1 First sample size.
@@ -308,7 +343,8 @@ public final class TTest {
      * @throws IllegalArgumentException if the number of samples in either dataset is
      * {@code < 2}; or the variances are negative.
      */
-    public static double statistic(double m1, double v1, long n1,
+    public static double statistic(double mu,
+                                   double m1, double v1, long n1,
                                    double m2, double v2, long n2,
                                    boolean equalVariances) {
         InferenceUtils.checkNonNegative(v1);
@@ -316,42 +352,44 @@ public final class TTest {
         checkSampleSize(n1);
         checkSampleSize(n2);
         return equalVariances ?
-            computeHomoscedasticT(m1, v1, n1, m2, v2, n2) :
-            computeT(m1, v1, n1, m2, v2, n2);
+            computeHomoscedasticT(m1 - mu, v1, n1, m2, v2, n2) :
+            computeT(m1 - mu, v1, n1, m2, v2, n2);
     }
 
     /**
-     * Computes a two-sample t statistic, comparing the means of the datasets.
+     * Computes a two-sample t statistic, comparing the difference in means of the
+     * samples to {@code mu}.
      *
      * <p>Use the {@code equalVariances} flag to control the computation of the variance.
      * Use {@code false} to compare the means without the assumption of equal
      * sub-population variances (heteroscedastic); otherwise the means are compared
      * under the assumption of equal sub-population variances (homoscedastic).
      *
-     * @param sample1 First sample values.
-     * @param sample2 Second sample values.
+     * @param mu Expected difference between means.
+     * @param x First sample values.
+     * @param y Second sample values.
      * @param equalVariances Set to {@code true} to assume equal variances.
      * @return t statistic
      * @throws IllegalArgumentException if the number of samples in either dataset is {@code < 2}
      */
-    public static double statistic(double[] sample1, double[] sample2, boolean equalVariances) {
-        final long n1 = checkSampleSize(sample1.length);
-        final long n2 = checkSampleSize(sample2.length);
-        final double m1 = StatisticUtils.mean(sample1);
-        final double m2 = StatisticUtils.mean(sample2);
-        final double v1 = StatisticUtils.variance(sample1, m1);
-        final double v2 = StatisticUtils.variance(sample2, m2);
+    public static double statistic(double mu, double[] x, double[] y, boolean equalVariances) {
+        final long n1 = checkSampleSize(x.length);
+        final long n2 = checkSampleSize(y.length);
+        final double[] s1 = StatisticUtils.subtract(x, mu);
+        final double m1 = StatisticUtils.mean(s1);
+        final double m2 = StatisticUtils.mean(y);
+        final double v1 = StatisticUtils.variance(s1, m1);
+        final double v2 = StatisticUtils.variance(y, m2);
         return equalVariances ?
             computeHomoscedasticT(m1, v1, n1, m2, v2, n2) :
             computeT(m1, v1, n1, m2, v2, n2);
     }
 
     /**
-     * Perform a two-sided one-sample t-test comparing the mean of the dataset to {@code mu}.
+     * Perform a two-sided one-sample t-test comparing the mean of the dataset to {@code 0}.
      *
      * <p>Degrees of freedom are \( v = n - 1).
      *
-     * @param mu Constant value to compare sample mean against.
      * @param m Sample mean.
      * @param v Sample variance.
      * @param n Sample size.
@@ -359,18 +397,17 @@ public final class TTest {
      * @throws IllegalArgumentException if the number of samples is {@code < 2}; or the
      * variance is negative
      * @see #statistic(double, double, double, long)
-     * @see #test(double, double, double, long, Options)
+     * @see #test(double, double, long, Options)
      */
-    public static Result test(double mu, double m, double v, long n) {
-        return test(mu, m, v, n, Options.defaults());
+    public static Result test(double m, double v, long n) {
+        return test(m, v, n, Options.defaults());
     }
 
     /**
      * Perform a one-sample t-test comparing the mean of the dataset to {@code mu}.
      *
-     * <p>Degrees of freedom are \( v = n - 1).
+     * <p>Degrees of freedom are \( v = n - 1 \).
      *
-     * @param mu Constant value to compare sample mean against.
      * @param m Sample mean.
      * @param v Sample variance.
      * @param n Sample size.
@@ -380,36 +417,34 @@ public final class TTest {
      * variance is negative
      * @see #statistic(double, double, double, long)
      */
-    public static Result test(double mu, double m, double v, long n, Options options) {
-        final double t = statistic(mu, m, v, n);
+    public static Result test(double m, double v, long n, Options options) {
+        final double t = statistic(options.getMu(), m, v, n);
         final double df = n - 1.0;
         final double p = computeP(t, df, options.getAlternative());
         return new Result(t, df, p);
     }
 
     /**
-     * Performs a two-sided one-sample t-test comparing the mean of the sample to {@code mu}.
+     * Performs a two-sided one-sample t-test comparing the mean of the sample to {@code 0}.
      *
-     * <p>Degrees of freedom are \( v = n - 1).
+     * <p>Degrees of freedom are \( v = n - 1 \).
      *
-     * @param mu Constant value to compare sample mean against.
      * @param sample Sample values.
      * @return the test result
      * @throws IllegalArgumentException if the number of samples is {@code < 2}; or the
      * the size of the samples is not equal
      * @see #statistic(double, double[])
-     * @see #test(double, double[], Options)
+     * @see #test(double[], Options)
      */
-    public static Result test(double mu, double[] sample) {
-        return test(mu, sample, Options.defaults());
+    public static Result test(double[] sample) {
+        return test(sample, Options.defaults());
     }
 
     /**
      * Performs a one-sample t-test comparing the mean of the sample to {@code mu}.
      *
-     * <p>Degrees of freedom are \( v = n - 1).
+     * <p>Degrees of freedom are \( v = n - 1 \).
      *
-     * @param mu Constant value to compare sample mean against.
      * @param sample Sample values.
      * @param options Test options.
      * @return the test result
@@ -417,49 +452,51 @@ public final class TTest {
      * the size of the samples is not equal
      * @see #statistic(double, double[])
      */
-    public static Result test(double mu, double[] sample, Options options) {
-        final double t = statistic(mu, sample);
+    public static Result test(double[] sample, Options options) {
+        final double t = statistic(options.getMu(), sample);
         final double df = sample.length - 1.0;
         final double p = computeP(t, df, options.getAlternative());
         return new Result(t, df, p);
     }
 
     /**
-     * Performs a two-sided paired two-sample t-test.
+     * Performs a two-sided paired two-sample t-test comparing the mean difference between the
+     * samples to {@code 0}.
      *
-     * @param sample1 First sample values.
-     * @param sample2 Second sample values.
+     * @param x First sample values.
+     * @param y Second sample values.
      * @return the test result
      * @throws IllegalArgumentException if the number of samples is {@code < 2}; or the
      * the size of the samples is not equal
-     * @see #pairedStatistic(double[], double[])
+     * @see #pairedStatistic(double, double[], double[])
      * @see #pairedTest(double[], double[], Options)
      */
-    public static Result pairedTest(double[] sample1, double[] sample2) {
-        return pairedTest(sample1, sample2, Options.defaults());
+    public static Result pairedTest(double[] x, double[] y) {
+        return pairedTest(x, y, Options.defaults());
     }
 
     /**
-     * Performs a paired two-sample t-test.
+     * Performs a paired two-sample t-test comparing the mean difference between the
+     * samples to {@code mu}.
      *
-     * @param sample1 First sample values.
-     * @param sample2 Second sample values.
+     * @param x First sample values.
+     * @param y Second sample values.
      * @param options Test options.
      * @return the test result
      * @throws IllegalArgumentException if the number of samples is {@code < 2}; or the
      * the size of the samples is not equal
-     * @see #pairedStatistic(double[], double[])
+     * @see #pairedStatistic(double, double[], double[])
      */
-    public static Result pairedTest(double[] sample1, double[] sample2, Options options) {
-        final double t = pairedStatistic(sample1, sample2);
-        final double df = sample1.length - 1.0;
+    public static Result pairedTest(double[] x, double[] y, Options options) {
+        final double t = pairedStatistic(options.getMu(), x, y);
+        final double df = x.length - 1.0;
         final double p = computeP(t, df, options.getAlternative());
         return new Result(t, df, p);
     }
 
     /**
-     * Performs a two-sided two-sample t-test, comparing the means of the datasets without the
-     * assumption of equal sub-population variances.
+     * Performs a two-sided two-sample t-test, comparing the difference in means of the
+     * datasets to {@code 0} without the assumption of equal sub-population variances.
      *
      * @param m1 First sample mean.
      * @param v1 First sample variance.
@@ -470,7 +507,7 @@ public final class TTest {
      * @return test result
      * @throws IllegalArgumentException if the number of samples in either dataset is
      * {@code < 2}; or the variances are negative.
-     * @see #statistic(double, double, long, double, double, long, boolean)
+     * @see #statistic(double, double, double, long, double, double, long, boolean)
      * @see #test(double, double, long, double, double, long, Options)
      */
     public static Result test(double m1, double v1, long n1,
@@ -479,7 +516,8 @@ public final class TTest {
     }
 
     /**
-     * Performs a two-sample t-test, comparing the means of the datasets.
+     * Performs a two-sample t-test, comparing the difference in means of the
+     * datasets to {@code mu}.
      *
      * <p>Use the {@code options} to select a homoscedastic test under the assumption of equal
      * sub-population variances; or a heteroscedastic test without the
@@ -503,12 +541,12 @@ public final class TTest {
      * @return test result
      * @throws IllegalArgumentException if the number of samples in either dataset is
      * {@code < 2}; or the variances are negative.
-     * @see #statistic(double, double, long, double, double, long, boolean)
+     * @see #statistic(double, double, double, long, double, double, long, boolean)
      */
     public static Result test(double m1, double v1, long n1,
                               double m2, double v2, long n2,
                               Options options) {
-        final double t = statistic(m1, v1, n1, m2, v2, n2, options.isEqualVariances());
+        final double t = statistic(options.getMu(), m1, v1, n1, m2, v2, n2, options.isEqualVariances());
         final double df = options.isEqualVariances() ?
                 -2.0 + n1 + n2 :
                 computeDf(v1, n1, v2, n2);
@@ -517,71 +555,105 @@ public final class TTest {
     }
 
     /**
-     * Performs a two-sided two-sample t-test on two independent samples without the
-     * assumption of equal sub-population variances.
+     * Performs a two-sided two-sample t-test on two independent samples comparing the difference
+     * in means of the datasets to {@code 0} without the assumption of equal sub-population
+     * variances.
      *
-     * @param sample1 First sample values.
-     * @param sample2 Second sample values.
+     * @param x First sample values.
+     * @param y Second sample values.
      * @return the test result
      * @throws IllegalArgumentException if the number of samples in either dataset
      * is {@code < 2}
-     * @see #statistic(double[], double[], boolean)
+     * @see #statistic(double, double[], double[], boolean)
      * @see #test(double[], double[], Options)
      */
-    public static Result test(double[] sample1, double[] sample2) {
-        return test(sample1, sample2, Options.defaults());
+    public static Result test(double[] x, double[] y) {
+        return test(x, y, Options.defaults());
     }
 
     /**
-     * Performs a two-sample t-test on two independent samples.
+     * Performs a two-sample t-test on two independent samples comparing the difference in means of
+     * the samples to {@code mu}.
      *
      * <p>Use the {@code options} to select a homoscedastic test under the assumption of equal
      * sub-population variances; or a heteroscedastic test without the
      * assumption of equal samples sizes or sub-population variances.
      *
-     * @param sample1 First sample values.
-     * @param sample2 Second sample values.
+     * @param x First sample values.
+     * @param y Second sample values.
      * @param options Test options.
      * @return the test result
      * @throws IllegalArgumentException if the number of samples in either dataset
      * is {@code < 2}
-     * @see #statistic(double[], double[], boolean)
+     * @see #statistic(double, double[], double[], boolean)
      * @see #test(double, double, long, double, double, long, Options)
      */
-    public static Result test(double[] sample1, double[] sample2, Options options) {
+    public static Result test(double[] x, double[] y, Options options) {
+        return test(x, y, options.getAlternative(),
+            options.isEqualVariances() ? DataDispersion.HOMOSCEDASTIC : DataDispersion.HETEROSCEDASTIC,
+            Difference.of(options.getMu()));
+    }
+
+    /**
+     * Performs a two-sample t-test on two independent samples comparing the difference in means of
+     * the samples to {@code mu}.
+     *
+     * <p>Use the {@code options} to select a homoscedastic test under the assumption of equal
+     * sub-population variances; or a heteroscedastic test without the
+     * assumption of equal samples sizes or sub-population variances.
+     *
+     * <p>Supports the following options (with defaults):
+     *
+     * <ul>
+     * <li>{@link AlternativeHypothesis AlternativeHypothesis = two-sided}
+     * <li>{@link DataDispersion DataDispersion = heteroscedastic}
+     * <li>{@link Difference Difference mu = 0}
+     * </ul>
+     *
+     * @param x First sample values.
+     * @param y Second sample values.
+     * @param options Test options.
+     * @return the test result
+     * @throws IllegalArgumentException if the number of samples in either dataset
+     * is {@code < 2}
+     * @see #statistic(double, double[], double[], boolean)
+     * @see #test(double, double, long, double, double, long, Options)
+     */
+    public static Result test(double[] x, double[] y, Object... options) {
         // Here we do not call statistic(double[], double[], boolean) because the degreesOfFreedom
         // requires the variance. So repeat the computation and compute p.
-        final long n1 = checkSampleSize(sample1.length);
-        final long n2 = checkSampleSize(sample2.length);
-        final double m1 = StatisticUtils.mean(sample1);
-        final double m2 = StatisticUtils.mean(sample2);
-        final double v1 = StatisticUtils.variance(sample1, m1);
-        final double v2 = StatisticUtils.variance(sample2, m2);
+        final long n1 = checkSampleSize(x.length);
+        final long n2 = checkSampleSize(y.length);
+        final double mu = Options2.orElse(Difference.ZERO, options).doubleValue();
+        final double[] xx = StatisticUtils.subtract(x, mu);
+        final double m1 = StatisticUtils.mean(xx);
+        final double m2 = StatisticUtils.mean(y);
+        final double v1 = StatisticUtils.variance(xx, m1);
+        final double v2 = StatisticUtils.variance(y, m2);
         double t;
         double df;
-        if (options.isEqualVariances()) {
+        if (Options2.isPresent(DataDispersion.HOMOSCEDASTIC, options)) {
             t = computeHomoscedasticT(m1, v1, n1, m2, v2, n2);
             df = -2.0 + n1 + n2;
         } else {
             t = computeT(m1, v1, n1, m2, v2, n2);
             df = computeDf(v1, n1, v2, n2);
         }
-        final double p = computeP(t, df, options.getAlternative());
+        final AlternativeHypothesis alternative = Options2.orElse(AlternativeHypothesis.TWO_SIDED, options);
+        final double p = computeP(t, df, alternative);
         return new Result(t, df, p);
     }
 
     /**
      * Computes t statistic for one-sample t-test.
      *
-     * @param mu Constant to test against.
      * @param m Sample mean.
      * @param v Sample variance.
      * @param n Sample size.
      * @return t test statistic
      */
-    private static double computeT(double mu,
-                                   double m, double v, long n) {
-        return (m - mu) / Math.sqrt(v / n);
+    private static double computeT(double m, double v, long n) {
+        return m / Math.sqrt(v / n);
     }
 
     /**

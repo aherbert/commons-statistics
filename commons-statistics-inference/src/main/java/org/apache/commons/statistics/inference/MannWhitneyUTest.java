@@ -64,6 +64,8 @@ public final class MannWhitneyUTest {
         private final PValueMethod pValue;
         /** Perform continuity correction. */
         private final boolean continuityCorrection;
+        /** Expected location shift. */
+        private final double mu;
 
         /**
          * Builder for the {@link Options}.
@@ -75,6 +77,8 @@ public final class MannWhitneyUTest {
             private PValueMethod pValue;
             /** Perform continuity correction. */
             private boolean continuityCorrection;
+            /** Expected location shift. */
+            private double mu;
 
             /**
              * @param source Source to copy.
@@ -83,6 +87,7 @@ public final class MannWhitneyUTest {
                 alternative = source.alternative;
                 pValue = source.pValue;
                 continuityCorrection = source.continuityCorrection;
+                mu = source.mu;
             }
 
             /**
@@ -123,6 +128,18 @@ public final class MannWhitneyUTest {
             }
 
             /**
+             * Set the expected location shift.
+             *
+             * @param v Value.
+             * @return a reference to {@code this}
+             * @see Options#getMu()
+             */
+            public Builder setMu(double v) {
+                mu = v;
+                return this;
+            }
+
+            /**
              * Builds the options.
              *
              * @return the options
@@ -134,17 +151,12 @@ public final class MannWhitneyUTest {
 
         /**
          * Create the default options.
-         *
-         * <ul>
-         * <li>{@link #getAlternative getAlternative = two-sided}
-         * <li>{@link #getPValueMethod() getPValueMethod = auto}
-         * <li>{@link #isContinuityCorrection() isContinuityCorrection = true}
-         * </ul>
          */
         Options() {
             alternative = AlternativeHypothesis.TWO_SIDED;
             pValue = PValueMethod.AUTO;
             continuityCorrection = true;
+            mu = 0;
         }
 
         /**
@@ -154,6 +166,7 @@ public final class MannWhitneyUTest {
             alternative = source.alternative;
             pValue = source.pValue;
             continuityCorrection = source.continuityCorrection;
+            mu = source.mu;
         }
 
         /**
@@ -163,6 +176,7 @@ public final class MannWhitneyUTest {
          * <li>{@link #getAlternative getAlternative = two-sided}
          * <li>{@link #getPValueMethod() getPValueMethod = auto}
          * <li>{@link #isContinuityCorrection() isContinuityCorrection = true}
+         * <li>{@link #getMu() getMu = 0}
          * </ul>
          *
          * @return the options
@@ -210,12 +224,21 @@ public final class MannWhitneyUTest {
         /**
          * If {@code true}, adjust the Wilcoxon rank statistic by 0.5 towards the
          * mean value when computing the z-statistic if a normal approximation is used
-         * to copmute the p-value.
+         * to compute the p-value.
          *
          * @return true to perform continuity correction
          */
         public boolean isContinuityCorrection() {
             return continuityCorrection;
+        }
+
+        /**
+         * Return the location shift.
+         *
+         * @return the location shift
+         */
+        public double getMu() {
+            return mu;
         }
     }
 
@@ -256,11 +279,11 @@ public final class MannWhitneyUTest {
     private MannWhitneyUTest() {}
 
     /**
-     * Computes the Mann-Whitney U statistic comparing the mean for two independent
+     * Computes the Mann-Whitney U statistic comparing two independent
      * samples possibly of different length.
      *
      * <p>This statistic can be used to perform a Mann-Whitney U test evaluating the
-     * null hypothesis that the two independent samples has equal mean.
+     * null hypothesis that the two independent samples differ by a location shift of {@code mu}.
      *
      * <p>This returns the {@code U1} statistic. Compute the {@code U2} statistic
      * using:
@@ -268,16 +291,17 @@ public final class MannWhitneyUTest {
      * u2 = (long) x.length * y.length - u1;
      * </pre>
      *
+     * @param mu Expected location shift.
      * @param x First sample values.
      * @param y Second sample values.
      * @return Mann-Whitney U1 statistic
      * @throws IllegalArgumentException if {@code x} or {@code y} are zero-length; or contain
      * NaN values.
      */
-    public static double statistic(double[] x, double[] y) {
+    public static double statistic(double mu, double[] x, double[] y) {
         ensureDataConformance(x, y);
 
-        final double[] z = concatenateSamples(x, y);
+        final double[] z = concatenateSamples(mu, x, y);
         final double[] ranks = RANKING.apply(z);
 
         // The ranks for x is in the first x.length entries in ranks because x
@@ -290,7 +314,7 @@ public final class MannWhitneyUTest {
     }
 
     /**
-     * Performs a Mann-Whitney U test comparing the mean for two independent
+     * Performs a Mann-Whitney U test comparing the location for two independent
      * samples.
      *
      * @param x First sample values.
@@ -298,7 +322,7 @@ public final class MannWhitneyUTest {
      * @return test result
      * @throws IllegalArgumentException if {@code x} or {@code y} are zero-length; or contain
      * NaN values.
-     * @see #statistic(double[], double[])
+     * @see #statistic(double, double[], double[])
      * @see #test(double[], double[], Options)
      */
     public static Result test(double[] x, double[] y) {
@@ -306,8 +330,8 @@ public final class MannWhitneyUTest {
     }
 
     /**
-     * Performs a Mann-Whitney U test comparing the mean for two independent
-     * samples.
+     * Performs a Mann-Whitney U test comparing the location for two independent
+     * samples. The location is specified using {@link Options#getMu()}.
      *
      * <p>If the p-value method is {@link PValueMethod#AUTO auto} an exact p-value is
      * computed if the samples contain less than 50 values; otherwise a normal
@@ -332,12 +356,12 @@ public final class MannWhitneyUTest {
      * @return test result
      * @throws IllegalArgumentException if {@code x} or {@code y} are zero-length; or contain
      * NaN values.
-     * @see #statistic(double[], double[])
+     * @see #statistic(double, double[], double[])
      */
     public static Result test(double[] x, double[] y, Options options) {
         // Computation as above. The ranks are required for tie correction.
         ensureDataConformance(x, y);
-        final double[] z = concatenateSamples(x, y);
+        final double[] z = concatenateSamples(options.getMu(), x, y);
         final double[] ranks = RANKING.apply(z);
         final double sumRankX = Arrays.stream(ranks).limit(x.length).sum();
         final double u1 = sumRankX - ((long) x.length * (x.length + 1)) * 0.5;
@@ -375,16 +399,22 @@ public final class MannWhitneyUTest {
     }
 
     /**
-     * Concatenate the samples into one array.
+     * Concatenate the samples into one array. Subtract {@code mu} from the first sample.
      *
+     * @param mu Expected difference between means.
      * @param x First sample values.
      * @param y Second sample values.
      * @return concatenated array
      */
-    private static double[] concatenateSamples(double[] x, double[] y) {
+    private static double[] concatenateSamples(double mu, double[] x, double[] y) {
         final double[] z = new double[x.length + y.length];
         System.arraycopy(x, 0, z, 0, x.length);
         System.arraycopy(y, 0, z, x.length, y.length);
+        if (mu != 0) {
+            for (int i = 0; i < x.length; i++) {
+                z[i] -= mu;
+            }
+        }
         return z;
     }
 

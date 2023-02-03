@@ -31,11 +31,32 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Test cases for {@link StatisticUtils}.
  */
 class StatisticUtilsTest {
+
+    @ParameterizedTest
+    @ValueSource(doubles = {-1, 0, 1})
+    void testSubtract(double y) {
+        final double[] x = {-99, -7, 0, 1, 1.23, 4, 42, 10234};
+        final double[] xmy = StatisticUtils.subtract(x, y);
+        if (y == 0) {
+            Assertions.assertSame(x, xmy);
+            // Test null array
+            Assertions.assertNull(StatisticUtils.subtract(null, y),
+                "null array should be returned unchanged");
+        } else {
+            for (int i = 0; i < x.length; i++) {
+                Assertions.assertEquals(x[i] - y, xmy[i]);
+            }
+            // Test null array
+            Assertions.assertThrows(NullPointerException.class, () -> StatisticUtils.subtract(null, y),
+                "cannot change a null array");
+        }
+    }
 
     @ParameterizedTest
     @CsvSource({
