@@ -74,11 +74,15 @@ public class MedianPerformance {
     private static final String SBM2 = "2SBM";
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
     private static final String KSBM = "KSBM";
+    /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
+    private static final String K1SBM = "K1SBM";
 
     // Paired-key partition functions
 
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
     private static final String PSBM = "PairedSBM";
+
+    // TODO: Use same data class as QuantilePerformance
 
     /**
      * Source of {@code double} array data.
@@ -219,26 +223,32 @@ public class MedianPerformance {
                 function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateDP5;
             // Second generation partition functions (allow configuration)
             } else if (name.startsWith(RANGE_SBM)) {
-                final int minSelectSize = QuantilePerformance.getMinSelectSize(name);
+                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
                 function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
                     ::evaluateRangeSBM;
             } else if (name.startsWith(SBM2)) {
-                final int minSelectSize = QuantilePerformance.getMinSelectSize(name);
+                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
                 function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
                     ::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
-                final int minSelectSize = QuantilePerformance.getMinSelectSize(name);
+                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
                 function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
                     ::evaluateKSBM;
+            } else if (name.startsWith(K1SBM)) {
+                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
+                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
+                final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
+                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
+                    ::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
-                final int minSelectSize = QuantilePerformance.getMinSelectSize(name);
+                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
                 function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))

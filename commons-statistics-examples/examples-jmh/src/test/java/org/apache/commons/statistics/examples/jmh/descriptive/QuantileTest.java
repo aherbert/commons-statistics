@@ -123,6 +123,14 @@ class QuantileTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testQuantile"})
+    void testQuantileK1SBM(double[] values, double[] p, double[][] expected, double delta) {
+        assertQuantile(Quantile.withDefaults().withPartition(new Partition(KeyStrategy.PIVOT_CACHE)),
+            values, p, expected, delta,
+            Quantile::evaluateK1SBM, Quantile::evaluateK1SBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantile"})
     void testQuantilePairedSBM(double[] values, double[] p, double[][] expected, double delta) {
         assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
             Quantile::evaluatePairedSBM, Quantile::evaluatePairedSBM);
