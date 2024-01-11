@@ -266,6 +266,82 @@ class PartitionTest {
         return builder.build();
     }
 
+    @ParameterizedTest
+    @MethodSource
+    void testPartitionMin2(double[] values, int from, int to) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        Partition.partitionMin2(values, from, to);
+        Assertions.assertEquals(sorted[from], values[from]);
+        if (to - from > 1) {
+            Assertions.assertEquals(sorted[from + 1], values[from + 1]);
+        }
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = "testPartitionMin2")
+    void testPartitionMin2IgnoreZeros(double[] values, int from, int to) {
+        // TODO - replace -0.0 with -Double.MIN_VALUE
+        // partition, then replace with -0.0 and test.
+        Assumptions.assumeTrue(Arrays.stream(values, from, to + 1).filter(
+            x -> x == 0 && Double.doubleToRawLongBits(x) < 1).findAny().isEmpty());
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        Partition.partitionMin2IgnoreZeros(values, from, to);
+        Assertions.assertEquals(sorted[from], values[from]);
+        if (to - from > 1) {
+            Assertions.assertEquals(sorted[from + 1], values[from + 1]);
+        }
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+    }
+
+    static Stream<Arguments> testPartitionMin2() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final double[] values = {-0.0, 0.0, 1};
+        final double x = Double.NaN;
+        final double y = 42;
+        for (final double a : values) {
+            builder.add(Arguments.of(new double[] {a}, 0, 0));
+            builder.add(Arguments.of(new double[] {x, a, y}, 1, 1));
+            for (final double b : values) {
+                builder.add(Arguments.of(new double[] {a, b}, 0, 1));
+                builder.add(Arguments.of(new double[] {x, a, b, y}, 1, 2));
+                for (final double c : values) {
+                    builder.add(Arguments.of(new double[] {a, b, c}, 0, 2));
+                    builder.add(Arguments.of(new double[] {x, a, b, c, y}, 1, 3));
+                    for (final double d : values) {
+                        builder.add(Arguments.of(new double[] {a, b, c, d}, 0, 3));
+                        builder.add(Arguments.of(new double[] {x, a, b, c, d, y}, 1, 4));
+                    }
+                }
+            }
+        }
+        builder.add(Arguments.of(new double[] {-1, -1, -1, 4, 3, 2, 1, y}, 3, 6));
+//        builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
+//        builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
+//        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+//        for (final int size : new int[] {5, 10}) {
+//            final double[] values = rng.doubles(size).toArray();
+//            builder.add(Arguments.of(values.clone(), 0, size - 1));
+//            builder.add(Arguments.of(values.clone(), size >>> 1, size - 1));
+//            builder.add(Arguments.of(values.clone(), 1, size >>> 1));
+//        }
+//        builder.add(Arguments.of(new double[] {-0.0, 0.0}, 0, 1));
+//        builder.add(Arguments.of(new double[] {0.0, -0.0}, 0, 1));
+//        builder.add(Arguments.of(new double[] {-0.0, -0.0}, 0, 1));
+//        builder.add(Arguments.of(new double[] {0.0, 0.0}, 0, 1));
+//        builder.add(Arguments.of(new double[] {0.0, -0.0, 0.0, -0.0}, 0, 3));
+//        builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0, 0.0}, 0, 3));
+//        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
+//        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
+        return builder.build();
+    }
+
 //    @ParameterizedTest
 //    @MethodSource
 //    void testSelect(double[] values) {
@@ -394,6 +470,12 @@ class PartitionTest {
     @MethodSource(value = {"testPartition"})
     void testPartitionKSBM(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionKSBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionK1SBM(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionK1SBM);
     }
 
     @ParameterizedTest

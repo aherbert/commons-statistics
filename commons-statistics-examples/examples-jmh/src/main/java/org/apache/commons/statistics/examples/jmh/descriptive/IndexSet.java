@@ -459,7 +459,7 @@ final class IndexSet implements PivotStore {
      * partition keys in ascending order.
      *
      * <p>The cache allows incrementing the {@code left} support using
-     * {@link PivotCache#moveLeft(int)}. Any calls to decrement the {@code left} support
+     * {@link ScanningPivotCache#moveLeft(int)}. Any calls to decrement the {@code left} support
      * at any time will result in an {@link IllegalStateException}; this prevents reseting
      * to within the original support used to create the cache. If the {@code left} is
      * moved beyond the {@code right} then the move is rejected.
@@ -470,24 +470,24 @@ final class IndexSet implements PivotStore {
      * @throws IllegalArgumentException if {@code right < left} or the range cannot be
      * supported.
      */
-    PivotCache asPivotCache(int left, int right) {
-        return asPivotCache(left, right, true);
+    ScanningPivotCache asScanningPivotCache(int left, int right) {
+        return asScanningPivotCache(left, right, true);
     }
 
     /**
-     * Return a {@link PivotCache} implementation to support the range
+     * Return a {@link ScanningPivotCache} implementation to support the range
      * {@code [left, right]}.
      *
-     * <p>See {@link #asPivotCache(int, int)} for the details of the cache implementation.
+     * <p>See {@link #asScanningPivotCache(int, int)} for the details of the cache implementation.
      *
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @return the pivot cache
      * @throws IllegalArgumentException if {@code right < left}
      */
-    static PivotCache createPivotCache(int left, int right) {
+    static ScanningPivotCache createScanningPivotCache(int left, int right) {
         final IndexSet set = ofRange(left, right);
-        return set.asPivotCache(left, right, false);
+        return set.asScanningPivotCache(left, right, false);
     }
 
     /**
@@ -501,7 +501,7 @@ final class IndexSet implements PivotStore {
      * @throws IllegalArgumentException if {@code right < left} or the range cannot be
      * supported.
      */
-    private PivotCache asPivotCache(int left, int right, boolean initialize) {
+    private ScanningPivotCache asScanningPivotCache(int left, int right, boolean initialize) {
         if (initialize) {
             checkRange(left, right);
             final int capacity = data.length * Long.SIZE + offset;
@@ -539,7 +539,7 @@ final class IndexSet implements PivotStore {
      * <p>This class is bound to the enclosing {@link IndexSet} instance to provide
      * the functionality to read, write and search indexes.
      */
-    class IndexPivotCache implements PivotCache {
+    class IndexPivotCache implements ScanningPivotCache {
         /** Default value for an unset upper floating pivot.
          * Set as a value higher than any valid array index. */
         private static final int UPPER_DEFAULT = Integer.MAX_VALUE;

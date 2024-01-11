@@ -62,23 +62,60 @@ final class PivotCaches {
      * <p>If the range contains internal indices, the {@link PivotCache} will not
      * store them and will be {@link PivotCache#sparse() sparse}.
      *
+     * <p>The range returned instance may implement {@link ScanningPivotCache}.
+     * It should only be cast to a {@link ScanningPivotCache} and used for scanning
+     * if it reports itself as non-{@link PivotCache#sparse() sparse}.
+     *
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @return the pivot cache
+     * @see #ofFullRange(int, int)
      */
     static PivotCache ofRange(int left, int right) {
-        if (right < left) {
-            throw new IllegalArgumentException("Invalid range");
-        }
+        validateRange(left, right);
         return left == right ?
             new PointPivotCache(left) :
             new RangePivotCache(left, right);
     }
 
     /**
+     * Return a {@link PivotCache} for the full-range {@code [left, right]}.
+     * The returned implementation will be non-{@link PivotCache#sparse() sparse}.
+     *
+     * <p>The range returned instance may implement {@link ScanningPivotCache}.
+     *
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @return the pivot cache
+     */
+    static PivotCache ofFullRange(int left, int right) {
+        validateRange(left, right);
+        if (right - left <= 1) {
+            return left == right ?
+                new PointPivotCache(left) :
+                new RangePivotCache(left, right);
+        }
+        // For now just use the IndexSet ScanningPivotCache implementation.
+        // This could be changed to a non-scanning version.
+        return IndexSet.createScanningPivotCache(left, right);
+    }
+
+    /**
+     * Validate the range {@code left <= right}.
+     *
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    private static void validateRange(int left, int right) {
+        if (right < left) {
+            throw new IllegalArgumentException("Invalid range");
+        }
+    }
+
+    /**
      * PivotCache for range {@code [left, right]} consisting of a single point.
      */
-    private static class PointPivotCache implements PivotCache {
+    private static class PointPivotCache implements ScanningPivotCache {
         /** The target point. */
         private final int target;
         /** The upstream pivot closest to the left bound of the support.
@@ -185,7 +222,7 @@ final class PivotCaches {
      *
      * <p>Behaviour is undefined if {@code left == right}.
      */
-    private static class RangePivotCache implements PivotCache {
+    private static class RangePivotCache implements ScanningPivotCache {
         /** Left bound of the support. */
         private final int left;
         /** Left bound of the support. */

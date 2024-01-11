@@ -42,13 +42,13 @@ class PivotCacheTest {
         allIndices[n] = left;
         allIndices[n + 1] = right;
         final IndexSet set = IndexSet.of(allIndices);
-        assertSingleRange(left, right, indices, set.asPivotCache(left, right));
+        assertSingleRange(left, right, indices, set.asScanningPivotCache(left, right));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSingleRange", "testSinglePoint"})
     void testSingleRangeUsingIndexSet(int left, int right, int[][] indices) {
-        assertSingleRange(left, right, indices, IndexSet.createPivotCache(left, right));
+        assertSingleRange(left, right, indices, IndexSet.createScanningPivotCache(left, right));
     }
 
     @ParameterizedTest
@@ -129,6 +129,11 @@ class PivotCacheTest {
             Assertions.assertEquals(ref.get(left), cache.contains(left));
             Assertions.assertEquals(ref.get(right), cache.contains(right));
 
+            if (!(cache instanceof ScanningPivotCache)) {
+                continue;
+            }
+            final ScanningPivotCache scanningCache = (ScanningPivotCache) cache;
+
             // Test internal scanning from the ends for additional pivots
             // lower---left------p----------p2-------right----upper
             //                    s--------e
@@ -159,7 +164,7 @@ class PivotCacheTest {
             while (left < e && e < upper) {
                 // sort [s, e)
                 copy.set(s, e);
-                Assertions.assertEquals(s, cache.nextNonPivot(p));
+                Assertions.assertEquals(s, scanningCache.nextNonPivot(p));
                 Assertions.assertEquals(e, cache.nextPivot(s));
                 p = s;
                 s = ref.nextClearBit(p);
@@ -181,7 +186,7 @@ class PivotCacheTest {
             while (lower < s) {
                 // sort (s, e]
                 copy.set(s + 1, e + 1);
-                Assertions.assertEquals(e, cache.previousNonPivot(p2));
+                Assertions.assertEquals(e, scanningCache.previousNonPivot(p2));
                 Assertions.assertEquals(s, cache.previousPivot(e));
                 p2 = s;
                 e = ref.previousClearBit(p2);
@@ -243,13 +248,13 @@ class PivotCacheTest {
         allIndices[n] = left;
         allIndices[n + 1] = right;
         final IndexSet set = IndexSet.of(allIndices);
-        assertSetRange(left, right, indices, set.asPivotCache(left, right));
+        assertSetRange(left, right, indices, set.asScanningPivotCache(left, right));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSetRange", "testSetRangeSinglePoint"})
     void testSetRangeUsingIndexSet(int left, int right, int[][] indices) {
-        assertSetRange(left, right, indices, IndexSet.createPivotCache(left, right));
+        assertSetRange(left, right, indices, IndexSet.createScanningPivotCache(left, right));
     }
 
     @ParameterizedTest
