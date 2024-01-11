@@ -48,10 +48,10 @@ class IndexSetTest {
         final int left = 10;
         final int right = 156;
         final IndexSet set = IndexSet.ofRange(left, right);
-        Assertions.assertThrows(IllegalArgumentException.class, () -> set.asPivotCache(left - 1, right));
-        Assertions.assertThrows(IllegalArgumentException.class, () -> set.asPivotCache(right, left));
-        Assertions.assertDoesNotThrow(() -> set.asPivotCache(left, right));
-        Assertions.assertDoesNotThrow(() -> set.asPivotCache(left + 1, right - 1));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> set.asScanningPivotCache(left - 1, right));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> set.asScanningPivotCache(right, left));
+        Assertions.assertDoesNotThrow(() -> set.asScanningPivotCache(left, right));
+        Assertions.assertDoesNotThrow(() -> set.asScanningPivotCache(left + 1, right - 1));
         // We must know the capacity (the highest bit that can be stored).
         final int noOfLongs = 1 + (right - left) / Long.SIZE;
         final int highBit = left + noOfLongs * Long.SIZE - 1;
@@ -59,8 +59,8 @@ class IndexSetTest {
         set.add(highBit);
         final int capacity = set.nextClearBit(highBit);
         Assertions.assertEquals(highBit + 1, capacity);
-        Assertions.assertDoesNotThrow(() -> set.asPivotCache(left, highBit));
-        Assertions.assertThrows(IllegalArgumentException.class, () -> set.asPivotCache(left, capacity));
+        Assertions.assertDoesNotThrow(() -> set.asScanningPivotCache(left, highBit));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> set.asScanningPivotCache(left, capacity));
     }
 
     @ParameterizedTest

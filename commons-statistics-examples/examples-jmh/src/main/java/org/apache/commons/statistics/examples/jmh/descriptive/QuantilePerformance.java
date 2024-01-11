@@ -90,6 +90,8 @@ public class QuantilePerformance {
     private static final String SBM2 = "2SBM";
     /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
     private static final String KSBM = "KSBM";
+    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
+    private static final String K1SBM = "K1SBM";
 
     // Paired-key partition functions
 
@@ -274,7 +276,7 @@ public class QuantilePerformance {
             // Slow
             //SORT, SPH, SPE
             CM, SP, BM, SBM, DP, DP5,
-            SBM2, KSBM,
+            SBM2, KSBM, K1SBM,
             PSBM})
         private String name;
 
@@ -310,56 +312,62 @@ public class QuantilePerformance {
                     return q;
                 };
             } else if (name.startsWith(SPH)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateSPH;
             } else if (name.startsWith(SPE)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateSPE;
             } else if (name.startsWith(SP)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateSP;
             } else if (name.startsWith(BM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateBM;
             } else if (name.startsWith(SBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateSBM;
             } else if (name.startsWith(DP)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateDP;
             } else if (name.startsWith(DP5)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withKthSelector(new KthSelector(s, minSelectSize))::evaluateDP5;
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
                     .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluateKSBM;
+            } else if (name.startsWith(K1SBM)) {
+                final int minSelectSize = getMinQuickSelectSize(name);
+                final PivotingStrategy s = getPivotStrategy(name);
+                final KeyStrategy keyStrategy = getKeyStrategy(name);
+                function = Quantile.withDefaults().with(method)
+                    .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
@@ -456,32 +464,32 @@ public class QuantilePerformance {
             if (JDK.equals(name)) {
                 function = Arrays::sort;
             } else if (name.startsWith(SP)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = new KthSelector(s, minSelectSize)::sortSP;
             } else if (name.startsWith(SBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = new KthSelector(s, minSelectSize)::sortSBM;
             } else if (name.startsWith(BM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = new KthSelector(s, minSelectSize)::sortBM;
             } else if (name.startsWith(DP)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = new KthSelector(s, minSelectSize)::sortDP;
             } else if (name.startsWith(DP5)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = new KthSelector(s, minSelectSize)::sortDP5;
             } else if (name.startsWith(DNF)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 function = new KthSelector(s, minSelectSize)::sortDNF;
             // 2nd generation partition functions
             } else if (name.startsWith(SBM2)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = new Partition(s, minSelectSize, keyStrategy)::sortSBM;
@@ -502,7 +510,7 @@ public class QuantilePerformance {
         @Param({JDK, SPH,
             SP, BM, SBM,
             DP, DP5, DNF,
-            SBM2, KSBM,
+            SBM2, KSBM, K1SBM,
             PSBM})
         private String name;
 
@@ -530,7 +538,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(SPH)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -547,7 +555,7 @@ public class QuantilePerformance {
                     return x;
                 };
             } else if (name.startsWith(SP)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -555,7 +563,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(BM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -563,7 +571,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(SBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -571,7 +579,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(DP)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -579,7 +587,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(DP5)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -587,7 +595,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(DNF)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KthSelector selector = new KthSelector(s, minSelectSize);
                 function = (data, indices) -> {
@@ -596,7 +604,7 @@ public class QuantilePerformance {
                 };
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 final Partition part = new Partition(s, minSelectSize, keyStrategy);
@@ -605,7 +613,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(KSBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 final Partition part = new Partition(s, minSelectSize, keyStrategy);
@@ -613,10 +621,19 @@ public class QuantilePerformance {
                     part.partitionKSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
+            } else if (name.startsWith(K1SBM)) {
+                final int minSelectSize = getMinQuickSelectSize(name);
+                final PivotingStrategy s = getPivotStrategy(name);
+                final KeyStrategy keyStrategy = getKeyStrategy(name);
+                final Partition part = new Partition(s, minSelectSize, keyStrategy);
+                function = (data, indices) -> {
+                    part.partitionK1SBM(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
             // Paired key implementations.
             // This can be used to show they have no disadvantage for processing single keys.
             } else if (name.startsWith(PSBM)) {
-                final int minSelectSize = getMinSelectSize(name);
+                final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 final Partition part = new Partition(s, minSelectSize, keyStrategy);
@@ -664,12 +681,14 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the min select size for the recursive partition algorithm.
+     * Gets the minimum size for the recursive quickselect partition algorithm.
+     * Below this size the algorithm will change strategy for partitioning,
+     * e.g. change to a full sort.
      *
      * @param name Algorithm name.
-     * @return the min select size
+     * @return the minimum quickselect size
      */
-    static int getMinSelectSize(String name) {
+    static int getMinQuickSelectSize(String name) {
         // Note: Make the min select size reasonable.
         // 7 is used in BM's original paper for single-pivot variant.
         // 15 is used in Commons Math 3 Percentile.

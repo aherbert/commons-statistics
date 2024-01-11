@@ -69,7 +69,6 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-// TODO - drop methods that are in ScanningPivotCache
 // Make IndexSet implement PivotCache and have the inner class for ScanningPivotCache
 interface PivotCache extends PivotStore {
 
@@ -126,31 +125,6 @@ interface PivotCache extends PivotStore {
     boolean sparse();
 
     /**
-     * Move the start (inclusive) of the range of indices supported.
-     *
-     * <p>Implementations may discard previously stored indices during this operation, for
-     * example all indices below {@code newLeft}.
-     *
-     * <p>This method can be used when partitioning keys {@code k1, k2, ...} in ascending
-     * order to indicate the next {@code k} that will be processed. The cache can optimise
-     * pivot storage to help partition downstream keys.
-     *
-     * <p>Note: If {@code newLeft < left} then the updated range is outside the current
-     * support. Implementations may choose to: move {@code left} so the new support is
-     * {@code [newLeft, right]}; return {@code false} to indicate the support was not changed;
-     * or to throw an exception (which should be documented).
-     *
-     * <p>Note: If {@code newLeft > right} then the updated range is outside the current
-     * support. Implementations may choose to: move {@code right} so the new support is
-     * {@code [newLeft, newleft]}; return {@code false} to indicate the support was not changed;
-     * or to throw an exception (which should be documented).
-     *
-     * @param newLeft Start of the supported range.
-     * @return true if the support was successfully modified
-     */
-    boolean moveLeft(int newLeft);
-
-    /**
      * Test if the index {@code k} is a pivot.
      *
      * <p><em>If {@code index < left} or {@code index > right} the behavior is not
@@ -190,36 +164,4 @@ interface PivotCache extends PivotStore {
      * @return the index of the next pivot, or {@code other} if there is no index
      */
     int nextPivotOrElse(int k, int other);
-
-    /**
-     * Returns the nearest non-pivot index that occurs on or after the specified starting
-     * index <em>within the supported range</em>. If no such
-     * indices exists then {@code right + n} is returned, where {@code n} is strictly positive.
-     *
-     * <p>If the starting index is less than the supported range {@code left}
-     * the result is undefined.
-     *
-     * <p>This method is intended to allow traversing the unsorted ranges between sorted
-     * pivot regions within the range {@code [left, right]}.
-     *
-     * @param k Index to start checking from (inclusive).
-     * @return the index of the next non-pivot, or {@code right + n} if there is no index
-     */
-    int nextNonPivot(int k);
-
-    /**
-     * Returns the nearest non-pivot index that occurs on or before the specified starting
-     * index <em>within the supported range</em>. If no such
-     * indices exists then {@code left - n} is returned, where {@code n} is strictly positive.
-     *
-     * <p>If the starting index is greater than the supported range {@code right}
-     * the result is undefined.
-     *
-     * <p>This method is intended to allow traversing the unsorted ranges between sorted
-     * pivot regions within the range {@code [left, right]}.
-     *
-     * @param k Index to start checking from (inclusive).
-     * @return the index of the next non-pivot, or {@code left - n} if there is no index
-     */
-    int previousNonPivot(int k);
 }

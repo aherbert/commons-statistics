@@ -93,8 +93,6 @@ public final class Quantile {
          * data[i < k] <= data[k] <= data[k < i]
          * }</pre>
          *
-         * <p>Uses a single-pivot partition method.
-         *
          * @param data Values.
          * @param k Indices.
          */
@@ -114,8 +112,6 @@ public final class Quantile {
          * <pre>{@code
          * data[i < k] <= data[k] <= data[k < i]
          * }</pre>
-         *
-         * <p>Uses a single-pivot partition method.
          *
          * @param data Values.
          * @param k Indices (may be destructively modified).
@@ -561,6 +557,107 @@ public final class Quantile {
      * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
+    private double evaluateK1(PartitionFunction2 part, double[] values, double p) {
+        // Implicit NPE
+        final int n = values.length;
+        checkQuantile(p);
+        // Special cases
+        if (n <= 1) {
+            return n == 0 ? Double.NaN : values[0];
+        }
+        // A sort is required
+        final double[] x = overwrite ? values : values.clone();
+
+        final double pos = estimationType.index(p, n);
+        final int i = (int) pos;
+
+        // Partition and compute
+        // This requires a partition function to partition k+1
+        // for each input k
+        if (pos > i) {
+            part.partition(x, new int[] {i}, 1);
+            return DoubleMath.interpolate(x[i], x[i + 1], pos - i);
+        }
+        part.partition(x, new int[] {i}, 1);
+        return x[i];
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantiles of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * @param part Partition function.
+     * @param values Values.
+     * @param p Quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    public double[] evaluateK1(PartitionFunction2 part, double[] values, double... p) {
+        // Implicit NPE
+        final int n = values.length;
+        if (p.length == 0) {
+            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
+        }
+        for (final double pp : p) {
+            checkQuantile(pp);
+        }
+        // Special cases
+        final double[] q = new double[p.length];
+        if (n <= 1) {
+            Arrays.fill(q, n == 0 ? Double.NaN : values[0]);
+            return q;
+        }
+
+        // A sort is required
+        final double[] x = overwrite ? values : values.clone();
+
+        // Collect interpolation positions. We use the output q to store factors.
+        // This requires a partition function to partition k+1 for each input k
+        final int[] indices = new int[p.length];
+        for (int i = 0; i < p.length; i++) {
+            final double pos = estimationType.index(p[i], n);
+            q[i] = pos;
+            indices[i] = (int) pos;
+        }
+
+        // Partition
+        part.partition(x, indices, indices.length);
+
+        // Compute
+        for (int i = 0; i < p.length; i++) {
+            final int index = (int) q[i];
+            final double alpha = q[i] - index;
+            if (alpha != 0) {
+                q[i] = DoubleMath.interpolate(x[index], x[index + 1], alpha);
+            } else {
+                q[i] = x[index];
+            }
+        }
+        return q;
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantile of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p><strong>Performance</strong>
+     *
+     * <p>It is not recommended to use this method for repeat calls for different quantiles
+     * within the same values. The {@link #evaluateSP(double[], double...)} method should be used
+     * which provides better performance.
+     *
+     * @param part Partition function.
+     * @param values Values.
+     * @param p Quantile.
+     * @return the quantile
+     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @see #evaluateSP(double[], double...)
+     */
     private double evaluatePaired(PartitionFunction part, double[] values, double p) {
         // Implicit NPE
         final int n = values.length;
@@ -937,6 +1034,48 @@ public final class Quantile {
      */
     public double[] evaluateKSBM(double[] values, double... p) {
         return evaluate2(partition::partitionKSBM, values, p);
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantile of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
+     *
+     * <p><strong>Performance</strong>
+     *
+     * <p>It is not recommended to use this method for repeat calls for different quantiles
+     * within the same values. The {@link #evaluateKSBM(double[], double...)} method should be used
+     * which provides better performance.
+     *
+     * @param values Values.
+     * @param p Quantile.
+     * @return the quantile
+     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @see #evaluateSP(double[], double...)
+     */
+    public double evaluateK1SBM(double[] values, double p) {
+        return evaluateK1(partition::partitionK1SBM, values, p);
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantiles of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
+     *
+     * @param values Values.
+     * @param p Quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    public double[] evaluateK1SBM(double[] values, double... p) {
+        return evaluateK1(partition::partitionK1SBM, values, p);
     }
 
     /**
