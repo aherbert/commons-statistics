@@ -22,7 +22,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * @since 1.1
  */
 final class PivotCaches {
-    /** Default value for an unset upper floating pivot. 
+    /** Default value for an unset upper floating pivot.
      * Set as a value higher than any valid array index. */
     private static final int UPPER_DEFAULT = Integer.MAX_VALUE;
 

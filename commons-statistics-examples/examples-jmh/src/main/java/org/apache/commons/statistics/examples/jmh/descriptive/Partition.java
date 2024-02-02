@@ -822,7 +822,7 @@ final class Partition {
      * Move the minimum value to the start of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Does not respect the ordering of signed zeros.
+     * Respects the ordering of signed zeros.
      *
      * @param data Data array to use to find out the K<sup>th</sup> value.
      * @param begin Lower bound (inclusive).
@@ -890,6 +890,240 @@ final class Partition {
                 }
             }
         }
+    }
+
+    /**
+     * Partition the minimum {@code n} elements below {@code k} where
+     * {@code n = k - left + 1}. Uses a heap select algorithm.
+     *
+     * <p>Works with any {@code k} in the range {@code left <= k <= right}
+     * and can be used to perform a full sort of the range below {@code k}.
+     *
+     * <p>For best performance this should be called with
+     * {@code k - left < right - k}; and {@code k != left}, i.e.
+     * to partition a value in the lower half of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * Respects the ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k Index to select.
+     * @param count Size of range to sort below k.
+     * @param upper Upper bound (inclusive) of the sorted range.
+     * @return Lower bound (inclusive) of the sorted range.
+     * @see #partitionMin(double[], int, int)
+     */
+    static int partitionMinK(double[] a, int left, int right, int k, int count, int[] upper) {
+        // Size of the heap
+        int n = k - left + 1;
+        // Build the heap using Floyd's heap-construction algorithm
+        // Start at parent of the last element in the heap (n-1)
+        for (int start = (n - 1) >> 1; start >= 0; start--) {
+            maxHeapSiftDown(a, left, start, n);
+        }
+        // Scan the remaining data and insert
+        // Heap is rooted at a[left]
+        double max = a[left];
+        for (int i = k; ++i <= right;) {
+            if (a[i] < max) {
+                // swap(a[left], a[i])
+                a[left] = a[i];
+                a[i] = max;
+                maxHeapSiftDown(a, left, 0, n);
+                max = a[left];
+            }
+        }
+
+        // The max heap has been constructed in-place so a[left] is the max.
+        // To partition a[k] we have to move elements from the top of the
+        // heap to the position immediately after the end of the heap.
+
+        // Index of a zero in the sorted region
+        int zeroIndex = max == 0 ? k : -1;
+        if (count > 0) {
+            // Heap sort
+            for (int c = count; n-- > 1 && c >= 0; c--) {
+                // Move top of heap to the sorted end
+                final double v = a[left];
+                a[left] = a[left + n];
+                a[left + n] = v;
+                maxHeapSiftDown(a, left, 0, n);
+            }
+            if (zeroIndex < 0) {
+                zeroIndex = containsMixedZeros(a, k - 1, k - count);
+            }
+        } else {
+            // swap(a[left], a[k])
+            a[left] = a[k];
+            a[k] = max;
+        }
+
+        // Fix signed zeros.
+        if (zeroIndex >= 0) {
+            // Partition the data around zero and return the sorted bounds
+            final int lower = partitionZero(a, left, right, zeroIndex, upper);
+            // Expand sorted bounds if there were many zeros in the range
+            upper[0] = Math.max(upper[0], k);
+            return Math.min(lower, k - count);
+        }
+        upper[0] = k;
+        return k - count;
+    }
+
+    /**
+     * Sift the top element down the max heap.
+     *
+     * @param a Heap data.
+     * @param offset Offset of the heap in the data.
+     * @param root Root of the heap.
+     * @param n Size of the heap.
+     */
+    private static void maxHeapSiftDown(double[] a, int offset, int root, int n) {
+        // For node i:
+        // left child: 2i + 1
+        // right child: 2i + 2
+        // parent: floor((i-1) / 2)
+
+        // Value to sift
+        int p = root;
+        final double v = a[offset + p];
+        // Left child of root
+        int c = (p << 1) + 1;
+        while (c < n) {
+            // Use the right child if greater
+            if (c + 1 < n && a[offset + c] < a[offset + c + 1]) {
+                c++;
+            }
+            if (v < a[offset + c]) {
+                a[offset + p] = a[offset + c];
+                p = c;
+                c = (p << 1) + 1;
+            } else {
+                // Done
+                break;
+            }
+        }
+        a[offset + p] = v;
+    }
+
+    /**
+     * Partition the maximum {@code n} elements above {@code k} where
+     * {@code n = right - k + 1}. Uses a heap select algorithm.
+     *
+     * <p>Works with any {@code k} in the range {@code left <= k <= right}
+     * and can be used to perform a full sort of the range above {@code k}.
+     *
+     * <p>For best performance this should be called with
+     * {@code k - left > right - k}; and {@code k != right}, i.e.
+     * to partition a value in the upper half of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * Respects the ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k Index to select.
+     * @param count Size of range to sort below k.
+     * @param upper Upper bound (inclusive) of the sorted range.
+     * @return Lower bound (inclusive) of the sorted range.
+     * @see #partitionMax(double[], int, int)
+     */
+    static int partitionMaxK(double[] a, int left, int right, int k, int count, int[] upper) {
+        // Size of the heap
+        int n = right - k + 1;
+        // Build the heap using Floyd's heap-construction algorithm
+        // Start at parent of the last element in the heap (n-1)
+        for (int start = (n - 1) >> 1; start >= 0; start--) {
+            minHeapSiftDown(a, k, start, n);
+        }
+        // Scan the remaining data and insert
+        // Heap is rooted at a[left]
+        double min = a[k];
+        for (int i = k; --i >= left;) {
+            if (a[i] > min) {
+                // swap(a[left], a[i])
+                a[k] = a[i];
+                a[i] = min;
+                minHeapSiftDown(a, k, 0, n);
+                min = a[k];
+            }
+        }
+
+        // The min heap has been constructed in-place so a[k] is partitioned.
+        // To partition further we have to move elements from the top of the
+        // heap to the position immediately after the end of the heap
+        // which will output a descending order at the end of the array.
+
+        // Index of a zero in the sorted region
+        int zeroIndex = min == 0 ? k : -1;
+        if (count > 0) {
+            for (int c = count; n-- > 1 && c >= 0; c--) {
+                // Move top of heap to the (reverse) sorted end
+                final double v = a[k];
+                a[k] = a[k + n];
+                a[k + n] = v;
+                minHeapSiftDown(a, k, 0, n);
+            }
+            // Swap back the descending sequence
+            for (int i = k, j = right, c = count; i < j && c >= 0; i++, j--) {
+                final double v = a[i];
+                a[i] = a[j];
+                a[j] = v;
+            }
+            if (zeroIndex < 0) {
+                zeroIndex = containsMixedZeros(a, k + 1, k + count);
+            }
+        }
+
+        // Fix signed zeros.
+        if (zeroIndex >= 0) {
+            // Partition the data around zero and return the sorted bounds
+            final int lower = partitionZero(a, left, right, zeroIndex, upper);
+            // Expand sorted bounds if there were many zeros in the range
+            upper[0] = Math.max(upper[0], k + count);
+            return Math.min(lower, k);
+        }
+        upper[0] = k + count;
+        return k;
+    }
+
+    /**
+     * Sift the top element down the max heap.
+     *
+     * @param a Heap data.
+     * @param offset Offset of the heap in the data.
+     * @param root Root of the heap.
+     * @param n Size of the heap.
+     */
+    private static void minHeapSiftDown(double[] a, int offset, int root, int n) {
+        // For node i:
+        // left child: 2i + 1
+        // right child: 2i + 2
+        // parent: floor((i-1) / 2)
+
+        // Value to sift
+        int p = root;
+        final double v = a[offset + p];
+        // Left child of root
+        int c = (p << 1) + 1;
+        while (c < n) {
+            // Use the right child if less
+            if (c + 1 < n && a[offset + c] > a[offset + c + 1]) {
+                c++;
+            }
+            if (v > a[offset + c]) {
+                a[offset + p] = a[offset + c];
+                p = c;
+                c = (p << 1) + 1;
+            } else {
+                // Done
+                break;
+            }
+        }
+        a[offset + p] = v;
     }
 
     /**
@@ -1315,12 +1549,12 @@ final class Partition {
         // Special case for partition around adjacent indices (for interpolation)
         if (n == 2 && k[0] + 1 == k[1]) {
             if (k[0] <= right) {
-                long x = part.partition(data, 0, right, k[0], false, null);
+                final long x = part.partition(data, 0, right, k[0], false, null);
                 // Unpack the highest sorted position
-                int s = (int) x;
+                final int s = (int) x;
                 if (k[1] > s) {
                     // Unpack the closest bounding pivot
-                    int p = (int) (x >>> Integer.SIZE);
+                    final int p = (int) (x >>> Integer.SIZE);
                     partitionMin(data, k[1], p - 1);
                 }
             }
@@ -1347,7 +1581,7 @@ final class Partition {
                     // Already sorted
                     continue;
                 }
-                int r = pivots.nextPivotOrElse(ki + 1, right + 1);
+                final int r = pivots.nextPivotOrElse(ki + 1, right + 1);
                 part.partition(data, l + 1, r - 1, ki, r <= right,
                     // Final index does not require storing more pivots
                     i + 1 == n ? null : pivots);
@@ -1408,7 +1642,7 @@ final class Partition {
             part.partitionPaired(data, 0, right, k0, s0, pivots);
             final int l = pivots.previousPivot(k1);
             if (l < k1 || s1 < 0) {
-                int r = pivots.nextPivotOrElse(k1 + 1, right + 1);
+                final int r = pivots.nextPivotOrElse(k1 + 1, right + 1);
                 final int flags = s1 | ((r <= right) ? RIGHT_PIVOT : 0);
                 part.partitionPaired(data, l + 1, r - 1, k1, flags, IGNORE_PIVOTS);
             }
@@ -1444,7 +1678,7 @@ final class Partition {
             // Partition max
             int l = pivots.previousPivot(kn);
             if (l < kn || sn < 0) {
-                int r = pivots.nextPivotOrElse(kn + 1, right + 1);
+                final int r = pivots.nextPivotOrElse(kn + 1, right + 1);
                 part.partitionPaired(data, l + 1, r - 1, kn,
                     sn | ((r <= right) ? RIGHT_PIVOT : 0), pivots);
             }
@@ -1459,7 +1693,7 @@ final class Partition {
                     // ki is a pivot, no ki+1
                     continue;
                 }
-                int r = sortedK.nextSetBit(ki + 1);
+                final int r = sortedK.nextSetBit(ki + 1);
                 // Always internal
                 final int flags = si | RIGHT_PIVOT;
                 part.partitionPaired(data, l + 1, r - 1, ki, flags,
@@ -1475,7 +1709,7 @@ final class Partition {
                     // ki is a pivot, no ki+1
                     continue;
                 }
-                int r = pivots.nextPivotOrElse(ki + 1, right + 1);
+                final int r = pivots.nextPivotOrElse(ki + 1, right + 1);
                 final int flags = si | ((r <= right) ? RIGHT_PIVOT : 0);
                 part.partitionPaired(data, l + 1, r - 1, ki, flags,
                     i == n - 1 ? IGNORE_PIVOTS : pivots);
@@ -2592,6 +2826,32 @@ final class Partition {
     }
 
     /**
+     * Return an index of a zero if the range contains a mix of positive and negative zeros.
+     * If all positive, or all negative then this returns -1.
+     *
+     * @param data Values.
+     * @param begin Lower bound (inclusive).
+     * @param end Upper bound (inclusive).
+     * @return index of a zero
+     */
+    static int containsMixedZeros(double[] data, int begin, int end) {
+        int c = 0;
+        int cn = 0;
+        for (int i = begin; i <= end; i++) {
+            if (data[i] == 0) {
+                c++;
+                if (Double.doubleToRawLongBits(data[i]) < 0) {
+                    cn++;
+                }
+                if (c != cn) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Count the number of signed zeros (-0.0).
      *
      * @param data Values.
@@ -2664,5 +2924,111 @@ final class Partition {
             }
             sortZero(data, i, j);
         }
+    }
+
+    /**
+     * Detect and fix the sort order of signed zeros. Assumes the data may have been
+     * partially ordered around zero.
+     *
+     * <p>Searches for zeros if {@code data[begin] <= 0} and {@code data[end - 1] >= 0}.
+     * This function is expensive if the range is large as it must scan the range twice.
+     *
+     * @param data Values.
+     * @param begin Lower bound (inclusive).
+     * @param end Upper bound (inclusive).
+     */
+    private static void fixDiscontinuousSignedZeros(double[] data, int begin, int end) {
+        int j;
+        if (data[begin] <= 0 && data[end] >= 0) {
+            int i = begin;
+            while (data[i] < 0) {
+                i++;
+            }
+            j = end;
+            while (data[j] > 0) {
+                j--;
+            }
+            // Zeros in [i, j]
+            // Count the signed zeros and rewrite all zeros as 0.0
+            int c = 0;
+            for (int k = i; k <= j; k++) {
+                if (data[k] == 0 && Double.doubleToRawLongBits(data[k]) < 0) {
+                    data[k] = 0.0;
+                    c++;
+                }
+            }
+            for (int k = i; c != 0 && k <= j; k++) {
+                if (data[k] == 0) {
+                    data[k] = -0.0;
+                    c--;
+                }
+            }
+        }
+    }
+
+    /**
+     * Perform a stable partition of the data around zeros (all zeros are moved to
+     * the centre of the data, other elements are transferred in-order to the ends).
+     * Respects the order of signed zeros.
+     *
+     * <p>Warning: Assumes the data contains at least 1 zero.
+     *
+     * @param data Values.
+     * @param begin Lower bound (inclusive).
+     * @param end Upper bound (inclusive).
+     * @param pivot Location of known zero.
+     * @param upper Upper bound (inclusive) of the sorted range containing zero.
+     * @return Lower bound (inclusive) of the sorted range containing zero.
+     */
+    private static int partitionZero(double[] data, int begin, int end, int pivot, int[] upper) {
+        // Move values less than the partition value to the start.
+        // Move values greater than than the partition value to the end.
+        // Skip zeros values.
+
+        // Count signed zeros
+        assert data[pivot] == 0;
+        int c = Double.doubleToRawLongBits(data[pivot]) < 0 ? 1 : 0;
+
+        int lt = begin;
+        int gt = end;
+        for (int i = begin; i < pivot; i++) {
+            final double v = data[i];
+            if (v < 0) {
+                data[lt++] = v;
+            } else {
+                // Assume v == 0.0
+                // Count signed zeros
+                assert v == 0;
+                if (Double.doubleToRawLongBits(v) < 0) {
+                    c++;
+                }
+            }
+        }
+        for (int i = end; i > pivot; i--) {
+            final double v = data[i];
+            if (v > 0) {
+                data[gt--] = v;
+            } else {
+                // Assume v == 0.0
+                // Count signed zeros
+                assert v == 0;
+                if (Double.doubleToRawLongBits(v) < 0) {
+                    c++;
+                }
+            }
+        }
+
+        // zeros in [lt, gt]
+        // Fill in signed zeros
+        int k = lt;
+        while (--c >= 0) {
+            data[k++] = -0.0;
+        }
+        while (k <= gt) {
+            data[k++] = 0.0;
+        }
+
+        upper[0] = gt;
+        return lt;
     }
 }
