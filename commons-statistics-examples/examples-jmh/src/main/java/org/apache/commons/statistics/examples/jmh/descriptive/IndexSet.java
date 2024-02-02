@@ -540,7 +540,7 @@ final class IndexSet implements PivotStore {
      * the functionality to read, write and search indexes.
      */
     class IndexPivotCache implements PivotCache {
-        /** Default value for an unset upper floating pivot. 
+        /** Default value for an unset upper floating pivot.
          * Set as a value higher than any valid array index. */
         private static final int UPPER_DEFAULT = Integer.MAX_VALUE;
 

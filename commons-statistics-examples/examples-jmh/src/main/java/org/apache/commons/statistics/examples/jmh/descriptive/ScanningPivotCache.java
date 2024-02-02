@@ -18,12 +18,12 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
  * A cache of pivot indices used for partitioning an array into multiple regions.
- * 
+ *
  * <p>This extends the {@link PivotCache} interface to add support to traverse
- * a region between pivot and non-pivot indices. It is intended to be used to 
+ * a region between pivot and non-pivot indices. It is intended to be used to
  * allow unsorted gaps between pivots to be targeted using a full sort when
  * the partition function is configured to partition regions.
- * 
+ *
  * <p>In the following example the partition algorithm must fully sort [k1, k2]
  * and [k3, k4]. The first iteration detects pivots downstream from [k1, k2].
  * The second iteration can fill in the gaps when processing [k3, k4]:
