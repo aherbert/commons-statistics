@@ -122,7 +122,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource
+    @MethodSource(value = {"testPartitionMinMax"})
     void testPartitionMin(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
@@ -133,7 +133,7 @@ class PartitionTest {
         Assertions.assertArrayEquals(sorted, values, "Data destroyed");
     }
 
-    static Stream<Arguments> testPartitionMin() {
+    static Stream<Arguments> testPartitionMinMax() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
         builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
@@ -156,7 +156,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource
+    @MethodSource(value = {"testPartitionMinMax"})
     void testPartitionMax(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
@@ -167,28 +167,104 @@ class PartitionTest {
         Assertions.assertArrayEquals(sorted, values, "Data destroyed");
     }
 
-    static Stream<Arguments> testPartitionMax() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
-        builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
-        for (final int size : new int[] {5, 10}) {
-            final double[] values = rng.doubles(size).toArray();
-            builder.add(Arguments.of(values.clone(), 0, size - 1));
-            builder.add(Arguments.of(values.clone(), size >>> 1, size - 1));
-            builder.add(Arguments.of(values.clone(), 1, size >>> 1));
+    @ParameterizedTest
+    @MethodSource(value = {"testPartitionK", "testPartitionMinMax"})
+    void testPartitionMinK(double[] values, int from, int to) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        final int[] upper = {0};
+        for (int k = from; k <= to; k++) {
+            final int target = k;
+            double[] x = values.clone();
+            int lower = Partition.partitionMinK(x, from, to, k, 0, upper);
+            Assertions.assertTrue(lower <= k && upper[0] >= k);
+            for (int i = lower; i <= upper[0]; i++) {
+                Assertions.assertEquals(sorted[i], x[i], () -> Integer.toString(target));
+            }
+            // Check the data is the same
+            Arrays.sort(x, from, to + 1);
+            Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+            if (k > from) {
+                // Sort an extra 1
+                x = values.clone();
+                lower = Partition.partitionMinK(x, from, to, k, 1, upper);
+                Assertions.assertTrue(lower <= k - 1 && upper[0] >= k);
+                for (int i = lower; i <= upper[0]; i++) {
+                    Assertions.assertEquals(sorted[i], x[i], () -> (target - 1) + " to " + target);
+                }
+                // Check the data is the same
+                Arrays.sort(x, from, to + 1);
+                Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                if (k > from + 1) {
+                    // Sort all
+                    x = values.clone();
+                    lower =  Partition.partitionMinK(x, from, to, k, k - from, upper);
+                    Assertions.assertTrue(lower == from && upper[0] >= k);
+                    for (int i = lower; i <= upper[0]; i++) {
+                        Assertions.assertEquals(sorted[i], x[i], () -> "Full sort to " + Integer.toString(target));
+                    }
+                    // Check the data is the same
+                    Arrays.sort(x, from, to + 1);
+                    Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                }
+            }
         }
-        builder.add(Arguments.of(new double[] {-0.0, 0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {0.0, -0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {-0.0, -0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {0.0, 0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {0.0, -0.0, 0.0, -0.0}, 0, 3));
-        builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0, 0.0}, 0, 3));
-        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
-        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
-        return builder.build();
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testPartitionK", "testPartitionMinMax"})
+    void testPartitionMaxK(double[] values, int from, int to) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        final int[] upper = {0};
+        for (int k = from; k <= to; k++) {
+            final int target = k;
+            double[] x = values.clone();
+            int lower = Partition.partitionMaxK(x, from, to, k, 0, upper);
+            Assertions.assertTrue(lower <= k && upper[0] >= k);
+            for (int i = lower; i <= upper[0]; i++) {
+                Assertions.assertEquals(sorted[i], x[i], () -> Integer.toString(target));
+            }
+            // Check the data is the same
+            Arrays.sort(x, from, to + 1);
+            Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+            if (k < to) {
+                // Sort an extra 1
+                x = values.clone();
+                lower = Partition.partitionMaxK(x, from, to, k, 1, upper);
+                Assertions.assertTrue(lower <= k && upper[0] >= k + 1);
+                for (int i = lower; i <= upper[0]; i++) {
+                    Assertions.assertEquals(sorted[i], x[i], () -> target + " to " + (target + 1));
+                }
+                // Check the data is the same
+                Arrays.sort(x, from, to + 1);
+                Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                if (k < to - 1) {
+                    // Sort all
+                    x = values.clone();
+                    lower = Partition.partitionMaxK(x, from, to, k, to - k, upper);
+                    Assertions.assertTrue(lower <= k && upper[0] == to);
+                    for (int i = lower; i <= upper[0]; i++) {
+                        Assertions.assertEquals(sorted[i], x[i], () -> "Full sort from " + Integer.toString(target));
+                    }
+                    // Check the data is the same
+                    Arrays.sort(x, from, to + 1);
+                    Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                }
+            }
+        }
+    }
+
+    static Stream<Arguments> testPartitionK() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        builder.add(Arguments.of(new double[] {1}, 0, 0));
+        builder.add(Arguments.of(new double[] {3, 2, 1}, 1, 1));
+        builder.add(Arguments.of(new double[] {2, 1}, 0, 1));
+        builder.add(Arguments.of(new double[] {4, 3, 2, 1}, 1, 2));
+        builder.add(Arguments.of(new double[] {-1, 0.0, -0.0, -0.0, 1}, 0, 4));
+        builder.add(Arguments.of(new double[] {-1, 0.0, -0.0, -0.0, 1}, 0, 2));
+        return builder.build();
+    }
 
 //    @ParameterizedTest
 //    @MethodSource
