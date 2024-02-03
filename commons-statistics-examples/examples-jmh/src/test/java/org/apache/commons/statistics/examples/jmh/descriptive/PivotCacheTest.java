@@ -33,7 +33,7 @@ class PivotCacheTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSingleRange", "testSinglePoint"})
-    void testSingleRangeUsingFilledIndexSet(int left, int right, int[][] indices) {
+    void testSingleRangeUsingFilledIndexSetAsScanningPivotCache(int left, int right, int[][] indices) {
         // Collate all indices
         int[] allIndices = Arrays.stream(indices).flatMapToInt(Arrays::stream).toArray();
         // Append left and right
@@ -47,8 +47,14 @@ class PivotCacheTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSingleRange", "testSinglePoint"})
-    void testSingleRangeUsingIndexSet(int left, int right, int[][] indices) {
+    void testSingleRangeUsingScanningPivotCache(int left, int right, int[][] indices) {
         assertSingleRange(left, right, indices, IndexSet.createScanningPivotCache(left, right));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSingleRange", "testSinglePoint"})
+    void testSingleRangeUsingIndexSet(int left, int right, int[][] indices) {
+        assertSingleRange(left, right, indices, IndexSet.ofRange(left, right));
     }
 
     @ParameterizedTest
@@ -238,7 +244,7 @@ class PivotCacheTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSetRange", "testSetRangeSinglePoint"})
-    void testSetRangeUsingFilledIndexSet(int left, int right, int[][] indices) {
+    void testSetRangeUsingFilledIndexSetAsScanningPivotCache(int left, int right, int[][] indices) {
         // Collate all indices within [left, right]
         int[] allIndices = Arrays.stream(indices).flatMapToInt(Arrays::stream)
             .filter(i -> i >= left && i <= right).toArray();
@@ -253,8 +259,14 @@ class PivotCacheTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSetRange", "testSetRangeSinglePoint"})
-    void testSetRangeUsingIndexSet(int left, int right, int[][] indices) {
+    void testSetRangeUsingScanningPivotCache(int left, int right, int[][] indices) {
         assertSetRange(left, right, indices, IndexSet.createScanningPivotCache(left, right));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSetRange", "testSetRangeSinglePoint"})
+    void testSetRangeUsingIndexSet(int left, int right, int[][] indices) {
+        assertSetRange(left, right, indices, IndexSet.ofRange(left, right));
     }
 
     @ParameterizedTest

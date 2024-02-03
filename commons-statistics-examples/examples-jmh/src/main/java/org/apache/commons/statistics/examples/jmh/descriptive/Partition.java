@@ -45,9 +45,13 @@ import java.util.Arrays;
 final class Partition {
     // This class contains implementations for use in benchmarking.
 
-    /** Minimum selection size for insertion sort rather than selection.
+    /** Minimum selection size for quickselect.
+     * Below this switch to insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in the original paper. */
-    private static final int MIN_SELECT_SIZE = 17;
+    private static final int MIN_QUICKSELECT_SIZE = 17;
+    /** Minimum selection size for heapselect.
+     * Set to the same value as min select size. This requires tuning for performance. */
+    private static final int MIN_HEAPSELECT_SIZE = 17;
     /** Minimum length between 2 pivots {@code p2 - p1} that requires a full sort. */
     private static final int SORT_BETWEEN_SIZE = 2;
     /** Mask to extract the positive index from an integer. */
@@ -78,6 +82,10 @@ final class Partition {
      * is stopped. The strategy below this threshold varies, e.g. sort the remaining
      * range; or use heapselect. */
     private final int minQuickSelectSize;
+    /** Minimum size for heapselect. If distance of all points to partition to the bounds
+     * {@code [left, right]} is below this distance then heapselect is used.
+     * Not supported by all partition methods. */
+    private final int minHeapSelectSize;
 
     /** Setting to indicate strategy for processing of multiple keys. */
     private final KeyStrategy keyStrategy;
@@ -806,6 +814,37 @@ final class Partition {
             sort(a, k3 + 1, right, true, rightInner);
         }
     }
+    /**
+     * Single-pivot partition method handling equal values.
+     */
+    @FunctionalInterface
+    private interface SPEPartition {
+        /**
+         * Partition an array slice around a single pivot. Partitioning exchanges array
+         * elements such that all elements smaller than pivot are before it and all
+         * elements larger than pivot are after it.
+         *
+         * <p>Note: Requires that the range contains no NaN values.
+         *
+         * <p>This method returns 2 points describing the pivot range of equal values.
+         * <pre>{@code
+         *                     |k0 k1|
+         * |         <P        | ==P |            >P        |
+         * }</pre>
+         * <ul>
+         * <li>k0: lower pivot point
+         * <li>k1: upper pivot point
+         * </ul>
+         *
+         * @param a Data array.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param upper Upper bound (inclusive) of the pivot range [k1].
+         * @param pivot Pivot location.
+         * @return Lower bound (inclusive) of the pivot range [k0].
+         */
+        int partition(double[] a, int left, int right, int pivot, int[] upper);
+    }
 
     /**
      * Constructor with default {@link PivotingStrategy#MEDIAN_OF_3 median of 3} pivoting
@@ -821,7 +860,7 @@ final class Partition {
      * @param pivotingStrategy Pivoting strategy to use.
      */
     Partition(PivotingStrategy pivotingStrategy) {
-        this(pivotingStrategy, MIN_SELECT_SIZE, KeyStrategy.INDEX_SET);
+        this(pivotingStrategy, MIN_QUICKSELECT_SIZE, MIN_HEAPSELECT_SIZE, KeyStrategy.INDEX_SET);
     }
 
     /**
@@ -830,7 +869,7 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(int minQuickSelectSize) {
-        this(PivotingStrategy.MEDIAN_OF_3, minQuickSelectSize, KeyStrategy.INDEX_SET);
+        this(PivotingStrategy.MEDIAN_OF_3, minQuickSelectSize, MIN_HEAPSELECT_SIZE, KeyStrategy.INDEX_SET);
     }
 
     /**
@@ -839,19 +878,23 @@ final class Partition {
      * @param keyStrategy Strategy for processing multiple keys.
      */
     Partition(KeyStrategy keyStrategy) {
-        this(PivotingStrategy.MEDIAN_OF_3, MIN_SELECT_SIZE, keyStrategy);
+        this(PivotingStrategy.MEDIAN_OF_3, MIN_QUICKSELECT_SIZE, MIN_HEAPSELECT_SIZE, keyStrategy);
     }
 
     /**
-     * Constructor with specified pivoting strategy; quickselect size; and sequential key processing.
+     * Constructor with specified pivoting strategy; quickselect size; heapselect size;
+     * and sequential key processing.
      *
      * @param pivotingStrategy Pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
+     * @param minHeapSelectSize Minimum size for heapselect.
      * @param keyStrategy Strategy for processing multiple keys.
      */
-    Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize, KeyStrategy keyStrategy) {
+    Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize,
+        int minHeapSelectSize, KeyStrategy keyStrategy) {
         this.pivotingStrategy = pivotingStrategy;
         this.minQuickSelectSize = minQuickSelectSize;
+        this.minHeapSelectSize = minHeapSelectSize;
         this.keyStrategy = keyStrategy;
     }
 
@@ -862,14 +905,14 @@ final class Partition {
      * Respects the ordering of signed zeros.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void partitionMin(double[] data, int begin, int end) {
-        partitionMinIgnoreZeros(data, begin, end);
+    static void partitionMin(double[] data, int left, int right) {
+        partitionMinIgnoreZeros(data, left, right);
         // Edge-case: if min was 0.0, check for a -0.0 above and swap.
-        if (data[begin] == 0) {
-            minZero(data, begin, end);
+        if (data[left] == 0) {
+            minZero(data, left, right);
         }
     }
 
@@ -880,22 +923,22 @@ final class Partition {
      * Does not respect the ordering of signed zeros.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void partitionMin2(double[] data, int begin, int end) {
+    static void partitionMin2(double[] data, int left, int right) {
         // Note: This is a duplicate of partitionMin2IgnoreZeros
         // but with handling of signed partitioning zeros.
         // This cannot call partitionMin2IgnoreZeros as the
         // handling of a pair is different.
         // This is for comparative benchmarking.
 
-        final int len = end - begin + 1;
+        final int len = right - left + 1;
         if (len <= 1) {
             return;
         }
-        int j0 = begin;
-        int j1 = begin + 1;
+        int j0 = left;
+        int j1 = left + 1;
         if (DoubleMath.lessThan(data[j1], data[j0])) {
             final double v = data[j0];
             data[j0] = data[j1];
@@ -907,7 +950,7 @@ final class Partition {
         double min0 = data[j0];
         double min1 = data[j1];
 
-        for (int i = j1; ++i <= end;) {
+        for (int i = j1; ++i <= right;) {
             final double v = data[i];
             if (v < min1) {
                 if (data[i] < min0) {
@@ -932,11 +975,11 @@ final class Partition {
         // |  |  |......|j0|....|j1|..  Found multiple smaller values
         // |  |  |......|j1|....|j0|..  Found multiple smaller values
         // Take care to not overwrite min values
-        final double v0 = data[begin];
-        final double v1 = data[begin + 1];
-        data[begin] = min0;
-        data[begin + 1] = min1;
-        if (j1 == begin) {
+        final double v0 = data[left];
+        final double v1 = data[left + 1];
+        data[left] = min0;
+        data[left + 1] = min1;
+        if (j1 == left) {
             // ** Special case
             data[j0] = v1;
         } else {
@@ -946,10 +989,10 @@ final class Partition {
 
         // Edge-case: if min was 0.0, check for a -0.0 above and swap.
         if (min0 == 0) {
-            minZero(data, begin, end);
+            minZero(data, left, right);
         }
         if (min1 == 0) {
-            minZero(data, begin + 1, end);
+            minZero(data, left + 1, right);
         }
     }
 
@@ -960,36 +1003,36 @@ final class Partition {
      * Respects the ordering of signed zeros.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void partitionMax(double[] data, int begin, int end) {
-        partitionMaxIgnoreZeros(data, begin, end);
+    static void partitionMax(double[] data, int left, int right) {
+        partitionMaxIgnoreZeros(data, left, right);
         // Edge-case: if max was -0.0, check for a 0.0 below and swap.
-        if (data[end] == 0) {
-            maxZero(data, begin, end);
+        if (data[right] == 0) {
+            maxZero(data, left, right);
         }
     }
 
     /**
-     * Place a negative signed zero at {@code begin} before any positive signed zero in the range,
+     * Place a negative signed zero at {@code left} before any positive signed zero in the range,
      * {@code -0.0 < 0.0}.
      *
-     * <p>Warning: Only call when {@code data[begin]} is zero.
+     * <p>Warning: Only call when {@code data[left]} is zero.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    private static void minZero(double[] data, int begin, int end) {
-        // Assume data[begin] is zero and check the sign bit
-        if (Double.doubleToRawLongBits(data[begin]) >= 0) {
+    private static void minZero(double[] data, int left, int right) {
+        // Assume data[left] is zero and check the sign bit
+        if (Double.doubleToRawLongBits(data[left]) >= 0) {
             // Check for a -0.0 above and swap.
             // We only require 1 swap as this is not a full sort of zeros.
-            for (int k = begin; ++k <= end;) {
+            for (int k = left; ++k <= right;) {
                 if (data[k] == 0 && Double.doubleToRawLongBits(data[k]) < 0) {
                     data[k] = 0.0;
-                    data[begin] = -0.0;
+                    data[left] = -0.0;
                     break;
                 }
             }
@@ -997,24 +1040,24 @@ final class Partition {
     }
 
     /**
-     * Place a positive signed zero at {@code end} after any negative signed zero in the range,
+     * Place a positive signed zero at {@code right} after any negative signed zero in the range,
      * {@code -0.0 < 0.0}.
      *
-     * <p>Warning: Only call when {@code data[end]} is zero.
+     * <p>Warning: Only call when {@code data[right]} is zero.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    private static void maxZero(double[] data, int begin, int end) {
-        // Assume data[end] is zero and check the sign bit
-        if (Double.doubleToRawLongBits(data[end]) < 0) {
+    private static void maxZero(double[] data, int left, int right) {
+        // Assume data[right] is zero and check the sign bit
+        if (Double.doubleToRawLongBits(data[right]) < 0) {
             // Check for a 0.0 below and swap.
             // We only require 1 swap as this is not a full sort of zeros.
-            for (int k = end; --k >= begin;) {
+            for (int k = right; --k >= left;) {
                 if (data[k] == 0 && Double.doubleToRawLongBits(data[k]) >= 0) {
                     data[k] = -0.0;
-                    data[end] = 0.0;
+                    data[right] = 0.0;
                     break;
                 }
             }
@@ -1029,22 +1072,22 @@ final class Partition {
      * Does not respect the ordering of signed zeros.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void partitionMinIgnoreZeros(double[] data, int begin, int end) {
-        int i = begin;
+    static void partitionMinIgnoreZeros(double[] data, int left, int right) {
+        int i = left;
         double min = data[i];
         int j = i;
-        while (++i <= end) {
+        while (++i <= right) {
             if (data[i] < min) {
                 min = data[i];
                 j = i;
             }
         }
-        //swap(data, begin, j)
-        data[j] = data[begin];
-        data[begin] = min;
+        //swap(data, left, j)
+        data[j] = data[left];
+        data[left] = min;
     }
 
     /**
@@ -1054,16 +1097,16 @@ final class Partition {
      * Does not respect the ordering of signed zeros.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void partitionMin2IgnoreZeros(double[] data, int begin, int end) {
-        final int len = end - begin + 1;
+    static void partitionMin2IgnoreZeros(double[] data, int left, int right) {
+        final int len = right - left + 1;
         if (len <= 1) {
             return;
         }
-        int j0 = begin;
-        int j1 = begin + 1;
+        int j0 = left;
+        int j1 = left + 1;
         if (data[j1] < data[j0]) {
             final double v = data[j0];
             data[j0] = data[j1];
@@ -1075,7 +1118,7 @@ final class Partition {
         double min0 = data[j0];
         double min1 = data[j1];
 
-        for (int i = j1; ++i <= end;) {
+        for (int i = j1; ++i <= right;) {
             final double v = data[i];
             if (v < min1) {
                 if (data[i] < min0) {
@@ -1095,16 +1138,16 @@ final class Partition {
         // |j0|j1|....................
         // Possible ends:
         // |j0|j1|....................  Just overwrite the same values
-        // |j0|  |......|j1|..........  Found 1 value smaller than larger of the original pair
-        // |j1|  |......|j0|..........  Found 1 value smaller than smaller of the original pair **
+        // |j0|  |......|j1|..........  Found 1 value below the larger of the original pair
+        // |j1|  |......|j0|..........  Found 1 value below the smaller of the original pair **
         // |  |  |......|j0|....|j1|..  Found multiple smaller values
         // |  |  |......|j1|....|j0|..  Found multiple smaller values
         // Take care to not overwrite min values
-        final double v0 = data[begin];
-        final double v1 = data[begin + 1];
-        data[begin] = min0;
-        data[begin + 1] = min1;
-        if (j1 == begin) {
+        final double v0 = data[left];
+        final double v1 = data[left + 1];
+        data[left] = min0;
+        data[left + 1] = min1;
+        if (j1 == left) {
             // ** Special case
             data[j0] = v1;
         } else {
@@ -1120,22 +1163,167 @@ final class Partition {
      * Does not respect the ordering of signed zeros.
      *
      * @param data Data.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void partitionMaxIgnoreZeros(double[] data, int begin, int end) {
-        int i = end;
+    static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
+        int i = right;
         double max = data[i];
         int j = i;
-        while (--i >= begin) {
+        while (--i >= left) {
             if (data[i] > max) {
                 max = data[i];
                 j = i;
             }
         }
-        //swap(data, end, j)
-        data[j] = data[end];
-        data[end] = max;
+        //swap(data, right, j)
+        data[j] = data[right];
+        data[right] = max;
+    }
+
+    /**
+     * Move the two largest values to the end of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * Does not respect the ordering of signed zeros.
+     *
+     * @param data Data.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void partitionMax2IgnoreZeros(double[] data, int left, int right) {
+        final int len = right - left + 1;
+        if (len <= 1) {
+            return;
+        }
+        int j0 = right;
+        int j1 = right - 1;
+        if (data[j1] > data[j0]) {
+            final double v = data[j0];
+            data[j0] = data[j1];
+            data[j1] = v;
+        }
+        if (len == 2) {
+            return;
+        }
+        double max0 = data[j0];
+        double max1 = data[j1];
+
+        for (int i = j1; --i >= left;) {
+            final double v = data[i];
+            if (v > max1) {
+                if (data[i] > max0) {
+                    j1 = j0;
+                    j0 = i;
+                    max1 = max0;
+                    max0 = v;
+                } else {
+                    j1 = i;
+                    max1 = v;
+                }
+            }
+        }
+
+        // Move two largest values
+        // Start:
+        // ....................|j1|j0|
+        // Possible ends:
+        // ....................|j1|j0|  Just overwrite the same values
+        // ......|j1|..........|  |j0|  Found 1 value above the larger of the original pair
+        // ......|j0|..........|  |j1|  Found 1 value above the smaller of the original pair **
+        // ......|j0|....|j1|..|  |  |  Found multiple larger values
+        // ......|j1|....|j0|..|  |  |  Found multiple larger values
+        // Take care to not overwrite max values
+        final double v0 = data[right];
+        final double v1 = data[right - 1];
+        data[right] = max0;
+        data[right - 1] = max1;
+        if (j1 == right) {
+            // ** Special case
+            data[j0] = v1;
+        } else {
+            data[j0] = v0;
+            data[j1] = v1;
+        }
+    }
+
+    /**
+     * Partition the elements {@code ka} and {@code kb} using a heap select algorithm. It
+     * is assumed {@code left <= ka <= kb <= right}. Any range between the two elements is
+     * not ensured to be sorted.
+     *
+     * <p>If there is no range between the two point, i.e. {@code ka == kb} or
+     * {@code ka + 1 == kb}, it is preferred to use
+     * {@link #heapSelectRange(double[], int, int, int, int)}. The result is the same but
+     * the decision choice is simpler for the range function.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     * @see #heapSelectRange(double[], int, int, int, int)
+     */
+    static void heapSelect(double[] a, int left, int right, int ka, int kb) {
+        assert ka <= kb;
+        // Call the appropriate heap partition function based on
+        // building a heap up to 50% of the length
+        // |l|-----|ka|--------|kb|------|r|
+        //  ---s1----
+        //                      -----s3----
+        //  ---------s2----------
+        //          ----------s4-----------
+        final int s1 = ka - left;
+        final int s2 = kb - left;
+        final int s3 = right - kb;
+        final int s4 = right - ka;
+        if (s1 + s3 < Math.min(s2, s4)) {
+            // Partition both ends.
+            // Note: Not possible if ka == kb.
+            // s1 + s3 == r - l and >= than the smallest
+            // distance to one of the ends
+            partitionMinK(a, left, right, ka, 0);
+            partitionMaxK(a, left, right, kb, 0);
+        } else if (s2 < s4) {
+            partitionMinK(a, left, right, kb, kb - ka);
+        } else {
+            // s4
+            partitionMaxK(a, left, right, ka, kb - ka);
+        }
+    }
+
+    /**
+     * Partition the elements between {@code ka} and {@code kb} using a heap select
+     * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     * @see #heapSelect(double[], int, int, int, int)
+     */
+    static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
+        assert ka <= kb;
+        // Call the appropriate heap partition function based on
+        // building a heap up to 50% of the length
+        // |l|-----|ka|--------|kb|------|r|
+        //  ---------s2----------
+        //          ----------s4-----------
+        final int s2 = kb - left;
+        final int s4 = right - ka;
+        if (s2 < s4) {
+            partitionMinK(a, left, right, kb, kb - ka);
+        } else {
+            // s4
+            partitionMaxK(a, left, right, ka, kb - ka);
+        }
     }
 
     /**
@@ -1146,24 +1334,35 @@ final class Partition {
      * and can be used to perform a full sort of the range below {@code k}.
      *
      * <p>For best performance this should be called with
-     * {@code k - left < right - k}; and {@code k != left}, i.e.
+     * {@code k - left < right - k}, i.e.
      * to partition a value in the lower half of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Respects the ordering of signed zeros.
+     * Does not respects the ordering of signed zeros.
+     *
+     * <p>This may sort more than {@code count} if {@code k} is close to {@code left}.
+     * The lower bound of the sorted range is returned.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Index to select.
      * @param count Size of range to sort below k.
-     * @param upper Upper bound (inclusive) of the sorted range.
      * @return Lower bound (inclusive) of the sorted range.
-     * @see #partitionMin(double[], int, int)
      */
-    static int partitionMinK(double[] a, int left, int right, int k, int count, int[] upper) {
+    static int partitionMinK(double[] a, int left, int right, int k, int count) {
         // Size of the heap
         int n = k - left + 1;
+        // Optimise
+        if (n <= 2) {
+            if (n == 1) {
+                partitionMinIgnoreZeros(a, left, right);
+            } else {
+                partitionMin2IgnoreZeros(a, left, right);
+            }
+            // This is always 'left' even when count == 0
+            return left;
+        }
         // Build the heap using Floyd's heap-construction algorithm
         // Start at parent of the last element in the heap (n-1)
         for (int start = (n - 1) >> 1; start >= 0; start--) {
@@ -1185,11 +1384,15 @@ final class Partition {
         // The max heap has been constructed in-place so a[left] is the max.
         // To partition a[k] we have to move elements from the top of the
         // heap to the position immediately after the end of the heap.
+        // root
+        // |l|-min-heap-|k|--------------|
+        //  |  <-swap->  |
 
-        // Index of a zero in the sorted region
-        int zeroIndex = max == 0 ? k : -1;
+        int low = k;
         if (count > 0) {
             // Heap sort
+            // Output lower bound limited by the heap size
+            low -= Math.min(count, n - 1);
             for (int c = count; n-- > 1 && c >= 0; c--) {
                 // Move top of heap to the sorted end
                 final double v = a[left];
@@ -1197,31 +1400,19 @@ final class Partition {
                 a[left + n] = v;
                 maxHeapSiftDown(a, left, 0, n);
             }
-            if (zeroIndex < 0) {
-                // min is not zero.
-                // Check if the region we will claim as sorted contains zeros.
-                zeroIndex = containsMixedZeros(a, left, k - 1);
-            }
         } else {
             // swap(a[left], a[k])
             a[left] = a[k];
             a[k] = max;
         }
-
-        // Fix signed zeros.
-        if (zeroIndex >= 0) {
-            // Partition the data around zero and return the sorted bounds
-            final int lower = partitionZero(a, left, right, zeroIndex, upper);
-            // Expand sorted bounds if there were many zeros in the range
-            upper[0] = Math.max(upper[0], k);
-            return Math.min(lower, k - count);
-        }
-        upper[0] = k;
-        return k - count;
+        return low;
     }
 
     /**
      * Sift the top element down the max heap.
+     *
+     * <p>Note this creates the max heap in ascending sequence so the
+     * heap is positioned above the root.
      *
      * @param a Heap data.
      * @param offset Offset of the heap in the data.
@@ -1264,84 +1455,86 @@ final class Partition {
      * and can be used to perform a full sort of the range above {@code k}.
      *
      * <p>For best performance this should be called with
-     * {@code k - left > right - k}; and {@code k != right}, i.e.
+     * {@code k - left > right - k}, i.e.
      * to partition a value in the upper half of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Respects the ordering of signed zeros.
+     * Does not respects the ordering of signed zeros.
+     *
+     * <p>This may sort more than {@code count} if {@code k} is close to {@code right}.
+     * The upper bound of the sorted range is returned.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Index to select.
      * @param count Size of range to sort below k.
-     * @param upper Upper bound (inclusive) of the sorted range.
-     * @return Lower bound (inclusive) of the sorted range.
-     * @see #partitionMax(double[], int, int)
+     * @return Upper bound (inclusive) of the sorted range.
      */
-    static int partitionMaxK(double[] a, int left, int right, int k, int count, int[] upper) {
+    static int partitionMaxK(double[] a, int left, int right, int k, int count) {
         // Size of the heap
         int n = right - k + 1;
+        // Optimise
+        if (n <= 2) {
+            if (n == 1) {
+                partitionMaxIgnoreZeros(a, left, right);
+            } else {
+                partitionMax2IgnoreZeros(a, left, right);
+            }
+            // This is always 'right' even when count == 0
+            return right;
+        }
         // Build the heap using Floyd's heap-construction algorithm
         // Start at parent of the last element in the heap (n-1)
         for (int start = (n - 1) >> 1; start >= 0; start--) {
-            minHeapSiftDown(a, k, start, n);
+            minHeapSiftDown(a, right, start, n);
         }
         // Scan the remaining data and insert
-        // Heap is rooted at a[left]
-        double min = a[k];
+        // Heap is rooted at a[right]
+        double min = a[right];
         for (int i = k; --i >= left;) {
             if (a[i] > min) {
-                // swap(a[left], a[i])
-                a[k] = a[i];
+                // swap(a[right], a[i])
+                a[right] = a[i];
                 a[i] = min;
-                minHeapSiftDown(a, k, 0, n);
-                min = a[k];
+                minHeapSiftDown(a, right, 0, n);
+                min = a[right];
             }
         }
 
-        // The min heap has been constructed in-place so a[k] is partitioned.
-        // To partition further we have to move elements from the top of the
-        // heap to the position immediately after the end of the heap
-        // which will output a descending order at the end of the array.
+        // The min heap has been constructed in-place so a[right] is the min.
+        // To partition a[k] we have to move elements from the top of the
+        // heap to the position immediately before the end of the heap
+        // (which is below right):
+        //                             root
+        // |--------------|k|-min-heap-|r|
+        //                 |  <-swap->  |
 
-        // Index of a zero in the sorted region
-        int zeroIndex = min == 0 ? k : -1;
+        int upper = k;
         if (count > 0) {
+            // Heap sort
+            // Output upper bound limited by the heap size
+            upper += Math.min(count, n - 1);
             for (int c = count; n-- > 1 && c >= 0; c--) {
-                // Move top of heap to the (reverse) sorted end
-                final double v = a[k];
-                a[k] = a[k + n];
-                a[k + n] = v;
-                minHeapSiftDown(a, k, 0, n);
+                // Move top of heap to the sorted end
+                final double v = a[right];
+                a[right] = a[right - n];
+                a[right - n] = v;
+                minHeapSiftDown(a, right, 0, n);
             }
-            // Swap back the descending sequence
-            for (int i = k, j = right, c = count; i < j && c >= 0; i++, j--) {
-                final double v = a[i];
-                a[i] = a[j];
-                a[j] = v;
-            }
-            if (zeroIndex < 0) {
-                // min is not zero.
-                // Check if the region we will claim as sorted contains zeros.
-                zeroIndex = containsMixedZeros(a, k + 1, right);
-            }
+        } else {
+            // swap(a[right], a[k])
+            a[right] = a[k];
+            a[k] = min;
         }
-
-        // Fix signed zeros.
-        if (zeroIndex >= 0) {
-            // Partition the data around zero and return the sorted bounds
-            final int lower = partitionZero(a, left, right, zeroIndex, upper);
-            // Expand sorted bounds if there were many zeros in the range
-            upper[0] = Math.max(upper[0], k + count);
-            return Math.min(lower, k);
-        }
-        upper[0] = k + count;
-        return k;
+        return upper;
     }
 
     /**
-     * Sift the top element down the max heap.
+     * Sift the top element down the min heap.
+     *
+     * <p>Note this creates the min heap in descending sequence so the
+     * heap is positioned below the root.
      *
      * @param a Heap data.
      * @param offset Offset of the heap in the data.
@@ -1356,16 +1549,16 @@ final class Partition {
 
         // Value to sift
         int p = root;
-        final double v = a[offset + p];
+        final double v = a[offset - p];
         // Left child of root
         int c = (p << 1) + 1;
         while (c < n) {
             // Use the right child if less
-            if (c + 1 < n && a[offset + c] > a[offset + c + 1]) {
+            if (c + 1 < n && a[offset - c] > a[offset - c - 1]) {
                 c++;
             }
-            if (v > a[offset + c]) {
-                a[offset + p] = a[offset + c];
+            if (v > a[offset - c]) {
+                a[offset - p] = a[offset - c];
                 p = c;
                 c = (p << 1) + 1;
             } else {
@@ -1373,7 +1566,7 @@ final class Partition {
                 break;
             }
         }
-        a[offset + p] = v;
+        a[offset - p] = v;
     }
 
     /**
@@ -1488,6 +1681,15 @@ final class Partition {
         sortRange(this::partitionRangeSBM, data);
     }
 
+    // TODO:
+    // Update the range idea to implement Introselect
+    // Do this for a range (k1, k2). When partitioning
+    // cuts (k1, k2) then use a Range interface to determine
+    // the cut: (k1, k2b) + (k1b, k2) to pass into the recursive call.
+    // https://en.wikipedia.org/wiki/Introsort
+    // https://en.wikipedia.org/wiki/Introselect
+    // Combine quicksort and heapselect
+
     /**
      * Sort an array within the ranges identified by the {@code sortRange}.
      *
@@ -1496,12 +1698,12 @@ final class Partition {
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
      * @param data Data array.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @param sortRange Predicate.
      */
     // TODO - Remove used of instance methods for partitioning
-    private void partitionRangeSBM(double[] data, int begin, int end, IntIntBiPredicate sortRange) {
+    private void partitionRangeSBM(double[] data, int left, int right, IntIntBiPredicate sortRange) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
@@ -1528,20 +1730,20 @@ final class Partition {
         // - Added a fast-forward over initial range containing the pivot.
 
         // Switch to insertion sort for small range
-        if (end - begin <= minQuickSelectSize) {
-            Sorting.sort(data, begin, end, begin != 0);
-            fixContinuousSignedZeros(data, begin, end);
+        if (right - left <= minQuickSelectSize) {
+            Sorting.sort(data, left, right, left != 0);
+            fixContinuousSignedZeros(data, left, right);
             return;
         }
 
-        final int l = begin;
-        final int r = end;
+        final int l = left;
+        final int r = right;
 
         int p = l;
         int q = r;
 
         // Use the pivot index to set the upper sentinal value
-        final int pivot = pivotingStrategy.pivotIndex(data, begin, end);
+        final int pivot = pivotingStrategy.pivotIndex(data, left, right);
         final double v = data[pivot];
         data[pivot] = data[r];
         data[r] = v;
@@ -1549,7 +1751,7 @@ final class Partition {
         // Special case: count signed zeros
         int c = 0;
         if (v == 0) {
-            c = countMixedSignedZeros(data, begin, end);
+            c = countMixedSignedZeros(data, left, right);
         }
 
         // Fast-forward over equal regions to reduce swaps
@@ -1557,7 +1759,7 @@ final class Partition {
             if (++p == q) {
                 // Edge-case: constant value
                 if (c != 0) {
-                    sortZero(data, begin, end);
+                    sortZero(data, left, right);
                 }
                 return;
             }
@@ -1656,11 +1858,11 @@ final class Partition {
         // Equal in [lower, upper)
 
         // Recurse for the less and greater regions
-        if (begin < lower - 1 && sortRange.test(begin, lower - 1)) {
-            partitionRangeSBM(data, begin, lower - 1, sortRange);
+        if (left < lower - 1 && sortRange.test(left, lower - 1)) {
+            partitionRangeSBM(data, left, lower - 1, sortRange);
         }
-        if (upper < end && sortRange.test(upper, end)) {
-            partitionRangeSBM(data, upper, end, sortRange);
+        if (upper < right && sortRange.test(upper, right)) {
+            partitionRangeSBM(data, upper, right, sortRange);
         }
     }
 
@@ -1870,19 +2072,13 @@ final class Partition {
      * @param n Count of indices (assumed to be strictly positive).
      */
     private void partitionK1(K1PartitionFunction part, double[] data, int right, int[] k, int n) {
-        // TODO:
-        // Update all code to compute (k, k+1) for all k.
-        // Update all code to ignore zero checks.
-        // Compare to existing implementations.
-
-        // Special cases
-        // These must check the bounds of input indices.
-
         // Single point
         if (n == 1) {
             part.partition(data, 0, right, k[0], false, null);
             return;
         }
+
+        // TODO: Try different key strategies
 
         if (keyStrategy == KeyStrategy.PIVOT_CACHE) {
             // Non-sequential processing using a pivot cache to optimise storage.
@@ -1898,7 +2094,7 @@ final class Partition {
             }
             for (int i = 1; i < n; i++) {
                 final int ki = k[i];
-                int l = pivots.previousPivot(ki);
+                final int l = pivots.previousPivot(ki);
                 // This assumes previousPivot(ki) will be as fast as contains(ki)
                 if (l == ki && pivots.contains(ki + 1)) {
                     // (k, k+1) is already sorted
@@ -2534,51 +2730,80 @@ final class Partition {
      * @param k Indices (may be destructively modified).
      * @param count Count of indices.
      */
-    // TODO - call this function with only k of (k, k+1)
     void partitionK1SBM(double[] data, int[] k, int count) {
         // This method does all pre-processing for NaNs and signed zeros.
         // The partition function can then assume no NaNs and can
         // use zero as any other number. In particular any value == pivotValue
-        // can be moved using the pivotValue. This is true if all zeros
-        // are 0.0, or all are -0.0, but not a mixture.
+        // can be moved using the pivotValue.
+        // Note that this is true if all zeros are 0.0, or all are -0.0, but not
+        // a mixture. However counting a mixture is slower.
 
-        // Remove NaN and count mixed signed zeros
-        int c = 0;
+        // XXX: For testing with no zero processing
+        //partitionK1(this::partitionK1SBM, data, data.length - 1, k, k.length);
+
+        // TODO: Move this to a NaN policy (and zero) strategy in the Quantile class.
+        // Note this will have to be shared with the Median class.
+
+        // Move NaNs and count signed zeros.
+        // Note counting both positive and negative zeros is slower;
+        // Here we just count negatives which are an unlikely data occurrence.
         int cn = 0;
-        int right = data.length - 1;
-        for (int i = data.length; --i >= 0;) {
-            final double v = data[i];
-            // NaN check
-            if (v != v) {
-                // swap(data, i, right--)
-                data[i] = data[right];
-                data[right] = v;
-                right--;
-            } else if (v == 0) {
-                c++;
-                if (Double.doubleToRawLongBits(v) < 0) {
-                    cn++;
-                }
-                // XXX: For testing (some tests) unify the zeros here
-                // and downstream detection code should ignore
-                // correcting zeros.
-                //data[i] = 0.0;
+        int end = data.length;
+        for (int i = end; i > 0;) {
+            final double v = data[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                data[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                data[i] = data[--end];
+                data[end] = v;
             }
         }
-        if (right < 1) {
-            // No non-NaN data
+        if (end <= 1) {
+            // Nothing to partition
             return;
         }
 
-        // Filter invalid indices removed by NaN check
+        // FYI: Method to count positive and negative zeros
+//        int c = 0;
+//        int cn = 0;
+//        int right = data.length - 1;
+//        for (int i = data.length; --i >= 0;) {
+//            final double v = data[i];
+//            // NaN check
+//            if (v != v) {
+//                // swap(data, i, right--)
+//                data[i] = data[right];
+//                data[right] = v;
+//                right--;
+//            } else if (v == 0) {
+//                c++;
+//                if (Double.doubleToRawLongBits(v) < 0) {
+//                    cn++;
+//                }
+//                // XXX: For testing (some tests) unify the zeros here
+//                // and downstream detection code should ignore
+//                // correcting zeros.
+//                //data[i] = 0.0;
+//            }
+//        }
+
+        // Filter indices invalidated by NaN check
         int n = count;
-        if (right < k.length - 1) {
-            for (int i = n; --i >= 0;) {
-                if (k[i] > right) {
+        if (end < k.length) {
+            for (int i = n; i > 0;) {
+                final int v = k[--i];
+                if (v >= end) {
                     // swap(k, i, --n)
-                    int j = k[i];
                     k[i] = k[--n];
-                    k[n] = j;
+                    k[n] = v;
                 }
             }
             if (n == 0) {
@@ -2587,26 +2812,23 @@ final class Partition {
             }
         }
 
-        partitionK1(this::partitionK1SBM, data, right, k, n);
+        partitionK1(this::partitionK1SBM, data, end - 1, k, n);
 
-        // Fix signed zeros when a mixture of positive and negative.
-        // i.e. cp > 0 && cn > 0
-        if (cn > 0 && c > cn) {
-            // Count of positive zeros
-            c -= cn;
+        // Restore signed zeros
+        if (cn != 0) {
             // Use the partitioned indices to bracket zero.
             // For now we just fast-forward as much as possible.
             // Assumes partitioning has not changed indices (but
             // reordering is OK).
             int j = -1;
             for (int i = 0; i < n; i++) {
-                int kk = k[i];
+                final int kk = k[i];
                 if (data[kk] < 0) {
                     j = Math.max(j, kk);
                 }
             }
             // Fix. Assume the zeros are all present so no bounds checks
-            // are used when incrementing j.
+            // are used when incrementing j
             for (;;) {
                 if (data[++j] == 0) {
                     data[j] = -0.0;
@@ -2615,14 +2837,269 @@ final class Partition {
                     }
                 }
             }
-            // Finish the positive zeros
+        }
+
+        // FYI: Method to restore a mixture of +/- 0.0
+//        // Fix signed zeros when a mixture of positive and negative.
+//        // i.e. cp > 0 && cn > 0
+//        if (cn > 0 && c > cn) {
+//            // Count of positive zeros
+//            c -= cn;
+//            // Use the partitioned indices to bracket zero.
+//            // For now we just fast-forward as much as possible.
+//            // Assumes partitioning has not changed indices (but
+//            // reordering is OK).
+//            int j = -1;
+//            for (int i = 0; i < n; i++) {
+//                int kk = k[i];
+//                if (data[kk] < 0) {
+//                    j = Math.max(j, kk);
+//                }
+//            }
+//            // Fix. Assume the zeros are all present so no bounds checks
+//            // are used when incrementing j.
+//            for (;;) {
+//                if (data[++j] == 0) {
+//                    data[j] = -0.0;
+//                    if (--cn == 0) {
+//                        break;
+//                    }
+//                }
+//            }
+//            // Finish the positive zeros
+//            for (;;) {
+//                if (data[++j] == 0) {
+//                    data[j] = 0.0;
+//                    if (--c == 0) {
+//                        break;
+//                    }
+//                }
+//            }
+//        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This method ensures that all {@code k + 1} are also correctly partitioned.
+     * The method assumes all {@code k} are valid indices into the data.
+     *
+     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
+     * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    void partitionIntroselectSBM(double[] data, int[] k, int count) {
+        // This method does all pre-processing for NaNs and signed zeros.
+        // The partition function can then assume no NaNs and can
+        // use zero as any other number. In particular any value == pivotValue
+        // can be moved using the pivotValue.
+        // Note that this is true if all zeros are 0.0, or all are -0.0, but not
+        // a mixture. However counting a mixture is slower.
+
+        // TODO: Move this to a NaN policy (and zero) strategy in the Quantile class.
+        // Note this will have to be shared with the Median class.
+
+        // Move NaNs and count signed zeros.
+        // Note counting both positive and negative zeros is slower;
+        // Here we just count negatives which are an unlikely data occurrence.
+        int cn = 0;
+        int end = data.length;
+        for (int i = end; i > 0;) {
+            final double v = data[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                data[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                data[i] = data[--end];
+                data[end] = v;
+            }
+        }
+        if (end <= 1) {
+            // Nothing to partition
+            return;
+        }
+
+        // Filter indices invalidated by NaN check
+        int n = count;
+        if (end < k.length) {
+            for (int i = n; i > 0;) {
+                final int v = k[--i];
+                if (v >= end) {
+                    // swap(k, i, --n)
+                    k[i] = k[--n];
+                    k[n] = v;
+                }
+            }
+            if (n == 0) {
+                // NaNs for all k
+                return;
+            }
+        }
+
+        introselect(Partition::partitionSBM, data, end - 1, k, n);
+
+        // Restore signed zeros
+        if (cn != 0) {
+            // Use the partitioned indices to bracket zero.
+            // For now we just fast-forward as much as possible.
+            // Assumes partitioning has not changed indices (but
+            // reordering is OK).
+            int j = -1;
+            for (int i = 0; i < n; i++) {
+                final int kk = k[i];
+                if (data[kk] < 0) {
+                    j = Math.max(j, kk);
+                }
+            }
+            // Fix. Assume the zeros are all present so no bounds checks
+            // are used when incrementing j
             for (;;) {
                 if (data[++j] == 0) {
-                    data[j] = 0.0;
-                    if (--c == 0) {
+                    data[j] = -0.0;
+                    if (--cn == 0) {
                         break;
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
+     * may be destroyed (the mixture updated during partitioning). The caller is
+     * responsible for counting a mixture of signed zeros and restoring them if
+     * required.
+     *
+     * <p>This function assumes {@code n > 0} and {@code right > 0}; otherwise
+     * there is nothing to do.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices (assumed to be strictly positive).
+     */
+    private void introselect(SPEPartition part, double[] a, int right, int[] k, int n) {
+        // Ideal single pivot recursion will take log2(n) steps as data is
+        // divided into length (n/2) at each iteration.
+        int maxDepth = floorLog2(right + 1);
+
+        // TODO: this factor should be tuned for practical performance
+        // Increase by factor of 1.5
+        maxDepth = (maxDepth * 3) >>> 1;
+
+        if (n == 1) {
+            introselect(part, a, 0, right, k[0], k[0], maxDepth);
+            return;
+        }
+        if (n == 2) {
+            final int ka = Math.min(k[0], k[1]);
+            final int kb = Math.max(k[0], k[1]);
+            introselect(part, a, 0, right, ka, kb, maxDepth);
+            return;
+        }
+
+        // TODO: Try different key strategies
+        throw new IllegalStateException("Unsupported introselect-partitioning: " + keyStrategy);
+    }
+
+    /**
+     * Partition the array such that indices {@code ka} and {@code kb} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>Note: Requires {@code ka <= kb}. The use of two indices is to support processing
+     * of pairs of indices {@code (k, k+1)}. However the indices are treated independently
+     * and partitioned by recursion. They may be equal, neighbours or well separated.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka Index.
+     * @param kb Index.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    private void introselect(SPEPartition part, double[] a, int left, int right,
+        int ka, int kb, int maxDepth) {
+        if (right - left < minQuickSelectSize) {
+            // Full sort of small data
+            Sorting.sort(a, left, right, left > 0);
+            return;
+        }
+        // It is possible to use heapselect when ka and kb are close to the ends
+        // |l|-----|ka|--------|kb|------|r|
+        //  ---s1----
+        //                      -----s3----
+        //  ---------s2----------
+        //          ----------s4-----------
+        final int s1 = ka - left;
+        final int s2 = kb - left;
+        final int s3 = right - kb;
+        final int s4 = right - ka;
+        if (maxDepth == 0 || Math.min(s1 + s3, Math.min(s2, s4)) < minHeapSelectSize) {
+            // Too much recursion, or ka and kb are both close to the ends
+            heapSelect(a, left, right, ka, kb);
+        } else {
+            // Pick a pivot and partition
+            final int[] upper = {0};
+            final int k0 = part.partition(a, left, right,
+                pivotingStrategy.pivotIndex(a, left, right),
+                upper);
+            final int k1 = upper[0];
+            // Recursion to max depth
+            // Note: Here we possibly branch left and right with one or two
+            // of ka and kb. It is possible that the partition has split the pair
+            // and the recursion proceeds with a single point.
+            if (ka < k0) {
+                final int other = kb < k0 ? kb : ka;
+                introselect(part, a, left, k0 - 1, ka, other, maxDepth - 1);
+            }
+            if (kb > k1) {
+                final int other = ka > k1 ? ka : kb;
+                introselect(part, a, k1 + 1, right, other, kb, maxDepth - 1);
             }
         }
     }
@@ -2914,14 +3391,14 @@ final class Partition {
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
      * @param data Data array.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @param upper Upper bound (inclusive) of the pivot range.
      * @param leftInner Flag to indicate {@code left - 1} is a pivot.
      * @param rightInner Flag to indicate {@code right + 1} is a pivot.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int partitionSBM(double[] data, int begin, int end, int[] upper,
+    private int partitionSBM(double[] data, int left, int right, int[] upper,
         boolean leftInner, boolean rightInner) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
@@ -2949,21 +3426,21 @@ final class Partition {
         // - Added a fast-forward over initial range containing the pivot.
 
         // Switch to insertion sort for small range
-        if (end - begin <= minQuickSelectSize) {
-            Sorting.sort(data, begin, end, leftInner);
-            fixContinuousSignedZeros(data, begin, end);
-            upper[0] = end;
-            return begin;
+        if (right - left <= minQuickSelectSize) {
+            Sorting.sort(data, left, right, leftInner);
+            fixContinuousSignedZeros(data, left, right);
+            upper[0] = right;
+            return left;
         }
 
-        final int l = begin;
-        final int r = end;
+        final int l = left;
+        final int r = right;
 
         int p = l;
         int q = r;
 
         // Use the pivot index to set the upper sentinal value
-        final int pivot = pivotingStrategy.pivotIndex(data, begin, end);
+        final int pivot = pivotingStrategy.pivotIndex(data, left, right);
         final double v = data[pivot];
         data[pivot] = data[r];
         data[r] = v;
@@ -2971,7 +3448,7 @@ final class Partition {
         // Special case: count signed zeros
         int c = 0;
         if (v == 0) {
-            c = countMixedSignedZeros(data, begin, end);
+            c = countMixedSignedZeros(data, left, right);
         }
 
         // Fast-forward over equal regions to reduce swaps
@@ -2979,10 +3456,10 @@ final class Partition {
             if (++p == q) {
                 // Edge-case: constant value
                 if (c != 0) {
-                    sortZero(data, begin, end);
+                    sortZero(data, left, right);
                 }
-                upper[0] = end;
-                return begin;
+                upper[0] = right;
+                return left;
             }
         }
         // Cannot overrun as the prior scan using p stopped before the end
@@ -3088,13 +3565,13 @@ final class Partition {
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
      * @param data Data array.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @param pivot Pivot index.
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private static int partitionSBM(double[] data, int begin, int end, int pivot, int[] upper) {
+    private static int partitionSBM(double[] data, int left, int right, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
@@ -3120,8 +3597,8 @@ final class Partition {
         //   object references. Equivalent swap calls are commented.
         // - Added a fast-forward over initial range containing the pivot.
 
-        final int l = begin;
-        final int r = end;
+        final int l = left;
+        final int r = right;
 
         int p = l;
         int q = r;
@@ -3134,7 +3611,7 @@ final class Partition {
         // Special case: count signed zeros
         int c = 0;
         if (v == 0) {
-            c = countMixedSignedZeros(data, begin, end);
+            c = countMixedSignedZeros(data, left, right);
         }
 
         // Fast-forward over equal regions to reduce swaps
@@ -3142,10 +3619,10 @@ final class Partition {
             if (++p == q) {
                 // Edge-case: constant value
                 if (c != 0) {
-                    sortZero(data, begin, end);
+                    sortZero(data, left, right);
                 }
-                upper[0] = end;
-                return begin;
+                upper[0] = right;
+                return left;
             }
         }
         // Cannot overrun as the prior scan using p stopped before the end
@@ -3252,13 +3729,13 @@ final class Partition {
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
      * @param data Data array.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
      * @param pivot Pivot index.
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private static int partitionSBMIgnoreZeros(double[] data, int begin, int end, int pivot, int[] upper) {
+    private static int partitionSBMIgnoreZeros(double[] data, int l, int r, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
@@ -3284,9 +3761,6 @@ final class Partition {
         //   object references. Equivalent swap calls are commented.
         // - Added a fast-forward over initial range containing the pivot.
 
-        final int l = begin;
-        final int r = end;
-
         int p = l;
         int q = r;
 
@@ -3299,8 +3773,8 @@ final class Partition {
         while (data[p] == v) {
             if (++p == q) {
                 // Edge-case: constant value
-                upper[0] = end;
-                return begin;
+                upper[0] = r;
+                return l;
             }
         }
         // Cannot overrun as the prior scan using p stopped before the end
@@ -3416,6 +3890,44 @@ final class Partition {
     }
 
     /**
+     * Move NaN values to the end of the array. Count signed zeros {@code -0.0}.
+     * Any signed zero is replaced with {@code 0.0}.
+     *
+     * <p>Returns the end of the data and the count of signed zeros packed as a long:
+     * <pre>
+     * long x = ...
+     * int end = (int) x;
+     * int count = (int) (x >>> 0);
+     * </pre>
+     *
+     * @param data Values.
+     * @return {signedZeroCount, end of data}
+     */
+    static long sortNaNandCountSignedZeros(double[] data) {
+        int end = data.length;
+        int cn = 0;
+        for (int i = end; i > 0;) {
+            final double v = data[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                data[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                data[i] = data[--end];
+                data[end] = v;
+            }
+        }
+        // Pack result
+        return (((long) cn) << Integer.SIZE) | end;
+    }
+
+    /**
      * Move invalid indices to the end of the array.
      *
      * @param indices Values.
@@ -3488,14 +4000,14 @@ final class Partition {
      * If all positive, or all negative then this returns -1.
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @return index of a zero
      */
-    static int containsMixedZeros(double[] data, int begin, int end) {
+    static int containsMixedZeros(double[] data, int left, int right) {
         int c = 0;
         int cn = 0;
-        for (int i = begin; i <= end; i++) {
+        for (int i = left; i <= right; i++) {
             if (data[i] == 0) {
                 c++;
                 if (Double.doubleToRawLongBits(data[i]) < 0) {
@@ -3513,14 +4025,14 @@ final class Partition {
      * Count the number of signed zeros (-0.0).
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @return the count
      */
-    static int countSignedZeros1(double[] data, int begin, int end) {
+    static int countSignedZeros1(double[] data, int left, int right) {
         // Count negative zeros
         int c = 0;
-        for (int i = begin; i <= end; i++) {
+        for (int i = left; i <= right; i++) {
             if (data[i] == 0 && Double.doubleToRawLongBits(data[i]) < 0) {
                 c++;
             }
@@ -3538,15 +4050,15 @@ final class Partition {
      * depending on the pivot value.
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @return the count of signed zeros if some positive zeros are also present
      */
-    static int countMixedSignedZeros(double[] data, int begin, int end) {
+    static int countMixedSignedZeros(double[] data, int left, int right) {
         // Count negative zeros
         int c = 0;
         int cn = 0;
-        for (int i = begin; i <= end; i++) {
+        for (int i = left; i <= right; i++) {
             if (data[i] == 0) {
                 c++;
                 if (Double.doubleToRawLongBits(data[i]) < 0) {
@@ -3564,24 +4076,24 @@ final class Partition {
      * <p>Warning: The range must contain only zeros.
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    static void sortZero(double[] data, int begin, int end) {
+    static void sortZero(double[] data, int left, int right) {
         // Count negative zeros
         int c = 0;
-        for (int i = begin; i <= end; i++) {
+        for (int i = left; i <= right; i++) {
             if (Double.doubleToRawLongBits(data[i]) < 0) {
                 c++;
             }
         }
         // Replace
         if (c != 0) {
-            int i = begin;
+            int i = left;
             while (c-- > 0) {
                 data[i++] = -0.0;
             }
-            while (i <= end) {
+            while (i <= right) {
                 data[i++] = 0.0;
             }
         }
@@ -3591,21 +4103,21 @@ final class Partition {
      * Detect and fix the sort order of signed zeros. Assumes the data may have been
      * partially ordered around zero.
      *
-     * <p>Searches for zeros if {@code data[begin] <= 0} and {@code data[end - 1] >= 0}.
+     * <p>Searches for zeros if {@code data[left] <= 0} and {@code data[right] >= 0}.
      * If zeros are discovered in the range then they are assumed to be continuous.
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    private static void fixContinuousSignedZeros(double[] data, int begin, int end) {
+    private static void fixContinuousSignedZeros(double[] data, int left, int right) {
         int j;
-        if (data[begin] <= 0 && data[end] >= 0) {
-            int i = begin;
+        if (data[left] <= 0 && data[right] >= 0) {
+            int i = left;
             while (data[i] < 0) {
                 i++;
             }
-            j = end;
+            j = right;
             while (data[j] > 0) {
                 j--;
             }
@@ -3617,21 +4129,21 @@ final class Partition {
      * Detect and fix the sort order of signed zeros. Assumes the data may have been
      * partially ordered around zero.
      *
-     * <p>Searches for zeros if {@code data[begin] <= 0} and {@code data[end - 1] >= 0}.
+     * <p>Searches for zeros if {@code data[left] <= 0} and {@code data[right] >= 0}.
      * This function is expensive if the range is large as it must scan the range twice.
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    private static void fixDiscontinuousSignedZeros(double[] data, int begin, int end) {
+    private static void fixDiscontinuousSignedZeros(double[] data, int left, int right) {
         int j;
-        if (data[begin] <= 0 && data[end] >= 0) {
-            int i = begin;
+        if (data[left] <= 0 && data[right] >= 0) {
+            int i = left;
             while (data[i] < 0) {
                 i++;
             }
-            j = end;
+            j = right;
             while (data[j] > 0) {
                 j--;
             }
@@ -3658,27 +4170,28 @@ final class Partition {
      * the centre of the data, other elements are transferred in-order to the ends).
      * Respects the order of signed zeros.
      *
-     * <p>Warning: Assumes the data contains at least 1 zero.
+     * <p>Warning: Assumes the data contains at least 1 zero and that the
+     * zero value partitions less-than and greater-than.
      *
      * @param data Values.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @param pivot Location of known zero.
      * @param upper Upper bound (inclusive) of the sorted range containing zero.
      * @return Lower bound (inclusive) of the sorted range containing zero.
      */
-    private static int partitionZero(double[] data, int begin, int end, int pivot, int[] upper) {
+    private static int partitionZero1(double[] data, int left, int right, int pivot, int[] upper) {
         // Move values less than the partition value to the start.
         // Move values greater than than the partition value to the end.
         // Skip zeros values.
 
         // Count of signed zeros
         //assert data[pivot] == 0;
-        int c = Double.doubleToRawLongBits(data[pivot]) < 0 ? 1 : 0;
+        int c = 0; //Double.doubleToRawLongBits(data[pivot]) < 0 ? 1 : 0;
 
-        int lt = begin;
-        int gt = end;
-        for (int i = begin; i < pivot; i++) {
+        int lt = left;
+        int gt = right;
+        for (int i = left; i <= pivot; i++) {
             final double v = data[i];
             if (v < 0) {
                 data[lt++] = v;
@@ -3691,7 +4204,7 @@ final class Partition {
                 }
             }
         }
-        for (int i = end; i > pivot; i--) {
+        for (int i = right; i > pivot; i--) {
             final double v = data[i];
             if (v > 0) {
                 data[gt--] = v;
@@ -3717,5 +4230,15 @@ final class Partition {
 
         upper[0] = gt;
         return lt;
+    }
+
+    /**
+     * Compute {@code floor(log 2 (x))}. This is valid for all strictly positive {@code x}.
+     *
+     * @param x Value.
+     * @return {@code floor(log 2 (x))}
+     */
+    static int floorLog2(int x) {
+        return 31 - Integer.numberOfLeadingZeros(x);
     }
 }

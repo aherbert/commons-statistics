@@ -56,7 +56,7 @@ class IndexSetTest {
         final int noOfLongs = 1 + (right - left) / Long.SIZE;
         final int highBit = left + noOfLongs * Long.SIZE - 1;
         // Show this is correct
-        set.add(highBit);
+        set.set(highBit);
         final int capacity = set.nextClearBit(highBit);
         Assertions.assertEquals(highBit + 1, capacity);
         Assertions.assertDoesNotThrow(() -> set.asScanningPivotCache(left, highBit));
@@ -70,7 +70,7 @@ class IndexSetTest {
         final BitSet ref = new BitSet(n);
         for (final int i : indices) {
             Assertions.assertEquals(ref.get(i), set.get(i), () -> String.valueOf(i));
-            set.add(i);
+            set.set(i);
             ref.set(i);
             Assertions.assertTrue(set.get(i));
         }
@@ -84,7 +84,7 @@ class IndexSetTest {
         for (final int i : indices) {
             Assertions.assertEquals(ref.get(i), set.get(i));
             // inclusive end
-            set.add(i, i);
+            set.set(i, i);
             ref.set(i);
             Assertions.assertTrue(set.get(i));
         }
@@ -105,7 +105,7 @@ class IndexSetTest {
             for (int j = from; j < to; j++) {
                 Assertions.assertFalse(set.get(j));
             }
-            set.add(from, to - 1);
+            set.set(from, to - 1);
             for (int j = from; j < to; j++) {
                 Assertions.assertTrue(set.get(j));
             }
@@ -129,8 +129,8 @@ class IndexSetTest {
             final int middle = (from + to) >>> 1;
             Assertions.assertEquals(ref.previousSetBit(middle), set.previousSetBit(middle));
             Assertions.assertEquals(ref.nextSetBit(middle), set.nextSetBit(middle));
-            set.add(from);
-            set.add(to);
+            set.set(from);
+            set.set(to);
             ref.set(from);
             ref.set(to);
             Assertions.assertEquals(ref.previousSetBit(middle), set.previousSetBit(middle));
@@ -165,7 +165,7 @@ class IndexSetTest {
             Assertions.assertEquals(ref.nextClearBit(middle), set.nextClearBit(middle));
             Assertions.assertEquals(ref.previousClearBit(middle), set.previousClearBit(middle));
             // inclusive end
-            set.add(from, to);
+            set.set(from, to);
             ref.set(from, to + 1);
             Assertions.assertEquals(ref.nextClearBit(middle), set.nextClearBit(middle));
             Assertions.assertEquals(ref.previousClearBit(middle), set.previousClearBit(middle));
@@ -178,7 +178,7 @@ class IndexSetTest {
         final IndexSet set = createIndexSet(indices);
         final BitSet ref = new BitSet(n);
         Arrays.stream(indices).forEach(i -> {
-            set.add(i);
+            set.set(i);
             ref.set(i);
         });
         final int[] e = ref.stream().toArray();

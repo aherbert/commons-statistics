@@ -18,6 +18,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
@@ -146,15 +147,38 @@ class QuantileTest {
             // Single quantiles
             for (int j = 0; j < p.length; j++) {
                 if (f1 != null) {
-                    Assertions.assertEquals(expected[i][j], f1.evaluate(m, values, p[j]), delta,
+                    assertEqualsOrExactlyEqual(expected[i][j], f1.evaluate(m, values, p[j]), delta,
                         () -> type.toString());
                 }
-                Assertions.assertEquals(expected[i][j], f2.evaluate(m, values, new double[] {p[j]})[0], delta,
+                assertEqualsOrExactlyEqual(expected[i][j], f2.evaluate(m, values, new double[] {p[j]})[0], delta,
                     () -> type.toString());
             }
             // Bulk quantiles
-            Assertions.assertArrayEquals(expected[i], f2.evaluate(m, values, p), delta,
-                () -> type.toString());
+            if (delta < 0) {
+                Assertions.assertArrayEquals(expected[i], f2.evaluate(m, values, p),
+                    () -> type.toString());
+            } else {
+                Assertions.assertArrayEquals(expected[i], f2.evaluate(m, values, p), delta,
+                    () -> type.toString());
+            }
+        }
+    }
+
+    /**
+     * Assert that {@code expected} and {@code actual} are equal within the given{@code delta}.
+     * If the {@code delta} is negative it is ignored and values must be exactly equal.
+     *
+     * @param expected Expected
+     * @param actual Actual
+     * @param delta Delta
+     * @param messageSupplier Failure message.
+     */
+    private static void assertEqualsOrExactlyEqual(double expected, double actual, double delta,
+        Supplier<String> messageSupplier) {
+        if (delta < 0) {
+            Assertions.assertEquals(expected, actual, messageSupplier);
+        } else {
+            Assertions.assertEquals(expected, actual, delta, messageSupplier);
         }
     }
 
@@ -188,7 +212,30 @@ class QuantileTest {
                 19.8, 11.0, 10.0, 8.8, 9.0, 12.3},
             new double[] {0.05}, 1e-4,
             new double[] {8.8000, 8.8000, 8.2000, 8.2600, 8.5600, 8.2900, 8.8100, 8.4700, 8.4925});
-        // TODO ... special values tests
+        // Special values tests
+        addQuantiles(builder,
+            new double[] {nan, nan},
+            new double[] {0.5}, 1e-4,
+            new double[] {nan, nan, nan, nan, nan, nan, nan, nan, nan});
+        // Note: Any method using interpolation between negative zeros will return
+        // positive zero because we use the scheme: x + (y - x) * alpha
+        // (-0.0 - -0.0) == 0.0
+        // Thus signed zeros do not need to be maintained for interpolation.
+        // They are required for discrete schemes, or if the user wishes to
+        // partition in place.
+        // An optimisation for single quantiles would be to ignore signed zero
+        // support when: all quantiles require interpolation; the data is not
+        // modified in-place.
+        addQuantiles(builder,
+            new double[] {-0.0, -0.0, -0.0},
+            new double[] {0.45}, -1,
+            // Here HF1-3 are discrete; All continuous distributions interpolate to +0.0
+            new double[] {-0.0, -0.0, -0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+        addQuantiles(builder,
+            new double[] {-0.0, -0.0},
+            new double[] {0.0}, -1,
+            // No interpolation
+            new double[] {-0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0});
         return builder.build();
     }
 

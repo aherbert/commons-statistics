@@ -95,9 +95,7 @@ final class PivotCaches {
                 new PointPivotCache(left) :
                 new RangePivotCache(left, right);
         }
-        // For now just use the IndexSet ScanningPivotCache implementation.
-        // This could be changed to a non-scanning version.
-        return IndexSet.createScanningPivotCache(left, right);
+        return IndexSet.ofRange(left, right);
     }
 
     /**
