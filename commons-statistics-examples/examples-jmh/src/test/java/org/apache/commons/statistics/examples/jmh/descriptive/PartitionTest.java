@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Test for {@link Partition}.
@@ -172,13 +173,14 @@ class PartitionTest {
     void testPartitionMinK(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
-        final int[] upper = {0};
         for (int k = from; k <= to; k++) {
             final int target = k;
             double[] x = values.clone();
-            int lower = Partition.partitionMinK(x, from, to, k, 0, upper);
-            Assertions.assertTrue(lower <= k && upper[0] >= k);
-            for (int i = lower; i <= upper[0]; i++) {
+            replaceNegativeZeros(x, from, to);
+            int lower = Partition.partitionMinK(x, from, to, k, 0);
+            restoreNegativeZeros(x, from, to);
+            Assertions.assertTrue(k >= lower);
+            for (int i = lower; i <= k; i++) {
                 Assertions.assertEquals(sorted[i], x[i], () -> Integer.toString(target));
             }
             // Check the data is the same
@@ -187,9 +189,11 @@ class PartitionTest {
             if (k > from) {
                 // Sort an extra 1
                 x = values.clone();
-                lower = Partition.partitionMinK(x, from, to, k, 1, upper);
-                Assertions.assertTrue(lower <= k - 1 && upper[0] >= k);
-                for (int i = lower; i <= upper[0]; i++) {
+                replaceNegativeZeros(x, from, to);
+                lower = Partition.partitionMinK(x, from, to, k, 1);
+                restoreNegativeZeros(x, from, to);
+                Assertions.assertTrue(k - 1 >= lower);
+                for (int i = lower; i <= k; i++) {
                     Assertions.assertEquals(sorted[i], x[i], () -> (target - 1) + " to " + target);
                 }
                 // Check the data is the same
@@ -198,9 +202,12 @@ class PartitionTest {
                 if (k > from + 1) {
                     // Sort all
                     x = values.clone();
-                    lower =  Partition.partitionMinK(x, from, to, k, k - from, upper);
-                    Assertions.assertTrue(lower == from && upper[0] >= k);
-                    for (int i = lower; i <= upper[0]; i++) {
+                    replaceNegativeZeros(x, from, to);
+                    // Test clipping with size of range below k too large: it should be k - from
+                    lower = Partition.partitionMinK(x, from, to, k, k - from + 42);
+                    restoreNegativeZeros(x, from, to);
+                    Assertions.assertEquals(from, lower);
+                    for (int i = lower; i <= k; i++) {
                         Assertions.assertEquals(sorted[i], x[i], () -> "Full sort to " + Integer.toString(target));
                     }
                     // Check the data is the same
@@ -216,13 +223,14 @@ class PartitionTest {
     void testPartitionMaxK(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
-        final int[] upper = {0};
         for (int k = from; k <= to; k++) {
             final int target = k;
             double[] x = values.clone();
-            int lower = Partition.partitionMaxK(x, from, to, k, 0, upper);
-            Assertions.assertTrue(lower <= k && upper[0] >= k);
-            for (int i = lower; i <= upper[0]; i++) {
+            replaceNegativeZeros(x, from, to);
+            int upper = Partition.partitionMaxK(x, from, to, k, 0);
+            restoreNegativeZeros(x, from, to);
+            Assertions.assertTrue(k <= upper);
+            for (int i = k; i <= upper; i++) {
                 Assertions.assertEquals(sorted[i], x[i], () -> Integer.toString(target));
             }
             // Check the data is the same
@@ -231,9 +239,11 @@ class PartitionTest {
             if (k < to) {
                 // Sort an extra 1
                 x = values.clone();
-                lower = Partition.partitionMaxK(x, from, to, k, 1, upper);
-                Assertions.assertTrue(lower <= k && upper[0] >= k + 1);
-                for (int i = lower; i <= upper[0]; i++) {
+                replaceNegativeZeros(x, from, to);
+                upper = Partition.partitionMaxK(x, from, to, k, 1);
+                restoreNegativeZeros(x, from, to);
+                Assertions.assertTrue(k + 1 <= upper);
+                for (int i = k; i <= upper; i++) {
                     Assertions.assertEquals(sorted[i], x[i], () -> target + " to " + (target + 1));
                 }
                 // Check the data is the same
@@ -242,9 +252,12 @@ class PartitionTest {
                 if (k < to - 1) {
                     // Sort all
                     x = values.clone();
-                    lower = Partition.partitionMaxK(x, from, to, k, to - k, upper);
-                    Assertions.assertTrue(lower <= k && upper[0] == to);
-                    for (int i = lower; i <= upper[0]; i++) {
+                    replaceNegativeZeros(x, from, to);
+                    // Test clipping with size of range above k too large: it should be to - k
+                    upper = Partition.partitionMaxK(x, from, to, k, to - k + 42);
+                    restoreNegativeZeros(x, from, to);
+                    Assertions.assertEquals(to, upper);
+                    for (int i = k; i <= upper; i++) {
                         Assertions.assertEquals(sorted[i], x[i], () -> "Full sort from " + Integer.toString(target));
                     }
                     // Check the data is the same
@@ -263,6 +276,8 @@ class PartitionTest {
         builder.add(Arguments.of(new double[] {4, 3, 2, 1}, 1, 2));
         builder.add(Arguments.of(new double[] {-1, 0.0, -0.0, -0.0, 1}, 0, 4));
         builder.add(Arguments.of(new double[] {-1, 0.0, -0.0, -0.0, 1}, 0, 2));
+        builder.add(Arguments.of(new double[] {1, 0.0, -0.0, -0.0, -1}, 0, 4));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 1, 6));
         return builder.build();
     }
 
@@ -284,13 +299,11 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = "testPartitionMin2")
     void testPartitionMin2IgnoreZeros(double[] values, int from, int to) {
-        // TODO - replace -0.0 with -Double.MIN_VALUE
-        // partition, then replace with -0.0 and test.
-        Assumptions.assumeTrue(Arrays.stream(values, from, to + 1).filter(
-            x -> x == 0 && Double.doubleToRawLongBits(x) < 1).findAny().isEmpty());
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
+        replaceNegativeZeros(values, from, to);
         Partition.partitionMin2IgnoreZeros(values, from, to);
+        restoreNegativeZeros(values, from, to);
         Assertions.assertEquals(sorted[from], values[from]);
         if (to - from > 1) {
             Assertions.assertEquals(sorted[from + 1], values[from + 1]);
@@ -340,6 +353,61 @@ class PartitionTest {
 //        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
 //        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
         return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void testHeapSelect(double[] values, int from, int to, int k1, int k2) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        Partition.heapSelect(values, from, to, k1, k2);
+        Assertions.assertEquals(sorted[k1], values[k1]);
+        Assertions.assertEquals(sorted[k2], values[k2]);
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+    }
+
+    static Stream<Arguments> testHeapSelect() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 1, 2));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 2, 2));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 5, 7));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 1, 6));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 4, 4));
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void testHeapSelectRange(double[] values, int from, int to, int k1, int k2) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        Partition.heapSelectRange(values, from, to, k1, k2);
+        for (int i = k1; i <= k2; i++) {
+            Assertions.assertEquals(sorted[i], values[i]);
+        }
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+    }
+
+    static Stream<Arguments> testHeapSelectRange() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 1, 2));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 2, 2));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 5, 7));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 1, 6));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 0, 3));
+        builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 4, 7));
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 42, 32488})
+    void testFloorLog2(int x) {
+        final double expected = Math.floor(Math.log(x) / Math.log(2));
+        Assertions.assertEquals(expected, Partition.floorLog2(x));
     }
 
 //    @ParameterizedTest
@@ -636,7 +704,7 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortRangeSBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, KeyStrategy.INDEX_SET)::sortRangeSBM);
+            new Partition(PivotingStrategy.DYNAMIC, 3, 0, KeyStrategy.INDEX_SET)::sortRangeSBM);
     }
 //
 //    @ParameterizedTest
@@ -655,8 +723,21 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortSBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, KeyStrategy.INDEX_SET)::sortSBM);
+            new Partition(PivotingStrategy.DYNAMIC, 3, 0, KeyStrategy.INDEX_SET)::sortSBM);
     }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testHeapSortUsingHeapSelectRange(double[] values) {
+        assumeNonNaN(values);
+        Assumptions.assumeTrue(values.length > 0);
+        assertSort(values, x -> {
+            replaceNegativeZeros(x, 0, x.length - 1);
+            Partition.heapSelectRange(x, 0, x.length - 1, 0, x.length - 1);
+            restoreNegativeZeros(x, 0, x.length - 1);
+        });
+    }
+
 //
 //    @ParameterizedTest
 //    @MethodSource(value = {"testSort"})
@@ -677,13 +758,16 @@ class PartitionTest {
 //        assertSort(values, new Partition()::sortDNF);
 //    }
 //
+
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testInsertionSort(double[] values) {
-        // Cannot handle NaN or signed zeros
-        Assumptions.assumeFalse(Arrays.stream(values)
-            .filter(x -> x == 0 || Double.isNaN(x)).findAny().isPresent());
-        assertSort(values, x -> Sorting.sort(x, 0, x.length - 1, false));
+        assumeNonNaN(values);
+        assertSort(values, x -> {
+            replaceNegativeZeros(x, 0, x.length - 1);
+            Sorting.sort(x, 0, x.length - 1, false);
+            restoreNegativeZeros(x, 0, x.length - 1);
+        });
         if (values.length < 2) {
             return;
         }
@@ -691,17 +775,25 @@ class PartitionTest {
         // Set pivot at lower end
         values[0] = Arrays.stream(values).min().getAsDouble();
         // check internal sort
-        assertSort(values, x -> Sorting.sort(x, 1, x.length - 1, true));
+        assertSort(values, x -> {
+            replaceNegativeZeros(x, 1, x.length - 1);
+            Sorting.sort(x, 1, x.length - 1, false);
+            restoreNegativeZeros(x, 1, x.length - 1);
+        });
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testInsertionSort5(double[] values) {
-        // Cannot handle NaN or signed zeros
-        Assumptions.assumeFalse(Arrays.stream(values)
-            .filter(x -> x == 0 || Double.isNaN(x)).findAny().isPresent());
+        // Cannot handle NaN or -0.0
+        // Negative zeros are swapped for a proxy
+        assumeNonNaN(values);
         final double[] data = Arrays.copyOf(values, 5);
-        assertSort(data, x -> Sorting.sort5(x, 0, 1, 2, 3, 4));
+        assertSort(data, x -> {
+            replaceNegativeZeros(x, 0, x.length - 1);
+            Sorting.sort5(x, 0, 1, 2, 3, 4);
+            restoreNegativeZeros(x, 0, x.length - 1);
+        });
     }
 
     @Test
@@ -999,5 +1091,45 @@ class PartitionTest {
             43, 747, 1695, 3779, 3676, 5985, 3035, 6966, 2081, 5390, 6807}, allIndices));
 
         return builder.build();
+    }
+
+    /**
+     * Assume the data are non-NaN, otherwise skip the test.
+     *
+     * @param a Data.
+     */
+    private void assumeNonNaN(double[] a) {
+        for (int i = 0; i < a.length; i++) {
+            Assumptions.assumeFalse(Double.isNaN(a[i]));
+        }
+    }
+
+    /**
+     * Replace negative zeros with a proxy. Uses -{@link Double#MIN_VALUE} as the proxy.
+     *
+     * @param a Data.
+     * @param from Lower bound (inclusive).
+     * @param to Upper bound (inclusive).
+     */
+    private static void replaceNegativeZeros(double[] a, int from, int to) {
+        for (int i = from; i <= to; i++) {
+            if (Double.doubleToRawLongBits(a[i]) == Long.MIN_VALUE) {
+                a[i] = -Double.MIN_VALUE;
+            }
+        }
+    }
+    /**
+     * Restore proxy negative zeros.
+     *
+     * @param a Data.
+     * @param from Lower bound (inclusive).
+     * @param to Upper bound (inclusive).
+     */
+    private static void restoreNegativeZeros(double[] a, int from, int to) {
+        for (int i = from; i <= to; i++) {
+            if (a[i] == -Double.MIN_VALUE) {
+                a[i] = -0.0;
+            }
+        }
     }
 }

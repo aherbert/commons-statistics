@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.stat.ranking.NaNStrategy;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -103,6 +104,11 @@ public class QuantilePerformance {
      */
     @State(Scope.Benchmark)
     public abstract static class AbstractDataSource {
+        /** Seed for data length extension.
+         * This is fixed to generate the same lengths across samples
+         * for all iterations. JMH may spawn new JVMs so we used a constant value. */
+        private static final long RANGE_SEED = 2384628642384839L;
+
         /** Type of data. */
         @Param({"uniform",
             //"normal", "exponential"
@@ -156,17 +162,45 @@ public class QuantilePerformance {
             } else {
                 throw new IllegalStateException("Unknown distribution: " + distribution);
             }
+            IntSupplier sampleLength;
+            int range = getRange();
+            if (range <= 0) {
+                sampleLength = () -> length;
+            } else {
+                // Sample in [length, length + range]
+                sampleLength = DiscreteUniformSampler.of(
+                    RandomSource.XO_RO_SHI_RO_128_PP.create(RANGE_SEED), length,
+                    length + range)::sample;
+            }
             for (int i = 0; i < samples; i++) {
-                data[i] = sampler.samples(length).toArray();
+                data[i] = sampler.samples(sampleLength.getAsInt()).toArray();
             }
         }
 
         /**
-         * Gets the length of the data.
+         * Gets the minimum length of the data.
+         * The actual length is randomly sampled from {@code [length, length + range]}.
          *
          * @return the length
+         * @see #getRange()
          */
         protected abstract int getLength();
+
+        /**
+         * Gets the maximum addition to extend the length of each sample of data.
+         *
+         * <p>Can be used to create random lengths of data. The same seed is
+         * used for the random length so that repeat data generation creates
+         * the same lengths for all iterations.
+         *
+         * <p>The default value is zero.
+         *
+         * @return the range
+         * @see #getLength()
+         */
+        protected int getRange() {
+            return 0;
+        }
     }
 
     /**
@@ -352,26 +386,26 @@ public class QuantilePerformance {
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
-                    .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluateSBM2;
+                    .withPartition(new Partition(s, minSelectSize, 0,keyStrategy))::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
-                    .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluateKSBM;
+                    .withPartition(new Partition(s, minSelectSize, 0,keyStrategy))::evaluateKSBM;
             } else if (name.startsWith(K1SBM)) {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
-                    .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluateK1SBM;
+                    .withPartition(new Partition(s, minSelectSize, 0,keyStrategy))::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
                 function = Quantile.withDefaults().with(method)
-                    .withPartition(new Partition(s, minSelectSize, keyStrategy))::evaluatePairedSBM;
+                    .withPartition(new Partition(s, minSelectSize, 0,keyStrategy))::evaluatePairedSBM;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
@@ -492,7 +526,7 @@ public class QuantilePerformance {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
-                function = new Partition(s, minSelectSize, keyStrategy)::sortSBM;
+                function = new Partition(s, minSelectSize, 0,keyStrategy)::sortSBM;
             } else if ("InsertionSort".equals(name)) {
                 function = x -> KthSelector.insertionSort(x, 0, x.length, false);
             } else {
@@ -607,7 +641,7 @@ public class QuantilePerformance {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
-                final Partition part = new Partition(s, minSelectSize, keyStrategy);
+                final Partition part = new Partition(s, minSelectSize, 0,keyStrategy);
                 function = (data, indices) -> {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -616,7 +650,7 @@ public class QuantilePerformance {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
-                final Partition part = new Partition(s, minSelectSize, keyStrategy);
+                final Partition part = new Partition(s, minSelectSize, 0,keyStrategy);
                 function = (data, indices) -> {
                     part.partitionKSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -625,7 +659,7 @@ public class QuantilePerformance {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
-                final Partition part = new Partition(s, minSelectSize, keyStrategy);
+                final Partition part = new Partition(s, minSelectSize, 0,keyStrategy);
                 function = (data, indices) -> {
                     part.partitionK1SBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -636,7 +670,7 @@ public class QuantilePerformance {
                 final int minSelectSize = getMinQuickSelectSize(name);
                 final PivotingStrategy s = getPivotStrategy(name);
                 final KeyStrategy keyStrategy = getKeyStrategy(name);
-                final Partition part = new Partition(s, minSelectSize, keyStrategy);
+                final Partition part = new Partition(s, minSelectSize, 0,keyStrategy);
                 function = (data, indices) -> {
                     part.partitionPairedSBM(data, indices.clone());
                     return extractIndices(data, indices);
@@ -693,6 +727,18 @@ public class QuantilePerformance {
         // 7 is used in BM's original paper for single-pivot variant.
         // 15 is used in Commons Math 3 Percentile.
         // 27 is the value used in the dual-pivot paper.
+        // TODO: update code to look for _QSxx
+        return getInteger(name, 27);
+    }
+
+    /**
+     * Gets the minimum size for the heapselect partition algorithm.
+     *
+     * @param name Algorithm name.
+     * @return the minimum heapselect size
+     */
+    static int getMinHeapSelectSize(String name) {
+        // TODO: update code to look for _HSxx
         return getInteger(name, 27);
     }
 

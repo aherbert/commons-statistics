@@ -21,13 +21,11 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.ToDoubleFunction;
-import org.apache.commons.rng.UniformRandomProvider;
-import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
-import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
@@ -82,84 +80,36 @@ public class MedianPerformance {
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
     private static final String PSBM = "PairedSBM";
 
-    // TODO: Use same data class as QuantilePerformance
-
     /**
      * Source of {@code double} array data.
+     *
+     * <p>This uses the same data class as {@link QuantilePerformance}.
+     * This enables reuse of the various data distributions provided.
      */
     @State(Scope.Benchmark)
-    public static class DataSource {
-        /** Fraction of data that is unique. */
-        @Param({"0.9"})
-        private double unique;
-
+    public static class DataSource extends AbstractDataSource {
         /** Data length. */
         @Param({
-            //"0", "1",
-            //"10", "11",
-            "10.5",
-            //"100", "101",
-            "100.5",
-            //"1000", "1001",
-            "1000.5"})
-        private double length;
+            "10",
+            "100",
+            "1000"})
+        private int length;
 
-        /** Number of samples. */
-        @Param({"100"})
-        private int samples;
+        /** Extra range to add to the data length.
+         * Use 1 to force use of odd and even length samples for the median. */
+        @Param({"1"})
+        private int range;
 
-        /** Data. */
-        private double[][] data;
-
-        /** Data. */
-        private int[][] intData;
-
-        /**
-         * @return the data
-         */
-        public double[][] getData() {
-            return data;
+        /** {@inheritDoc} */
+        @Override
+        protected int getLength() {
+            return length;
         }
 
-        /**
-         * @return the int data
-         */
-        public int[][] getIntData() {
-            return intData;
-        }
-
-        /**
-         * Create the data.
-         */
-        @Setup(Level.Iteration)
-        public void setup() {
-            // Data will be randomized per iteration
-            final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
-            intData = new int[samples][];
-            data = new double[samples][];
-            final int n = (int) Math.floor(length);
-            final boolean split = n != length;
-            if (split && (n & 0x1) != 0) {
-                throw new IllegalStateException("Split length requires floor(length) to be even");
-            }
-            for (int i = 0; i < samples; i++) {
-                // For non-integer length, alternate the size N or N+1
-                final int n1 = split ? n + (i & 0x1) : n;
-                if (unique >= 1.0) {
-                    // Effectively unique
-                    intData[i] = rng.ints(n1).toArray();
-                } else {
-                    // Set a bound on random integer data to create duplicates
-                    final int bound = (int) Math.ceil(unique * length);
-                    if (bound < 1) {
-                        intData[i] = new int[n1];
-                        Arrays.fill(intData[i], rng.nextInt());
-                    } else {
-                        intData[i] = rng.ints(n1, 0, bound).toArray();
-                    }
-                }
-                data[i] = Arrays.stream(intData[i]).asDoubleStream().toArray();
-            }
+        /** {@inheritDoc} */
+        @Override
+        protected int getRange() {
+            return range;
         }
     }
 
@@ -226,32 +176,32 @@ public class MedianPerformance {
                 final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
+                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
                     ::evaluateRangeSBM;
             } else if (name.startsWith(SBM2)) {
                 final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
+                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
                     ::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
                 final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
+                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
                     ::evaluateKSBM;
             } else if (name.startsWith(K1SBM)) {
                 final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
+                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
                     ::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
                 final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
                 final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
                 final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, keyStrategy))
+                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
                     ::evaluatePairedSBM;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
