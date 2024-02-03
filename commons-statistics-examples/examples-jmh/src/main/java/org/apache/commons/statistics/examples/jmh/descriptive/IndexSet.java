@@ -23,38 +23,62 @@ import java.util.function.IntConsumer;
  * A fixed size set of indices within an inclusive range {@code [left, right]}.
  *
  * <p>This is a specialised class to implement a reduced API similar to a
- * {@link java.util.BitSet}. It uses no upper bounds range checks and supports only a
+ * {@link java.util.BitSet}. It uses no bounds range checks and supports only a
  * fixed size. It contains the methods required to store and look-up intervals of indices.
  *
  * <p>An offset is supported to allow the fixed size to cover a range of indices starting
  * above 0 with the most efficient usage of storage.
+ *
+ * <p>The class has methods to directly set and get bits in the range.
+ * Implementations of the {@link PivotCache} interface use range checks and maintain
+ * floating pivots flanking the range to allow bracketing any index within the range.
+ *
+ * <p>Stores all pivots between the support {@code [left, right]}. Uses two
+ * floating pivots which are the closest known pivots surrounding this range.
  *
  * <p>See the BloomFilter code in Commons Collections for use of long[] data to store
  * bits.
  *
  * @since 1.1
  */
-final class IndexSet implements PivotStore {
+final class IndexSet implements PivotCache {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
     private static final int DIVIDE_BY_64 = 6;
+    /** Default value for an unset upper floating pivot.
+     * Set as a value higher than any valid array index. */
+    private static final int UPPER_DEFAULT = Integer.MAX_VALUE;
+
 
     /** Bit indexes. */
     private final long[] data;
 
-    /** Index offset. */
-    private final int offset;
+    /** Left bound of the support. */
+    private final int left;
+    /** Left bound of the support. */
+    private final int right;
+    /** The upstream pivot closest to the left bound of the support.
+     * Provides a lower search bound for the range [left, right]. */
+    private int lowerPivot = -1;
+    /** The downstream pivot closest to the right bound of the support.
+     * Provides an upper search bound for the range [left, right]. */
+    private int upperPivot = UPPER_DEFAULT;
 
     /**
-     * Create an instance to store indices within the range {@code [offset, offset + size]}.
+     * Create an instance to store indices within the range {@code [left, right]}.
      *
-     * @param offset Index offset.
-     * @param size Number of additional indices to support after offset.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      */
-    private IndexSet(int offset, int size) {
-        this.offset = offset;
-        data = new long[getLongIndex(size) + 1];
+    private IndexSet(int left, int right) {
+        this.left = left;
+        this.right = right;
+        // Allocate storage to store index==right
+        // Note: This may allow directly writing to index > right if there
+        // is extra capacity. Ranges checks to prevent this are provided by
+        // the PivotCache.add(int) method rather than using set(int).
+        data = new long[getLongIndex(right - left) + 1];
     }
 
     /**
@@ -70,7 +94,7 @@ final class IndexSet implements PivotStore {
             throw new IllegalArgumentException("Invalid lower index: " + left);
         }
         checkRange(left, right);
-        return new IndexSet(left, right - left);
+        return new IndexSet(left, right);
     }
 
     /**
@@ -164,10 +188,8 @@ final class IndexSet implements PivotStore {
      * @return the value of the bit with the specified index
      */
     public boolean get(int bitIndex) {
-        if (bitIndex < offset) {
-            return false;
-        }
-        final int index = bitIndex - offset;
+        // WARNING: No range checks !!!
+        final int index = bitIndex - left;
         final int i = getLongIndex(index);
         final long m = getLongBit(index);
         return (data[i] & m) != 0;
@@ -176,16 +198,17 @@ final class IndexSet implements PivotStore {
     /**
      * Sets the bit at the specified index to {@code true}.
      *
+     * <p>Warning: This has no range checks. Use {@link #add(int)} to add an index that
+     * may be outside the support.
+     *
      * @param bitIndex the bit index (assumed to be positive)
      */
-    @Override
-    public void add(int bitIndex) {
-        if (bitIndex >= offset) {
-            final int index = bitIndex - offset;
-            final int i = getLongIndex(index);
-            final long m = getLongBit(index);
-            data[i] |= m;
-        }
+    public void set(int bitIndex) {
+        // WARNING: No range checks !!!
+        final int index = bitIndex - left;
+        final int i = getLongIndex(index);
+        final long m = getLongBit(index);
+        data[i] |= m;
     }
 
     /**
@@ -194,26 +217,22 @@ final class IndexSet implements PivotStore {
      *
      * <p><em>If {@code rightIndex - leftIndex < 0} the behavior is not defined.</em></p>
      *
-     * <p>Note: In contrast to the BitSet API, this uses an inclusive end as this is the
-     * main use case for the class.
+     * <p>Note: In contrast to the BitSet API, this uses an <em>inclusive</em> end as this
+     * is the main use case for the class.
+     *
+     * <p>Warning: This has no range checks. Use {@link #add(int, int)} to range that
+     * may be outside the support.
      *
      * @param leftIndex the left index
      * @param rightIndex the right index
      */
-    @Override
-    public void add(int leftIndex, int rightIndex) {
-        // Optimisation for the main use case of this index set
-        if (leftIndex == rightIndex) {
-            add(leftIndex);
-            return;
-        }
+    public void set(int leftIndex, int rightIndex) {
+        final int l = leftIndex - left;
+        final int r = rightIndex - left;
 
-        final int left = leftIndex - offset;
-        final int right = rightIndex - offset;
-
-        // WARNING: If leftIndex or rightIndex < offset this will error
-        int i = getLongIndex(left);
-        final int j = getLongIndex(right);
+        // WARNING: No range checks !!!
+        int i = getLongIndex(l);
+        final int j = getLongIndex(r);
 
         // Fill in bits using (big-endian mask):
         // end      middle   start
@@ -221,8 +240,8 @@ final class IndexSet implements PivotStore {
 
         // start = -1L << (left % 64)
         // end = -1L >>> (64 - ((right+1) % 64))
-        final long start = LONG_MASK << left;
-        final long end = LONG_MASK >>> -(right + 1);
+        final long start = LONG_MASK << l;
+        final long end = LONG_MASK >>> -(r + 1);
         if (i == j) {
             // Special case where the two masks overlap at the same long index
             // 11111100 & 00011111 => 00011100
@@ -239,6 +258,12 @@ final class IndexSet implements PivotStore {
             data[j] |= end;
         }
     }
+
+    // TODO
+    // previousSetBit(from, to) : to < from
+    // nextSetBit(from, to) : to > from
+    // Create an introselect recursing into the required ranges
+    // to partition [k1, k2] in the range.
 
     /**
      * Returns the index of the nearest bit that is set to {@code true} that occurs on or
@@ -261,11 +286,11 @@ final class IndexSet implements PivotStore {
      * @return the index of the previous set bit, or {@code defaultValue} if there is no such bit
      */
     int previousSetBitOrElse(int fromIndex, int defaultValue) {
-        if (fromIndex < offset) {
+        if (fromIndex < left) {
             // index is in an unknown range
             return defaultValue;
         }
-        final int index = fromIndex - offset;
+        final int index = fromIndex - left;
         int i = getLongIndex(index);
 
         long bits = data[i];
@@ -284,7 +309,7 @@ final class IndexSet implements PivotStore {
                 // |  index   |
                 // |    |     |
                 // 0  001010000
-                return (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits) - 1 + offset;
+                return (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits) - 1 + left;
             }
             if (i == 0) {
                 return defaultValue;
@@ -316,7 +341,7 @@ final class IndexSet implements PivotStore {
      */
     int nextSetBitOrElse(int fromIndex, int defaultValue) {
         // Support searching forward through the known range
-        final int index = fromIndex < offset ? 0 : fromIndex - offset;
+        final int index = fromIndex < left ? 0 : fromIndex - left;
 
         int i = getLongIndex(index);
 
@@ -329,7 +354,7 @@ final class IndexSet implements PivotStore {
                 // |    index |
                 // |      |   |
                 // 0  001010000
-                return i * Long.SIZE + Long.numberOfTrailingZeros(bits) + offset;
+                return i * Long.SIZE + Long.numberOfTrailingZeros(bits) + left;
             }
             if (++i == data.length) {
                 return defaultValue;
@@ -350,11 +375,11 @@ final class IndexSet implements PivotStore {
      * @return the index of the next unset bit, or the {@code capacity} if there is no such bit
      */
     public int nextClearBit(int fromIndex) {
-        if (fromIndex < offset) {
+        if (fromIndex < left) {
             return fromIndex;
         }
         // Support searching forward through the known range
-        final int index = fromIndex - offset;
+        final int index = fromIndex - left;
 
         int i = getLongIndex(index);
 
@@ -367,11 +392,11 @@ final class IndexSet implements PivotStore {
         long bits = ~data[i] & (LONG_MASK << index);
         for (;;) {
             if (bits != 0) {
-                return i * Long.SIZE + Long.numberOfTrailingZeros(bits) + offset;
+                return i * Long.SIZE + Long.numberOfTrailingZeros(bits) + left;
             }
             if (++i == data.length) {
                 // Capacity
-                return data.length * Long.SIZE + offset;
+                return data.length * Long.SIZE + left;
             }
             bits = ~data[i];
         }
@@ -389,11 +414,11 @@ final class IndexSet implements PivotStore {
      * @return the index of the previous unset bit, or {@code -1} if there is no such bit
      */
     public int previousClearBit(int fromIndex) {
-        if (fromIndex < offset) {
+        if (fromIndex < left) {
             // index is in an unknown range
             return fromIndex;
         }
-        final int index = fromIndex - offset;
+        final int index = fromIndex - left;
         int i = getLongIndex(index);
 
         // Note: This method is conceptually the same as previousSetBit with the exception
@@ -409,10 +434,10 @@ final class IndexSet implements PivotStore {
                 // |  index   |
                 // |    |     |
                 // 0  001010000
-                return (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits) - 1 + offset;
+                return (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits) - 1 + left;
             }
             if (i == 0) {
-                return offset - 1;
+                return left - 1;
             }
             bits = ~data[--i];
         }
@@ -425,7 +450,7 @@ final class IndexSet implements PivotStore {
      */
     public void forEach(IntConsumer action) {
         // Adapted from o.a.c.collections4.IndexProducer
-        int wordIdx = offset;
+        int wordIdx = left;
         for (int i = 0; i < data.length; i++) {
             long bits = data[i];
             int index = wordIdx;
@@ -440,22 +465,113 @@ final class IndexSet implements PivotStore {
         }
     }
 
+    // PivotCache interface
+
+    @Override
+    public int left() {
+        return left;
+    }
+
+    @Override
+    public int right() {
+        return right;
+    }
+
+    @Override
+    public boolean sparse() {
+        // Can store all pivots between [left, right]
+        return false;
+    }
+
+    @Override
+    public boolean contains(int k) {
+        // Assume [left <= k <= right]
+        return get(k);
+    }
+
+    @Override
+    public void add(int index) {
+        // Update the floating pivots if outside the support
+        if (index < left) {
+            lowerPivot = Math.max(index, lowerPivot);
+        } else if (index > right) {
+            upperPivot = Math.min(index, upperPivot);
+        } else {
+            set(index);
+        }
+    }
+
+    @Override
+    public void add(int fromIndex, int toIndex) {
+        // Optimisation for the main use case of the PivotCache
+        if (fromIndex == toIndex) {
+            add(fromIndex);
+            return;
+        }
+
+        // Note:
+        // Storing all pivots allows regions of identical values
+        // and sorted regions to be skipped in subsequent partitioning.
+        // Repeat sorting these regions is typically more expensive
+        // than caching them and moving over them during partitioning.
+        // An alternative is to: store fromIndex and only store
+        // toIndex if they are well separated, optionally storing
+        // regions between. If they are not well separated (e.g. < 10)
+        // then using a single pivot is an alternative to investigate
+        // with performance benchmarks on a range of input data.
+
+        // Pivots are required to bracket [L, R]:
+        // LP-----L--------------R------UP
+        // If the range [i, j] overlaps either L or R then
+        // the floating pivots are no longer required:
+        //     i-j                             Set lower pivot
+        //     i--------j                      Ignore lower pivot
+        //     i---------------------j         Ignore lower & upper pivots (no longer required)
+        //           i-------j                 Ignore lower & upper pivots
+        //           i---------------j         Ignore upper pivot
+        //                         i-j         Set upper pivot
+        if (fromIndex <= right && toIndex >= left) {
+            // Clip the range between [left, right]
+            final int i = Math.max(fromIndex, left);
+            final int j = Math.min(toIndex, right);
+            set(i, j);
+        } else if (toIndex < left) {
+            lowerPivot = Math.max(toIndex, lowerPivot);
+        } else {
+            // fromIndex > right
+            upperPivot = Math.min(fromIndex, upperPivot);
+        }
+    }
+
+    @Override
+    public int previousPivot(int k) {
+        // Assume scanning in [left <= k <= right]
+        return IndexSet.this.previousSetBitOrElse(k, lowerPivot);
+    }
+
+    @Override
+    public int nextPivotOrElse(int k, int other) {
+        // Assume scanning in [left <= k <= right]
+        final int p = upperPivot == UPPER_DEFAULT ? other : upperPivot;
+        return IndexSet.this.nextSetBitOrElse(k, p);
+    }
+
     /**
-     * Return a {@link PivotCache} implementation re-using the same internal storage.
+     * Return a {@link ScanningPivotCache} implementation re-using the same internal storage.
      *
-     * <p>Note that the range for the {@link PivotCache} must fit inside the current
+     * <p>Note that the range for the {@link ScanningPivotCache} must fit inside the current
      * supported range of indices.
      *
      * <p>Warning: This operation clears all set bits within the range.
      *
      * <p><strong>Support</strong>
      *
-     * <p>The returned {@link PivotCache} is suitable for storing all pivot points between
+     * <p>The returned {@link ScanningPivotCache} is suitable for storing all pivot points between
      * {@code [left, right]} and the closest bounding pivots outside that range. It can be
      * used for bracketing partition keys processed in a random order by storing pivots
      * found during each successive partition search.
      *
-     * <p>The returned {@link PivotCache} is suitable for use when iterating over
+     * <p>The returned {@link ScanningPivotCache} is suitable for use when iterating over
      * partition keys in ascending order.
      *
      * <p>The cache allows incrementing the {@code left} support using
@@ -464,14 +580,14 @@ final class IndexSet implements PivotStore {
      * to within the original support used to create the cache. If the {@code left} is
      * moved beyond the {@code right} then the move is rejected.
      *
-     * @param left Lower bound (inclusive).
-     * @param right Upper bound (inclusive).
+     * @param lower Lower bound (inclusive).
+     * @param upper Upper bound (inclusive).
      * @return the pivot cache
      * @throws IllegalArgumentException if {@code right < left} or the range cannot be
      * supported.
      */
-    ScanningPivotCache asScanningPivotCache(int left, int right) {
-        return asScanningPivotCache(left, right, true);
+    ScanningPivotCache asScanningPivotCache(int lower, int upper) {
+        return asScanningPivotCache(lower, upper, true);
     }
 
     /**
@@ -491,29 +607,29 @@ final class IndexSet implements PivotStore {
     }
 
     /**
-     * Return a {@link PivotCache} implementation to support the range
+     * Return a {@link ScanningPivotCache} implementation to support the range
      * {@code [left, right]} re-using the same internal storage.
      *
-     * @param left Lower bound (inclusive).
-     * @param right Upper bound (inclusive).
+     * @param lower Lower bound (inclusive).
+     * @param upper Upper bound (inclusive).
      * @param initialize Perform validation checks and initialize the storage.
      * @return the pivot cache
      * @throws IllegalArgumentException if {@code right < left} or the range cannot be
      * supported.
      */
-    private ScanningPivotCache asScanningPivotCache(int left, int right, boolean initialize) {
+    private ScanningPivotCache asScanningPivotCache(int lower, int upper, boolean initialize) {
         if (initialize) {
-            checkRange(left, right);
-            final int capacity = data.length * Long.SIZE + offset;
-            if (left < offset || right >= capacity) {
+            checkRange(lower, upper);
+            final int capacity = data.length * Long.SIZE + lower;
+            if (lower < left || upper >= capacity) {
                 throw new IllegalArgumentException(
-                    String.format("Unsupported range: [%d, %d] is not within [%d, %d]", left, right,
-                        offset, capacity - 1));
+                    String.format("Unsupported range: [%d, %d] is not within [%d, %d]", lower, upper,
+                        left, capacity - 1));
             }
             // Clear existing data
             Arrays.fill(data, 0);
         }
-        return new IndexPivotCache(left, right);
+        return new IndexPivotCache(lower, upper);
     }
 
     /**
@@ -531,19 +647,23 @@ final class IndexSet implements PivotStore {
     }
 
     /**
-     * Implementation of the {@link PivotCache} using the {@link IndexSet}.
+     * Implementation of the {@link ScanningPivotCache} using the {@link IndexSet}.
      *
      * <p>Stores all pivots between the support {@code [left, right]}. Uses two
      * floating pivots which are the closest known pivots surrounding this range.
      *
      * <p>This class is bound to the enclosing {@link IndexSet} instance to provide
      * the functionality to read, write and search indexes.
+     *
+     * <p>Note: This duplicates functionality of the parent IndexSet. Differences
+     * are that it uses a movable left bound and implements the scanning functionality
+     * of the {@link ScanningPivotCache} interface. It can also be created for
+     * a smaller {@code [left, right]} range than the enclosing class.
+     *
+     * <p>Creation of this class typically invalidates the use of the outer class.
+     * Creation will zero the underlying storage and the range may be different.
      */
     class IndexPivotCache implements ScanningPivotCache {
-        /** Default value for an unset upper floating pivot.
-         * Set as a value higher than any valid array index. */
-        private static final int UPPER_DEFAULT = Integer.MAX_VALUE;
-
         /** Left bound of the support. */
         private int left;
         /** Left bound of the support. */
