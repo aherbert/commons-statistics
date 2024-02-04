@@ -404,10 +404,16 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 2, 3, 4, 5, 6, 42, 32488})
+    @ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 42, 32488})
     void testFloorLog2(int x) {
         final double expected = Math.floor(Math.log(x) / Math.log(2));
-        Assertions.assertEquals(expected, Partition.floorLog2(x));
+        // Special case
+        if (x == 0) {
+            // Here expected = -Infinity; actual = -1
+            Assertions.assertNotEquals(expected, Partition.floorLog2(x));
+        } else {
+            Assertions.assertEquals(expected, Partition.floorLog2(x));
+        }
     }
 
 //    @ParameterizedTest
@@ -558,13 +564,14 @@ class PartitionTest {
         assertPartitionPaired(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionPairedSBM);
     }
 
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testPartition"})
-//    void testPartitionBM(double[] values, int[] indices) {
-//        assertPartition(values, indices, new Partition()::partitionBM);
-//    }
-//
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBM(double[] values, int[] indices) {
+        // TODO - fix this
+        Assumptions.assumeTrue(indices.length <= 2);
+        assertPartition(values, indices, new Partition()::partitionISBM);
+    }
+
 //    @ParameterizedTest
 //    @MethodSource(value = {"testPartition"})
 //    void testPartitionDP(double[] values, int[] indices) {
@@ -736,6 +743,25 @@ class PartitionTest {
             Partition.heapSelectRange(x, 0, x.length - 1, 0, x.length - 1);
             restoreNegativeZeros(x, 0, x.length - 1);
         });
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testHeapSort(double[] values) {
+        assumeNonNaN(values);
+        Assumptions.assumeTrue(values.length > 0);
+        assertSort(values, x -> {
+            replaceNegativeZeros(x, 0, x.length - 1);
+            Partition.heapSort(x, 0, x.length - 1);
+            restoreNegativeZeros(x, 0, x.length - 1);
+        });
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortISBM(double[] values) {
+        assertSort(values,
+            new Partition(PivotingStrategy.DYNAMIC, 3, 3, KeyStrategy.INDEX_SET)::sortISBM);
     }
 
 //

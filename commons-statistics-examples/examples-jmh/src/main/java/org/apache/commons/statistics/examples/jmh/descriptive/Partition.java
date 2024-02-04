@@ -48,10 +48,10 @@ final class Partition {
     /** Minimum selection size for quickselect.
      * Below this switch to insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in the original paper. */
-    private static final int MIN_QUICKSELECT_SIZE = 17;
+    static final int MIN_QUICKSELECT_SIZE = 27;
     /** Minimum selection size for heapselect.
      * Set to the same value as min select size. This requires tuning for performance. */
-    private static final int MIN_HEAPSELECT_SIZE = 17;
+    static final int MIN_HEAPSELECT_SIZE = 27;
     /** Minimum length between 2 pivots {@code p2 - p1} that requires a full sort. */
     private static final int SORT_BETWEEN_SIZE = 2;
     /** Mask to extract the positive index from an integer. */
@@ -1248,6 +1248,22 @@ final class Partition {
     }
 
     /**
+     * Sort the elements using a heap sort algorithm.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void heapSort(double[] a, int left, int right) {
+        // We could make a choice here
+        partitionMinK(a, left, right, right, right - left);
+        //partitionMaxK(a, left, right, left, right - left);
+    }
+
+    /**
      * Partition the elements {@code ka} and {@code kb} using a heap select algorithm. It
      * is assumed {@code left <= ka <= kb <= right}. Any range between the two elements is
      * not ensured to be sorted.
@@ -1428,21 +1444,25 @@ final class Partition {
         // Value to sift
         int p = root;
         final double v = a[offset + p];
-        // Left child of root
+        // Left child of root: p * 2 + 1
         int c = (p << 1) + 1;
         while (c < n) {
+            // Left child value
+            double cv = a[offset + c];
             // Use the right child if greater
-            if (c + 1 < n && a[offset + c] < a[offset + c + 1]) {
+            if (c + 1 < n && cv < a[offset + c + 1]) {
+                cv = a[offset + c + 1];
                 c++;
             }
-            if (v < a[offset + c]) {
-                a[offset + p] = a[offset + c];
-                p = c;
-                c = (p << 1) + 1;
-            } else {
-                // Done
+            // Max heap requires parent >= child
+            if (v >= cv) {
+                // Greater than largest child - done
                 break;
             }
+            // Swap and descend
+            a[offset + p] = cv;
+            p = c;
+            c = (p << 1) + 1;
         }
         a[offset + p] = v;
     }
@@ -1550,21 +1570,25 @@ final class Partition {
         // Value to sift
         int p = root;
         final double v = a[offset - p];
-        // Left child of root
+        // Left child of root: p * 2 + 1
         int c = (p << 1) + 1;
         while (c < n) {
+            // Left child value
+            double cv = a[offset - c];
             // Use the right child if less
-            if (c + 1 < n && a[offset - c] > a[offset - c - 1]) {
+            if (c + 1 < n && cv > a[offset - c - 1]) {
+                cv = a[offset - c - 1];
                 c++;
             }
-            if (v > a[offset - c]) {
-                a[offset - p] = a[offset - c];
-                p = c;
-                c = (p << 1) + 1;
-            } else {
-                // Done
+            // Min heap requires parent <= child
+            if (v <= cv) {
+                // Less than smallest child - done
                 break;
             }
+            // Swap and descend
+            a[offset - p] = cv;
+            p = c;
+            c = (p << 1) + 1;
         }
         a[offset - p] = v;
     }
@@ -2654,7 +2678,7 @@ final class Partition {
     }
 
     /**
-     * Sort the data.
+     * Sort the data by recursive partitioning (quicksort).
      *
      * @param part Partition function.
      * @param data Values.
@@ -2666,6 +2690,304 @@ final class Partition {
         }
         // Signal entire range
         part.sort(data, 0, right, false, false);
+    }
+
+    /**
+     * Sort the array using an introsort. The quicksort partition method is provided as an argument.
+     * Switches to heapsort when recursive partitioning reaches a maximum depth.
+     *
+     * <p>The partition method is not required to handle signed zeros.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @see <a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
+     */
+    private void introsort(SPEPartition part, double[] a) {
+        // Handle NaN / signed zeros
+        int cn = 0;
+        int end = a.length;
+        for (int i = end; i > 0;) {
+            final double v = a[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                a[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                a[i] = a[--end];
+                a[end] = v;
+            }
+        }
+        if (end <= 1) {
+            // Nothing to sort
+            return;
+        }
+        introsort(part, a, 0, end - 1, createMaxDepth(end));
+        // Restore signed zeros
+        if (cn != 0) {
+            // Find a zero
+            int j = Arrays.binarySearch(a, 0.0);
+            // Scan back to before zero
+            while (--j >= 0) {
+                if (a[j] != 0) {
+                    break;
+                }
+            }
+            // Fix. Assume the zeros are all present so just overwrite
+            // the required count of signed zeros.
+            while (--cn >= 0) {
+                a[++j] = -0.0;
+            }
+        }
+    }
+
+    /**
+     * Sort the array.
+     *
+     * <p>Uses an introsort. The quicksort partition method is provided as an argument.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
+     * may be destroyed (the mixture updated during partitioning). The caller is
+     * responsible for counting a mixture of signed zeros and restoring them if
+     * required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param maxDepth Maximum depth for recursion.
+     * @see <a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
+     */
+    private void introsort(SPEPartition part, double[] a, int left, int right, int maxDepth) {
+        if (right - left < minQuickSelectSize) {
+            // Full sort of small data
+            Sorting.sort(a, left, right, left > 0);
+        } else if (maxDepth == 0) {
+            // Too much recursion
+            heapSort(a, left, right);
+        } else {
+            // Pick a pivot and partition
+            final int[] upper = {0};
+            final int p0 = part.partition(a, left, right,
+                pivotingStrategy.pivotIndex(a, left, right),
+                upper);
+            final int p1 = upper[0];
+            introsort(part, a, left, p0 - 1, maxDepth - 1);
+            introsort(part, a, p1 + 1, right, maxDepth - 1);
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>The partition method is not required to handle signed zeros.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices (assumed to be strictly positive).
+     */
+    void introselect(SPEPartition part, double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        int cn = 0;
+        int end = a.length;
+        for (int i = end; i > 0;) {
+            final double v = a[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                a[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                a[i] = a[--end];
+                a[end] = v;
+            }
+        }
+        if (end <= 1) {
+            // Nothing to partition
+            return;
+        }
+
+        // Filter indices invalidated by NaN check
+        int n = count;
+        if (end < k.length) {
+            for (int i = n; i > 0;) {
+                final int v = k[--i];
+                if (v >= end) {
+                    // swap(k, i, --n)
+                    k[i] = k[--n];
+                    k[n] = v;
+                }
+            }
+            if (n == 0) {
+                // NaNs for all k
+                return;
+            }
+        }
+
+        introselect(part, a, end - 1, k, n);
+
+        // Restore signed zeros
+        if (cn != 0) {
+            // Use the partitioned indices to fast-forward as much as possible.
+            // Assumes partitioning has not changed indices (but
+            // reordering is OK).
+            int j = -1;
+            for (int i = 0; i < n; i++) {
+                if (k[i] < 0) {
+                    j = Math.max(j, k[i]);
+                }
+            }
+            // Fix. Assume the zeros are all present so no bounds checks
+            // are used when incrementing j. But we have to check for zeros
+            // before overwrite.
+            for (;;) {
+                if (a[++j] == 0) {
+                    a[j] = -0.0;
+                    if (--cn == 0) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
+     * may be destroyed (the mixture updated during partitioning). The caller is
+     * responsible for counting a mixture of signed zeros and restoring them if
+     * required.
+     *
+     * <p>This function assumes {@code n > 0} and {@code right > 0}; otherwise
+     * there is nothing to do.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices (assumed to be strictly positive).
+     */
+    private void introselect(SPEPartition part, double[] a, int right, int[] k, int n) {
+        final int maxDepth = createMaxDepth(right + 1);
+        // Handle cases without multiple keys
+        if (n == 1) {
+            introselect(part, a, 0, right, k[0], k[0], maxDepth);
+            return;
+        }
+        if (n == 2) {
+            final int ka = Math.min(k[0], k[1]);
+            final int kb = Math.max(k[0], k[1]);
+            introselect(part, a, 0, right, ka, kb, maxDepth);
+            return;
+        }
+
+        // TODO: Try different key strategies
+        throw new IllegalStateException("Unsupported introselect: " + keyStrategy);
+    }
+
+    /**
+     * Partition the array such that indices {@code ka} and {@code kb} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>Note: Requires {@code ka <= kb}. The use of two indices is to support processing
+     * of pairs of indices {@code (k, k+1)}. However the indices are treated independently
+     * and partitioned by recursion. They may be equal, neighbours or well separated.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka Index.
+     * @param kb Index.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    private void introselect(SPEPartition part, double[] a, int left, int right,
+        int ka, int kb, int maxDepth) {
+        if (right - left < minQuickSelectSize) {
+            // Full sort of small data
+            Sorting.sort(a, left, right, left > 0);
+            return;
+        }
+        // It is possible to use heapselect when ka and kb are close to the ends
+        // |l|-----|ka|--------|kb|------|r|
+        //  ---s1----
+        //                      -----s3----
+        //  ---------s2----------
+        //          ----------s4-----------
+        final int s1 = ka - left;
+        final int s2 = kb - left;
+        final int s3 = right - kb;
+        final int s4 = right - ka;
+        if (maxDepth == 0 || Math.min(s1 + s3, Math.min(s2, s4)) < minHeapSelectSize) {
+            // Too much recursion, or ka and kb are both close to the ends
+            heapSelect(a, left, right, ka, kb);
+        } else {
+            // Pick a pivot and partition
+            final int[] upper = {0};
+            final int k0 = part.partition(a, left, right,
+                pivotingStrategy.pivotIndex(a, left, right),
+                upper);
+            final int k1 = upper[0];
+            // Recursion to max depth
+            // Note: Here we possibly branch left and right with one or two
+            // of ka and kb. It is possible that the partition has split the pair
+            // and the recursion proceeds with a single point.
+            if (ka < k0) {
+                final int other = kb < k0 ? kb : ka;
+                introselect(part, a, left, k0 - 1, ka, other, maxDepth - 1);
+            }
+            if (kb > k1) {
+                final int other = ka > k1 ? ka : kb;
+                introselect(part, a, k1 + 1, right, other, kb, maxDepth - 1);
+            }
+        }
     }
 
     // TODO - Add other implementations
@@ -2887,8 +3209,7 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This method ensures that all {@code k + 1} are also correctly partitioned.
-     * The method assumes all {@code k} are valid indices into the data.
+     * <p>The method assumes all {@code k} are valid indices into the data.
      *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
      * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
@@ -2896,212 +3217,10 @@ final class Partition {
      *
      * @param data Values.
      * @param k Indices (may be destructively modified).
-     * @param count Count of indices.
+     * @param n Count of indices.
      */
-    void partitionIntroselectSBM(double[] data, int[] k, int count) {
-        // This method does all pre-processing for NaNs and signed zeros.
-        // The partition function can then assume no NaNs and can
-        // use zero as any other number. In particular any value == pivotValue
-        // can be moved using the pivotValue.
-        // Note that this is true if all zeros are 0.0, or all are -0.0, but not
-        // a mixture. However counting a mixture is slower.
-
-        // TODO: Move this to a NaN policy (and zero) strategy in the Quantile class.
-        // Note this will have to be shared with the Median class.
-
-        // Move NaNs and count signed zeros.
-        // Note counting both positive and negative zeros is slower;
-        // Here we just count negatives which are an unlikely data occurrence.
-        int cn = 0;
-        int end = data.length;
-        for (int i = end; i > 0;) {
-            final double v = data[--i];
-            // Count negative zeros using a sign bit check.
-            // This requires a performance test. If the conversion to raw bits
-            // is natively supported this is faster than using the == check.
-            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
-            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
-                cn++;
-                // Change to positive zero.
-                // The later pass then only has to restore negatives.
-                data[i] = 0.0;
-            } else if (v != v) {
-                // Move NaN to end
-                data[i] = data[--end];
-                data[end] = v;
-            }
-        }
-        if (end <= 1) {
-            // Nothing to partition
-            return;
-        }
-
-        // Filter indices invalidated by NaN check
-        int n = count;
-        if (end < k.length) {
-            for (int i = n; i > 0;) {
-                final int v = k[--i];
-                if (v >= end) {
-                    // swap(k, i, --n)
-                    k[i] = k[--n];
-                    k[n] = v;
-                }
-            }
-            if (n == 0) {
-                // NaNs for all k
-                return;
-            }
-        }
-
-        introselect(Partition::partitionSBM, data, end - 1, k, n);
-
-        // Restore signed zeros
-        if (cn != 0) {
-            // Use the partitioned indices to bracket zero.
-            // For now we just fast-forward as much as possible.
-            // Assumes partitioning has not changed indices (but
-            // reordering is OK).
-            int j = -1;
-            for (int i = 0; i < n; i++) {
-                final int kk = k[i];
-                if (data[kk] < 0) {
-                    j = Math.max(j, kk);
-                }
-            }
-            // Fix. Assume the zeros are all present so no bounds checks
-            // are used when incrementing j
-            for (;;) {
-                if (data[++j] == 0) {
-                    data[j] = -0.0;
-                    if (--cn == 0) {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>All indices are assumed to be within {@code [0, right]}.
-     *
-     * <p>Uses an introselect variant. The quickselect is provided as an argument;
-     * the fall-back on poor convergence of the quickselect is a heapselect.
-     *
-     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
-     * may be destroyed (the mixture updated during partitioning). The caller is
-     * responsible for counting a mixture of signed zeros and restoring them if
-     * required.
-     *
-     * <p>This function assumes {@code n > 0} and {@code right > 0}; otherwise
-     * there is nothing to do.
-     *
-     * @param part Partition function.
-     * @param a Values.
-     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices (assumed to be strictly positive).
-     */
-    private void introselect(SPEPartition part, double[] a, int right, int[] k, int n) {
-        // Ideal single pivot recursion will take log2(n) steps as data is
-        // divided into length (n/2) at each iteration.
-        int maxDepth = floorLog2(right + 1);
-
-        // TODO: this factor should be tuned for practical performance
-        // Increase by factor of 1.5
-        maxDepth = (maxDepth * 3) >>> 1;
-
-        if (n == 1) {
-            introselect(part, a, 0, right, k[0], k[0], maxDepth);
-            return;
-        }
-        if (n == 2) {
-            final int ka = Math.min(k[0], k[1]);
-            final int kb = Math.max(k[0], k[1]);
-            introselect(part, a, 0, right, ka, kb, maxDepth);
-            return;
-        }
-
-        // TODO: Try different key strategies
-        throw new IllegalStateException("Unsupported introselect-partitioning: " + keyStrategy);
-    }
-
-    /**
-     * Partition the array such that indices {@code ka} and {@code kb} correspond to their
-     * correctly sorted value in the equivalent fully sorted array.
-     *
-     * <p>For all indices {@code k} and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>Note: Requires {@code ka <= kb}. The use of two indices is to support processing
-     * of pairs of indices {@code (k, k+1)}. However the indices are treated independently
-     * and partitioned by recursion. They may be equal, neighbours or well separated.
-     *
-     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
-     * fall-back on poor convergence of the quickselect is a heapselect.
-     *
-     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
-     * destroyed (the mixture updated during partitioning). The caller is responsible for
-     * counting a mixture of signed zeros and restoring them if required.
-     *
-     * @param part Partition function.
-     * @param a Values.
-     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
-     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param ka Index.
-     * @param kb Index.
-     * @param maxDepth Maximum depth for recursion.
-     */
-    private void introselect(SPEPartition part, double[] a, int left, int right,
-        int ka, int kb, int maxDepth) {
-        if (right - left < minQuickSelectSize) {
-            // Full sort of small data
-            Sorting.sort(a, left, right, left > 0);
-            return;
-        }
-        // It is possible to use heapselect when ka and kb are close to the ends
-        // |l|-----|ka|--------|kb|------|r|
-        //  ---s1----
-        //                      -----s3----
-        //  ---------s2----------
-        //          ----------s4-----------
-        final int s1 = ka - left;
-        final int s2 = kb - left;
-        final int s3 = right - kb;
-        final int s4 = right - ka;
-        if (maxDepth == 0 || Math.min(s1 + s3, Math.min(s2, s4)) < minHeapSelectSize) {
-            // Too much recursion, or ka and kb are both close to the ends
-            heapSelect(a, left, right, ka, kb);
-        } else {
-            // Pick a pivot and partition
-            final int[] upper = {0};
-            final int k0 = part.partition(a, left, right,
-                pivotingStrategy.pivotIndex(a, left, right),
-                upper);
-            final int k1 = upper[0];
-            // Recursion to max depth
-            // Note: Here we possibly branch left and right with one or two
-            // of ka and kb. It is possible that the partition has split the pair
-            // and the recursion proceeds with a single point.
-            if (ka < k0) {
-                final int other = kb < k0 ? kb : ka;
-                introselect(part, a, left, k0 - 1, ka, other, maxDepth - 1);
-            }
-            if (kb > k1) {
-                final int other = ka > k1 ? ka : kb;
-                introselect(part, a, k1 + 1, right, other, kb, maxDepth - 1);
-            }
-        }
+    void partitionISBM(double[] data, int[] k, int n) {
+        introselect(Partition::partitionSBM, data, k, n);
     }
 
     /**
@@ -3381,6 +3500,19 @@ final class Partition {
         // Handle NaN
         final int right = sortNaN(data);
         sort((SPEPartitionFunction) this::partitionSBM, data, right);
+    }
+
+    /**
+     * Sort the data using an intrasort.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortISBM(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionSBM, data);
     }
 
     /**
@@ -4171,7 +4303,9 @@ final class Partition {
      * Respects the order of signed zeros.
      *
      * <p>Warning: Assumes the data contains at least 1 zero and that the
-     * zero value partitions less-than and greater-than.
+     * zero value partitions less-than-or-equal and greater-than-or-equal.
+     * This method will collect zeros that are intermixed in the {@code <=} and {@code >=}
+     * regions.
      *
      * @param data Values.
      * @param left Lower bound (inclusive).
@@ -4230,6 +4364,26 @@ final class Partition {
 
         upper[0] = gt;
         return lt;
+    }
+
+    /**
+     * Creates the maximum recursion depth for quickselect recursion.
+     *
+     * <p>Warning: A length of zero will create a negative recursion depth.
+     * In practice this does not matter as the sort / partition of a length
+     * zero array should ignore the data.
+     *
+     * @param n Length of data (must be strictly positive).
+     * @return the maximum recursion depth
+     */
+    private int createMaxDepth(int n) {
+        // Ideal single pivot recursion will take log2(n) steps as data is
+        // divided into length (n/2) at each iteration.
+        final int maxDepth = floorLog2(n);
+
+        // TODO: this factor should be tuned for practical performance
+        // Increase by factor of 1.5
+        return (maxDepth * 3) >>> 1;
     }
 
     /**
