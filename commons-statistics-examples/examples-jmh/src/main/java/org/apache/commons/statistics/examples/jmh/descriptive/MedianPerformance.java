@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.ToDoubleFunction;
-import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -79,6 +78,12 @@ public class MedianPerformance {
 
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
     private static final String PSBM = "PairedSBM";
+
+    // Introselect functions
+
+    /** Commons Statistics Median implementation with Sedgewick's BM quickselect, switching
+     * to heapselect when progress is poor. */
+    private static final String ISBM = "ISBM";
 
     /**
      * Source of {@code double} array data.
@@ -153,60 +158,60 @@ public class MedianPerformance {
                 final org.apache.commons.math3.stat.descriptive.rank.Median m =
                     new org.apache.commons.math3.stat.descriptive.rank.Median();
                 function = m::evaluate;
+            // First generation kth-selector functions
             } else if (name.startsWith(SP)) {
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateSP;
+                function = withKthSelector(name)::evaluateSP;
             } else if (name.startsWith(SP_NAN)) {
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateSPN;
+                function = withKthSelector(name)::evaluateSPN;
             } else if (name.startsWith(SBM)) {
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateSBM;
+                function = withKthSelector(name)::evaluateSBM;
             } else if (name.startsWith(BM)) {
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateBM;
+                function = withKthSelector(name)::evaluateBM;
             } else if (name.startsWith(DP)) {
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateDP;
+                function = withKthSelector(name)::evaluateDP;
             } else if (name.startsWith(DP5)) {
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                function = Median.withDefaults().withKthSelector(new KthSelector(s))::evaluateDP5;
-            // Second generation partition functions (allow configuration)
+                function = withKthSelector(name)::evaluateDP5;
+            // Second generation partition functions
             } else if (name.startsWith(RANGE_SBM)) {
-                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
-                    ::evaluateRangeSBM;
+                function = withPartition(name)::evaluateRangeSBM;
             } else if (name.startsWith(SBM2)) {
-                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
-                    ::evaluateSBM2;
+                function = withPartition(name)::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
-                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
-                    ::evaluateKSBM;
+                function = withPartition(name)::evaluateKSBM;
             } else if (name.startsWith(K1SBM)) {
-                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
-                    ::evaluateK1SBM;
+                function = withPartition(name)::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
-                final int minSelectSize = QuantilePerformance.getMinQuickSelectSize(name);
-                final PivotingStrategy s = QuantilePerformance.getPivotStrategy(name);
-                final KeyStrategy keyStrategy = QuantilePerformance.getKeyStrategy(name);
-                function = Median.withDefaults().withPartition(new Partition(s, minSelectSize, 0,keyStrategy))
-                    ::evaluatePairedSBM;
+                function = withPartition(name)::evaluatePairedSBM;
+            // Introselect implementations
+            } else if (name.startsWith(ISBM)) {
+                function = withPartition(name)::evaluateISBM;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
         }
+    }
+
+    /**
+     * Creates the {@link Median}.
+     * Parameters for the {@link KthSelector} are derived from the {@code name}.
+     *
+     * @param name Name.
+     * @return the {@link Median} instance
+     */
+    private static Median withKthSelector(String name) {
+        return Median.withDefaults().withKthSelector(QuantilePerformance.createKthSelector(name));
+    }
+
+    /**
+     * Creates the {@link Median}.
+     * Parameters for the {@link Partition} are derived from the {@code name}.
+     *
+     * @param name Name.
+     * @return the {@link Median} instance
+     */
+    private static Median withPartition(String name) {
+        return Median.withDefaults().withPartition(QuantilePerformance.createPartition(name));
     }
 
     /**

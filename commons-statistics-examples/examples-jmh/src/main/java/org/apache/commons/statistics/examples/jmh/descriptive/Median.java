@@ -529,4 +529,44 @@ public final class Median {
         partition.partitionK1SBM(x, new int[] {k - 1}, 1);
         return DoubleMath.mean(x[k - 1], x[k]);
     }
+
+    /**
+     * Evaluate the median.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
+     * handling equal keys by Sedgewick; switching to heapselect if quickselect convergence
+     * is slow.
+     *
+     * @param values Values.
+     * @return the median
+     */
+    public double evaluateISBM(double[] values) {
+        // Implicit NPE
+        final int n = values.length;
+        // Special cases
+        if (n <= 2) {
+            switch (n) {
+            case 2:
+                return DoubleMath.mean(values[0], values[1]);
+            case 1:
+                return values[0];
+            default:
+                return Double.NaN;
+            }
+        }
+        // A sort is required
+        final double[] x = overwrite ? values : values.clone();
+        final int k = n >>> 1;
+        // Odd
+        if ((n & 0x1) == 0x1) {
+            partition.partitionISBM(x, new int[] {k}, 1);
+            return x[k];
+        }
+        // Even: require (k-1, k)
+        partition.partitionISBM(x, new int[] {k - 1, k}, 2);
+        return DoubleMath.mean(x[k - 1], x[k]);
+    }
 }
