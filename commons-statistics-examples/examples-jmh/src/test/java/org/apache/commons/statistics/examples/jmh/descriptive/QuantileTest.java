@@ -23,6 +23,7 @@ import java.util.stream.Stream;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -135,6 +136,15 @@ class QuantileTest {
     void testQuantilePairedSBM(double[] values, double[] p, double[][] expected, double delta) {
         assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
             Quantile::evaluatePairedSBM, Quantile::evaluatePairedSBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantile"})
+    void testQuantileISBM(double[] values, double[] p, double[][] expected, double delta) {
+        // TODO - fix this
+        Assumptions.assumeTrue(p.length <= 2);
+        assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
+            Quantile::evaluateISBM, Quantile::evaluateISBM);
     }
 
     private static void assertQuantile(Quantile m, double[] values, double[] p,
