@@ -454,9 +454,9 @@ public final class Quantile {
      * @see #evaluateSP(double[], double...)
      */
     private double evaluate2(PartitionFunction2 part, double[] values, double p) {
+        checkQuantile(p);
         // Implicit NPE
         final int n = values.length;
-        checkQuantile(p);
         // Special cases
         if (n <= 1) {
             return n == 0 ? Double.NaN : values[0];
@@ -490,14 +490,14 @@ public final class Quantile {
      * or no quantiles are specified.
      */
     public double[] evaluate2(PartitionFunction2 part, double[] values, double... p) {
-        // Implicit NPE
-        final int n = values.length;
         if (p.length == 0) {
             throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
         }
         for (final double pp : p) {
             checkQuantile(pp);
         }
+        // Implicit NPE
+        final int n = values.length;
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
