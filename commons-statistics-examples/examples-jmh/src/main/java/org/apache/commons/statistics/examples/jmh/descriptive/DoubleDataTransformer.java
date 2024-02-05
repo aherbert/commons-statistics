@@ -68,7 +68,7 @@ interface DoubleDataTransformer {
      * <p>Note: Although the pre-processed data array may be longer than this length it is
      * only required to partition indices below this length. For example the end of the
      * array may contain values to ignore such as {@code NaN}.
-     * 
+     *
      * @return the length
      */
     int length();
