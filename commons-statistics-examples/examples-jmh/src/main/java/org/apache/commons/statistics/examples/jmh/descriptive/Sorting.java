@@ -508,4 +508,300 @@ final class Sorting {
         }
         return set;
     }
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <pre>{@code
+     * int[] indices = ...
+     * int n sortIndices(indices, indices.length);
+     * int min = indices[0];
+     * int max = indices[n - 1]
+     * }</pre>
+     *
+     * <p>This method assumes the {@code data} contains only positive integers.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndices(int[] data, int n) {
+        // TODO ... Combine the best methods for different size data
+        return 0;
+    }
+
+    // The following methods all perform the same function and are present
+    // for performance testing.
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <p>Uses an insertion sort modified to ignore duplicates.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesInsertionSort(int[] data, int n) {
+        // Simple cases
+        if (n < 3) {
+            if (n == 2) {
+                int i0 = data[0];
+                int i1 = data[1];
+                if (i0 > i1) {
+                    data[0] = i1;
+                    data[1] = i0;
+                } else if (i0 == i1) {
+                    return 1;
+                }
+            }
+            // n=0,1,2 unique values
+            return n;
+        }
+
+        // Insert min at start to act as a sentinal
+        int min = data[0];
+        int mini = 0;
+        for (int i = 0; ++i < n;) {
+            final int v = data[i];
+            if (v < min) {
+                min = v;
+                mini = i;
+            }
+        }
+        data[mini] = data[0];
+        data[0] = min;
+
+        int unique = 1;
+        int j;
+        // Do an insertion sort but only compare the current set of unique values.
+        for (int i = 0; ++i < n;) {
+            final int v = data[i];
+            j = unique - 1;
+            if (v > data[j]) {
+                // Insert at end
+                data[j + 1] = v;
+                unique++;
+            } else if (v < data[j]) {
+                // Find insertion point in the unique indices
+                // Cannot move past the sentinal at data[0]
+                do {
+                    --j;
+                } while (v < data[j]);
+                // Only insert non-duplicate
+                if (v != data[j]) {
+                    // Update j so it is the insertion position
+                    j++;
+                    // Process the delayed moves
+                    // Move from [j, unique) to [j+1, unique+1)
+                    // System.arraycopy(data, j, data, j + 1, unique - j)
+                    for (int k = unique; k-- > j;) {
+                        data[k + 1] = data[k];
+                    }
+                    data[j] = v;
+                    unique++;
+                }
+            }
+        }
+        return unique;
+    }
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <p>Uses a heap sort modified to ignore duplicates.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesHeapSort(int[] data, int n) {
+        // Simple cases
+        if (n < 3) {
+            if (n == 2) {
+                int i0 = data[0];
+                int i1 = data[1];
+                if (i0 > i1) {
+                    data[0] = i1;
+                    data[1] = i0;
+                } else if (i0 == i1) {
+                    return 1;
+                }
+            }
+            // n=0,1,2 unique values
+            return n;
+        }
+
+        // Build the min heap using Floyd's heap-construction algorithm
+        // Start at parent of the last element in the heap (n-1)
+        int offset = n - 1;
+        for (int start = offset >> 1; start >= 0; start--) {
+            minHeapSiftDown(data, offset, start, n);
+        }
+
+        // The min heap has been constructed in-place so a[n-1] is the min.
+        // To sort we have to move elements from the top of the
+        // heap to the position immediately before the end of the heap
+        // (which is below right), reducing the heap size each step:
+        //                             root
+        // |--------------|k|-min-heap-|r|
+        //                 |  <-swap->  |
+
+        // TODO: Get a reference for heap sort. Is this loop optimal?
+        // Also check the partition code use of a heap.
+
+        // Move top of heap to the sorted end and move the end
+        // to the top.
+        int previous = data[offset];
+        data[offset] = data[0];
+        data[0] = previous;
+        int s = n - 1;
+        minHeapSiftDown(data, offset, 0, s);
+
+        // Min heap is now 1 smaller
+        // Proceed with the remaining elements but do not write them
+        // to the sorted data unless different from the previous value.
+        int unique = 1;
+        for (;;) {
+            s--;
+            // Move top of heap to the sorted end
+            final int v = data[offset];
+            data[offset] = data[offset - s];
+            if (previous != v) {
+                data[unique++] = v;
+                previous = v;
+            }
+            if (s == 1) {
+                // end of heap
+                break;
+            }
+            minHeapSiftDown(data, offset, 0, s);
+        }
+        // Stopped sifting when the heap was size 1.
+        // Move the last (max) value to the sorted data.
+        if (previous != data[offset]) {
+            data[unique++] = data[offset];
+        }
+        return unique;
+    }
+
+    /**
+     * Sift the top element down the min heap.
+     *
+     * <p>Note this creates the min heap in descending sequence so the
+     * heap is positioned below the root.
+     *
+     * @param a Heap data.
+     * @param offset Offset of the heap in the data.
+     * @param root Root of the heap.
+     * @param n Size of the heap.
+     */
+    private static void minHeapSiftDown(int[] a, int offset, int root, int n) {
+        // For node i:
+        // left child: 2i + 1
+        // right child: 2i + 2
+        // parent: floor((i-1) / 2)
+
+        // Value to sift
+        int p = root;
+        final int v = a[offset - p];
+        // Left child of root: p * 2 + 1
+        int c = (p << 1) + 1;
+        while (c < n) {
+            // Left child value
+            int cv = a[offset - c];
+            // Use the right child if less
+            if (c + 1 < n && cv > a[offset - c - 1]) {
+                cv = a[offset - c - 1];
+                c++;
+            }
+            // Min heap requires parent <= child
+            if (v <= cv) {
+                // Less than smallest child - done
+                break;
+            }
+            // Swap and descend
+            a[offset - p] = cv;
+            p = c;
+            c = (p << 1) + 1;
+        }
+        a[offset - p] = v;
+    }
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <p>Uses a sort and a second-pass to ignore duplicates.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesSort(int[] data, int n) {
+        // Simple cases
+        if (n < 3) {
+            if (n == 2) {
+                int i0 = data[0];
+                int i1 = data[1];
+                if (i0 > i1) {
+                    data[0] = i1;
+                    data[1] = i0;
+                } else if (i0 == i1) {
+                    return 1;
+                }
+            }
+            // n=0,1,2 unique values
+            return n;
+        }
+        java.util.Arrays.sort(data, 0, n);
+        // Compress to remove duplicates
+        int i = 0;
+        int unique = 1;
+        int previous = data[0];
+        OUTER:
+        while (++i < n) {
+            while (data[i] == previous) {
+                if (++i == n) {
+                    break OUTER;
+                }
+            }
+            previous = data[i];
+            data[unique++] = previous;
+        }
+        return unique;
+    }
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <p>Uses an IndexSet to ignore duplicates.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesIndexSet(int[] data, int n) {
+        // Simple cases
+        if (n < 3) {
+            if (n == 2) {
+                int i0 = data[0];
+                int i1 = data[1];
+                if (i0 > i1) {
+                    data[0] = i1;
+                    data[1] = i0;
+                } else if (i0 == i1) {
+                    return 1;
+                }
+            }
+            // n=0,1,2 unique values
+            return n;
+        }
+        // Delegate to IndexSet
+        return IndexSet.of(data, n).toArray(data);
+    }
 }

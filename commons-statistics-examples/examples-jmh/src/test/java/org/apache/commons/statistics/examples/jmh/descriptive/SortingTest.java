@@ -18,6 +18,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -32,6 +33,20 @@ import org.junit.jupiter.params.provider.MethodSource;
  * Test for {@link Sorting}.
  */
 class SortingTest {
+
+    /**
+     * Interface to test sorting unique indices.
+     */
+    interface IndexSort {
+        /**
+         * Sort the indices into unique asceding order
+         *
+         * @param a Indices.
+         * @param n Number of indices.
+         * @return number of unique indices.
+         */
+        int sort(int[] a, int n);
+    }
 
     // double[]
 
@@ -447,6 +462,81 @@ class SortingTest {
         builder.add(Arguments.of(new int[] {42, 5, 7, 7, 4}, -1));
         // Truncated indices
         builder.add(Arguments.of(new int[] {42, 5, 7, 7, 4}, 3));
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
+    void testSortIndicesInsertionSort(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndicesInsertionSort, values, n < 0 ? values.length : n);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
+    void testSortIndicesHeapSort(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndicesHeapSort, values, n < 0 ? values.length : n);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
+    void testSortIndicesSort(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndicesSort, values, n < 0 ? values.length : n);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
+    void testSortIndicesIndexSet(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndicesIndexSet, values, n < 0 ? values.length : n);
+    }
+
+    private static void assertSortIndices(IndexSort fun, int[] values, int n) {
+        final int[] x = values.clone();
+        final int[] expected = Arrays.stream(values).limit(n)
+            .distinct().sorted().toArray();
+        int unique = fun.sort(x, n);
+        Assertions.assertEquals(expected.length, unique, "Incorrect unique length");
+        for (int i = 0; i < expected.length; i++) {
+            final int index = i;
+            Assertions.assertEquals(expected[i], x[i], () -> "Error @ " + index);
+        }
+        // Test values after unique should be in the entire original data
+        final BitSet set = new BitSet();
+        Arrays.stream(values).limit(n).forEach(set::set);
+        for (int i = expected.length; i < n; i++) {
+            Assertions.assertTrue(set.get(x[i]), "Data up to n destroyed");
+        }
+        // Data after n should be untouched
+        for (int i = n; i < values.length; i++) {
+            Assertions.assertEquals(values[i], x[i], "Data after n destroyed");
+        }
+    }
+
+    static Stream<Arguments> testSortIndices() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        // Use length -1 to use the array length
+        builder.add(Arguments.of(new int[0], -1));
+        builder.add(Arguments.of(new int[3], -1));
+        builder.add(Arguments.of(new int[3], -1));
+        builder.add(Arguments.of(new int[] {42}, -1));
+        builder.add(Arguments.of(new int[] {1, 2, 3}, -1));
+        builder.add(Arguments.of(new int[] {3, 2, 1}, -1));
+        builder.add(Arguments.of(new int[] {42, 5, 7}, -1));
+        // Duplicates
+        builder.add(Arguments.of(new int[] {1, 1, 1}, -1));
+        builder.add(Arguments.of(new int[] {42, 5, 2, 9, 2, 9, 7, 7, 4}, -1));
+        // Truncated indices
+        builder.add(Arguments.of(new int[] {42, 5, 7, 7, 4}, 3));
+        builder.add(Arguments.of(new int[] {5, 4, 3, 2, 1}, 3));
+        builder.add(Arguments.of(new int[] {1, 2, 3, 4, 5}, 3));
+        builder.add(Arguments.of(new int[] {5, 3, 1, 2, 4}, 3));
+        // Some random indices with duplicates
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
+        for (final int size : new int[] {5, 10, 20}) {
+            int maxIndex = size >>> 1;
+            for (int i = 0; i < 5; i++) {
+                builder.add(Arguments.of(rng.ints(size, 0, maxIndex).toArray(), -1));
+            }
+        }
         return builder.build();
     }
 

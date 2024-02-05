@@ -173,8 +173,8 @@ class IndexSetTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testGetSet"})
-    void testForEach(int[] indices, int n) {
+    @MethodSource(value = {"testGetSet", "testForEachToArray"})
+    void testForEachToArray(int[] indices, int n) {
         final IndexSet set = createIndexSet(indices);
         final BitSet ref = new BitSet(n);
         Arrays.stream(indices).forEach(i -> {
@@ -187,6 +187,27 @@ class IndexSetTest {
         final int[] c = {0};
         set.forEach(i -> a[c[0]++] = i);
         Assertions.assertArrayEquals(e, a);
+
+        int[] original = indices.clone();
+        int len = set.toArray(indices);
+        int[] x = Arrays.copyOf(indices, len);
+        Assertions.assertArrayEquals(e, x);
+        // Check rest of the array is untouched
+        if (len < indices.length) {
+            x = Arrays.copyOfRange(indices, len, indices.length);
+            original = Arrays.copyOfRange(original, len, original.length);
+            Assertions.assertArrayEquals(original, x);
+        }
+    }
+
+    static Stream<Arguments> testForEachToArray() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        // Add duplicates
+        builder.accept(Arguments.of(new int[] {1, 1, 1, 2, 3, 4, 5, 6, 7}, 10));
+        builder.accept(Arguments.of(new int[] {5, 6, 2, 2, 3, 8, 1, 1, 4, 3}, 10));
+        builder.accept(Arguments.of(new int[] {2, 2, 2, 2, 2}, 10));
+        builder.accept(Arguments.of(new int[] {2000, 2001, 2000, 2001}, 2010));
+        return builder.build();
     }
 
     @ParameterizedTest
