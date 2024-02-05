@@ -29,7 +29,7 @@ final class DoubleDataTransformers {
     private DoubleDataTransformers() {}
 
     /**
-     * Creates a factory to supply {@link DoubleDataTransformer} based on the 
+     * Creates a factory to supply {@link DoubleDataTransformer} based on the
      * {@code nanPolicy} and data {@code copy} policy.
      *
      * @param nanPolicy NaN policy.
@@ -83,7 +83,7 @@ final class DoubleDataTransformers {
 //     }
 // },
 // /**
-//  * Raise an {@link IllegalArgumentException} for {@code NaN} values and count signed zeros. 
+//  * Raise an {@link IllegalArgumentException} for {@code NaN} values and count signed zeros.
 //  */
 // ERROR_NAN_COUNT_ZEROS {
 //     @Override
@@ -91,7 +91,7 @@ final class DoubleDataTransformers {
 //         // TODO Auto-generated method stub
 //         return super.prepare(data, copy);
 //     }
-//     
+//
 //     @Override
 //     long transform(double[] a) {
 //         // Here we delay copy to not change the data if a NaN is found.
@@ -113,7 +113,7 @@ final class DoubleDataTransformers {
 //             }
 //         }
 //         if (copy) {
-//             
+//
 //         }
 //         // pack [count of signed zeros, length of data]
 //         final long result = (((long) cn) << Integer.SIZE) | a.length;
@@ -140,7 +140,7 @@ final class DoubleDataTransformers {
      *
      * <p>Zeros after {@code from} may be discontinuous, for example in data
      * that is partitioned.
-     * 
+     *
      * <p>Warning: This method assumes that there are at least {@code count} zeros in
      * the range {@code [from + 1, a.length)}, otherwise an index out of bounds exception will
      * occur as the scan passes the end of the data.
@@ -165,12 +165,12 @@ final class DoubleDataTransformers {
 
     /**
      * Replace the first {@code count} occurrences of zero with {@code -0.0}
-     * starting after the provided {@code from} index. 
+     * starting after the provided {@code from} index.
      *
      * <p>It is assumed that {@code a[from + 1] == 0} and zeros after are continuous,
      * for example in data that is sorted, or partitioned around zero using a method
      * that collects equal value together.
-     * 
+     *
      * <p>Warning: This method assumes that there are at least {@code count} zeros in
      * the range {@code [from + 1, a.length)}, otherwise an index out of bounds exception will
      * occur as the scan passes the end of the data.

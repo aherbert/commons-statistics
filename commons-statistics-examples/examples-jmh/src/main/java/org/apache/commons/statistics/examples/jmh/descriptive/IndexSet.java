@@ -465,6 +465,37 @@ final class IndexSet implements PivotCache {
         }
     }
 
+    /**
+     * Write each index in the set into the provided array.
+     * Returns the number of indices.
+     *
+     * <p>The caller must ensure the output array has sufficient capacity.
+     * For example the array used to construct the IndexSet.
+     *
+     * @param a Output array.
+     * @return count of indices
+     * @see #of(int[])
+     * @see #of(int[], int)
+     */
+    public int toArray(int[] a) {
+        // Adapted from o.a.c.collections4.IndexProducer
+        int wordIdx = left;
+        int n = 0;
+        for (int i = 0; i < data.length; i++) {
+            long bits = data[i];
+            int index = wordIdx;
+            while (bits != 0) {
+                if ((bits & 1L) == 1L) {
+                    a[n++] = index;
+                }
+                bits >>>= 1;
+                index++;
+            }
+            wordIdx += Long.SIZE;
+        }
+        return n;
+    }
+
     // PivotCache interface
 
     @Override
