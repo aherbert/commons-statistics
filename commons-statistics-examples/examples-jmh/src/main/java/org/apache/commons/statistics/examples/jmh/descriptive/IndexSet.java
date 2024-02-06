@@ -130,9 +130,28 @@ final class IndexSet implements PivotCache {
         }
         final IndexSet set = IndexSet.ofRange(min, max);
         for (int i = 0; i < n; i++) {
-            set.add(indices[i]);
+            set.set(indices[i]);
         }
         return set;
+    }
+
+    /**
+     * Return the memory footprint in bytes. This is always a multiple of 64.
+     *
+     * <p>The result is {@code 64 * ceil((right - left + 1) / 64)}.
+     *
+     * <p>This method is intended to provided information to choose if the data structure
+     * is memory efficient.
+     *
+     * <p>Warning: It is assumed {@code 0 <= left <= right}. Use with the min/max index
+     * that is to be stored.
+     *
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @return the memory footprint
+     */
+    static long memoryFootprint(int left, int right) {
+        return (getLongIndex(right - left) + 1L) * Long.BYTES;
     }
 
     /**

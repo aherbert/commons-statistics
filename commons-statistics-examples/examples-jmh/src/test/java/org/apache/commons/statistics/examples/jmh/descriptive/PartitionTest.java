@@ -1070,43 +1070,43 @@ class PartitionTest {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final int allIndices = -1;
         final int signBit = Integer.MIN_VALUE;
-        builder.add(Arguments.of(new int[]{1, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 1, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 1, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[]{1, 1, 1, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{1, 2}, allIndices));
-        builder.add(Arguments.of(new int[]{2, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 2, 3}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 3, 2}, allIndices));
-        builder.add(Arguments.of(new int[]{2, 1, 3}, allIndices));
-        builder.add(Arguments.of(new int[]{2, 3, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{3, 1, 2}, allIndices));
-        builder.add(Arguments.of(new int[]{3, 2, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 2, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[]{2, 1, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[]{1, 2, 3, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{1, 3, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{2, 1, 3, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{2, 3, 1, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{3, 1, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{3, 2, 1, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {1, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 1, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 1, 99, 98, 97}, 2));
+        builder.add(Arguments.of(new int[] {1, 1, 1, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {1, 2}, allIndices));
+        builder.add(Arguments.of(new int[] {2, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 2, 3}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 3, 2}, allIndices));
+        builder.add(Arguments.of(new int[] {2, 1, 3}, allIndices));
+        builder.add(Arguments.of(new int[] {2, 3, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {3, 1, 2}, allIndices));
+        builder.add(Arguments.of(new int[] {3, 2, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 2, 99, 98, 97}, 2));
+        builder.add(Arguments.of(new int[] {2, 1, 99, 98, 97}, 2));
+        builder.add(Arguments.of(new int[] {1, 2, 3, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {1, 3, 2, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {2, 1, 3, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {2, 3, 1, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {3, 1, 2, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {3, 2, 1, 99, 98, 97}, 3));
         // Paired keys. Replace highest value from above with the next value and a sign bit.
-        builder.add(Arguments.of(new int[]{1, 1 | signBit}, allIndices));
-        builder.add(Arguments.of(new int[]{1 | signBit, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 2, 2 | signBit}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 2 | signBit, 2}, allIndices));
-        builder.add(Arguments.of(new int[]{2, 1, 2 | signBit}, allIndices));
-        builder.add(Arguments.of(new int[]{2, 2 | signBit, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{2 | signBit, 1, 2}, allIndices));
-        builder.add(Arguments.of(new int[]{2 | signBit, 2, 1}, allIndices));
-        builder.add(Arguments.of(new int[]{1, 1 | signBit, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[]{1 | signBit, 1, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[]{1, 2, 2 | signBit, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{1, 2 | signBit, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{2, 1, 2 | signBit, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{2, 2 | signBit, 1, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{2 | signBit, 1, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[]{2 | signBit, 2, 1, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {1, 1 | signBit}, allIndices));
+        builder.add(Arguments.of(new int[] {1 | signBit, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 2, 2 | signBit}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 2 | signBit, 2}, allIndices));
+        builder.add(Arguments.of(new int[] {2, 1, 2 | signBit}, allIndices));
+        builder.add(Arguments.of(new int[] {2, 2 | signBit, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {2 | signBit, 1, 2}, allIndices));
+        builder.add(Arguments.of(new int[] {2 | signBit, 2, 1}, allIndices));
+        builder.add(Arguments.of(new int[] {1, 1 | signBit, 99, 98, 97}, 2));
+        builder.add(Arguments.of(new int[] {1 | signBit, 1, 99, 98, 97}, 2));
+        builder.add(Arguments.of(new int[] {1, 2, 2 | signBit, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {1, 2 | signBit, 2, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {2, 1, 2 | signBit, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {2, 2 | signBit, 1, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {2 | signBit, 1, 2, 99, 98, 97}, 3));
+        builder.add(Arguments.of(new int[] {2 | signBit, 2, 1, 99, 98, 97}, 3));
         // Case that created an index-out-of-bound error during benchmarking.
         // The max value is first key.
         builder.add(Arguments.of(new int[] {9874, 6495, 535, 9431, 2961, 5073, 9839, 5712, 9803, 1125, 6733, 2558, 1230, 35, 7378, 1114, 7142,
@@ -1157,5 +1157,50 @@ class PartitionTest {
                 a[i] = -0.0;
             }
         }
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void testSearch(int[] keys, int left, int right) {
+        // Clip to correct range
+        final int l = left < 0 ? 0 : left;
+        final int r = right < 0 ? keys.length - 1 : right;
+        for (final int k : keys) {
+            // Same as binary search when the key is present
+            // (binarySearch has exclusive upper bound)
+            final int expected = Arrays.binarySearch(keys, l, r + 1, k);
+            Assertions.assertEquals(expected, Partition.searchLessOrEqual(keys, l, r, k), "leq");
+            Assertions.assertEquals(expected, Partition.searchGreaterOrEqual(keys, l, r, k), "geq");
+        }
+        // Search above/below keys
+        Assertions.assertEquals(l - 1, Partition.searchLessOrEqual(keys, l, r, keys[l] - 44), "leq below");
+        Assertions.assertEquals(r, Partition.searchLessOrEqual(keys, l, r, keys[r] + 44), "leq above");
+        Assertions.assertEquals(l, Partition.searchGreaterOrEqual(keys, l, r, keys[l] - 44), "geq below");
+        Assertions.assertEquals(r + 1, Partition.searchGreaterOrEqual(keys, l, r, keys[r] + 44), "geq above");
+        // Search between neighbour keys
+        for (int i = 1; i < keys.length; i++) {
+            // Bound: keys[i-1] < k < keys[i]
+            final int k1 = keys[i - 1];
+            final int k2 = keys[i] - 1;
+            for (int k = k1 + 1; k <= k2; k++) {
+                Assertions.assertEquals(i - 1, Partition.searchLessOrEqual(keys, l, r, k), "leq between");
+                Assertions.assertEquals(i, Partition.searchGreaterOrEqual(keys, l, r, k), "geq between");
+            }
+        }
+    }
+
+    static Stream<Arguments> testSearch() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final int allIndices = -1;
+        builder.add(Arguments.of(new int[] {1}, allIndices, allIndices));
+        builder.add(Arguments.of(new int[] {1, 2}, allIndices, allIndices));
+        builder.add(Arguments.of(new int[] {1, 10}, allIndices, allIndices));
+        builder.add(Arguments.of(new int[] {1, 2, 3}, allIndices, allIndices));
+        builder.add(Arguments.of(new int[] {1, 4, 7}, allIndices, allIndices));
+        builder.add(Arguments.of(new int[] {1, 4, 5, 7}, allIndices, allIndices));
+        // Duplicates. These match binary search when found.
+        builder.add(Arguments.of(new int[] {1, 1, 1, 1, 1, 1}, allIndices, allIndices));
+        builder.add(Arguments.of(new int[] {1, 1, 1, 1, 3, 3, 3, 3, 3, 5, 5, 5, 5}, allIndices, allIndices));
+        return builder.build();
     }
 }

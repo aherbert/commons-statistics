@@ -63,6 +63,30 @@ class IndexSetTest {
         Assertions.assertThrows(IllegalArgumentException.class, () -> set.asScanningPivotCache(left, capacity));
     }
 
+    @Test
+    void testMemoryFootprint() {
+        // Memory footprint is number of bits that has to be stored, rounded up to
+        // a multiple of 64
+        final long longBytes = Long.BYTES;
+        Assertions.assertEquals(longBytes * 1, IndexSet.memoryFootprint(0, 0));
+        Assertions.assertEquals(longBytes * 1, IndexSet.memoryFootprint(0, 63));
+        Assertions.assertEquals(longBytes * 2, IndexSet.memoryFootprint(0, 64));
+        Assertions.assertEquals(longBytes * 2, IndexSet.memoryFootprint(0, 127));
+        Assertions.assertEquals(longBytes * 3, IndexSet.memoryFootprint(0, 128));
+        // Test the documented 64 * ceil((right - left + 1) / 64
+        Assertions.assertEquals(longBytes * Math.ceil(128 / 64.0), IndexSet.memoryFootprint(0, 127));
+        Assertions.assertEquals(longBytes * Math.ceil(129 / 64.0), IndexSet.memoryFootprint(0, 128));
+        // Maximum capacity
+        Assertions.assertEquals(longBytes * (1 << 25), IndexSet.memoryFootprint(0, Integer.MAX_VALUE));
+        // Offset from zero
+        final int left = 12563;
+        Assertions.assertEquals(longBytes * 1, IndexSet.memoryFootprint(left, left + 0));
+        Assertions.assertEquals(longBytes * 1, IndexSet.memoryFootprint(left, left + 63));
+        Assertions.assertEquals(longBytes * 2, IndexSet.memoryFootprint(left, left + 64));
+        Assertions.assertEquals(longBytes * 2, IndexSet.memoryFootprint(left, left + 127));
+        Assertions.assertEquals(longBytes * 3, IndexSet.memoryFootprint(left, left + 128));
+    }
+
     @ParameterizedTest
     @MethodSource
     void testGetSet(int[] indices, int n) {
