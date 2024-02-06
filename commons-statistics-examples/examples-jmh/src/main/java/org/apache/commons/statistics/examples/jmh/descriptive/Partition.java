@@ -1284,7 +1284,7 @@ final class Partition {
      * @see #heapSelectRange(double[], int, int, int, int)
      */
     static void heapSelect(double[] a, int left, int right, int ka, int kb) {
-        assert ka <= kb;
+        //assert ka <= kb;
         // Call the appropriate heap partition function based on
         // building a heap up to 50% of the length
         // |l|-----|ka|--------|kb|------|r|
@@ -1302,7 +1302,8 @@ final class Partition {
             // s1 + s3 == r - l and >= than the smallest
             // distance to one of the ends
             partitionMinK(a, left, right, ka, 0);
-            partitionMaxK(a, left, right, kb, 0);
+            // Repeat for the other side above ka
+            partitionMaxK(a, ka + 1, right, kb, 0);
         } else if (s2 < s4) {
             partitionMinK(a, left, right, kb, kb - ka);
         } else {
@@ -1326,7 +1327,7 @@ final class Partition {
      * @see #heapSelect(double[], int, int, int, int)
      */
     static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
-        assert ka <= kb;
+        //assert ka <= kb;
         // Call the appropriate heap partition function based on
         // building a heap up to 50% of the length
         // |l|-----|ka|--------|kb|------|r|
@@ -1398,28 +1399,35 @@ final class Partition {
         }
 
         // The max heap has been constructed in-place so a[left] is the max.
-        // To partition a[k] we have to move elements from the top of the
-        // heap to the position immediately after the end of the heap.
+        // To partition a[k] we have to move the top of the heap to the position
+        // immediately before the end of the reduced size heap; the previous end
+        // of the heap [k] is placed at the top. Heap is above left:
         // root
-        // |l|-min-heap-|k|--------------|
+        // |l|-max-heap-|k|--------------|
         //  |  <-swap->  |
+        // The heap can be restored by sifting down the top.
 
+        // Always require the top 1
+        // swap(a[left], a[k])
+        a[left] = a[k];
+        a[k] = max;
         int low = k;
+
         if (count > 0) {
-            // Heap sort
-            // Output lower bound limited by the heap size
-            low -= Math.min(count, n - 1);
-            for (int c = count; n-- > 1 && c >= 0; c--) {
-                // Move top of heap to the sorted end
+            // Here we sift down the last element moved to the top
+            // of the heap and repeat until we achieve count
+
+            // Count limited by the heap size (previously reduced by 1)
+            int c = Math.min(count, --n);
+            low -= c;
+            while (c-- > 0) {
+                // Sift down top element and reduce heap size by 1
+                maxHeapSiftDown(a, left, 0, n--);
+                // Move top of heap (now size n-1) to the sorted end
                 final double v = a[left];
                 a[left] = a[left + n];
                 a[left + n] = v;
-                maxHeapSiftDown(a, left, 0, n);
             }
-        } else {
-            // swap(a[left], a[k])
-            a[left] = a[k];
-            a[k] = max;
         }
         return low;
     }
@@ -1523,29 +1531,35 @@ final class Partition {
         }
 
         // The min heap has been constructed in-place so a[right] is the min.
-        // To partition a[k] we have to move elements from the top of the
-        // heap to the position immediately before the end of the heap
-        // (which is below right):
+        // To partition a[k] we have to move the top of the heap to the position
+        // immediately before the end of the reduced size heap; the previous end
+        // of the heap [k] is placed at the top. Heap is below right:
         //                             root
         // |--------------|k|-min-heap-|r|
         //                 |  <-swap->  |
+        // The heap can be restored by sifting down the top.
 
+        // Always require the top 1
+        // swap(a[right], a[k])
+        a[right] = a[k];
+        a[k] = min;
         int upper = k;
+
         if (count > 0) {
-            // Heap sort
-            // Output upper bound limited by the heap size
-            upper += Math.min(count, n - 1);
-            for (int c = count; n-- > 1 && c >= 0; c--) {
-                // Move top of heap to the sorted end
+            // Here we sift down the last element moved to the top
+            // of the heap and repeat until we achieve count
+
+            // Count limited by the heap size (previously reduced by 1)
+            int c = Math.min(count, --n);
+            upper += c;
+            while (c-- > 0) {
+                // Sift down top element and reduce heap size by 1
+                minHeapSiftDown(a, right, 0, n--);
+                // Move top of heap (now size n-1) to the sorted end
                 final double v = a[right];
                 a[right] = a[right - n];
                 a[right - n] = v;
-                minHeapSiftDown(a, right, 0, n);
             }
-        } else {
-            // swap(a[right], a[k])
-            a[right] = a[k];
-            a[k] = min;
         }
         return upper;
     }
