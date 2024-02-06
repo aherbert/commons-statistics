@@ -20,11 +20,13 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.sampling.PermutationSampler;
 import org.apache.commons.rng.simple.RandomSource;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -39,7 +41,7 @@ class SortingTest {
      */
     interface IndexSort {
         /**
-         * Sort the indices into unique asceding order
+         * Sort the indices into unique ascending order.
          *
          * @param a Indices.
          * @param n Number of indices.
@@ -468,28 +470,43 @@ class SortingTest {
     @ParameterizedTest
     @MethodSource(value = {"testSortIndices"})
     void testSortIndicesInsertionSort(int[] values, int n) {
-        assertSortIndices(Sorting::sortIndicesInsertionSort, values, n < 0 ? values.length : n);
+        assertSortIndices(Sorting::sortIndicesInsertionSort, values, n, 1);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSortIndices"})
     void testSortIndicesHeapSort(int[] values, int n) {
-        assertSortIndices(Sorting::sortIndicesHeapSort, values, n < 0 ? values.length : n);
+        assertSortIndices(Sorting::sortIndicesHeapSort, values, n, 3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSortIndices"})
     void testSortIndicesSort(int[] values, int n) {
-        assertSortIndices(Sorting::sortIndicesSort, values, n < 0 ? values.length : n);
+        assertSortIndices(Sorting::sortIndicesSort, values, n, 1);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSortIndices"})
     void testSortIndicesIndexSet(int[] values, int n) {
-        assertSortIndices(Sorting::sortIndicesIndexSet, values, n < 0 ? values.length : n);
+        assertSortIndices(Sorting::sortIndicesIndexSet, values, n, 1);
     }
 
-    private static void assertSortIndices(IndexSort fun, int[] values, int n) {
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
+    void testSortIndicesHashIndexSet(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndicesHashIndexSet, values, n, 1);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
+    void testSortIndices(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndices, values, n, 0);
+    }
+
+    private static void assertSortIndices(IndexSort fun, int[] values, int n, int minSupportedLength) {
+        // Negative n is a signal to use the full length
+        n = n < 0 ? values.length : n;
+        Assumptions.assumeTrue(n >= minSupportedLength);
         final int[] x = values.clone();
         final int[] expected = Arrays.stream(values).limit(n)
             .distinct().sorted().toArray();
@@ -512,6 +529,8 @@ class SortingTest {
     }
 
     static Stream<Arguments> testSortIndices() {
+        // Create data that should exercise all strategies in the heuristics in
+        // Sorting::sortIndices used to choose a sorting method
         final Stream.Builder<Arguments> builder = Stream.builder();
         // Use length -1 to use the array length
         builder.add(Arguments.of(new int[0], -1));
@@ -522,21 +541,35 @@ class SortingTest {
         builder.add(Arguments.of(new int[] {3, 2, 1}, -1));
         builder.add(Arguments.of(new int[] {42, 5, 7}, -1));
         // Duplicates
+        builder.add(Arguments.of(new int[] {1, 1}, -1));
         builder.add(Arguments.of(new int[] {1, 1, 1}, -1));
         builder.add(Arguments.of(new int[] {42, 5, 2, 9, 2, 9, 7, 7, 4}, -1));
         // Truncated indices
+        builder.add(Arguments.of(new int[] {3, 2, 1}, 1));
+        builder.add(Arguments.of(new int[] {3, 2, 1}, 2));
+        builder.add(Arguments.of(new int[] {2, 2, 1}, 2));
         builder.add(Arguments.of(new int[] {42, 5, 7, 7, 4}, 3));
         builder.add(Arguments.of(new int[] {5, 4, 3, 2, 1}, 3));
         builder.add(Arguments.of(new int[] {1, 2, 3, 4, 5}, 3));
         builder.add(Arguments.of(new int[] {5, 3, 1, 2, 4}, 3));
         // Some random indices with duplicates
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
-        for (final int size : new int[] {5, 10, 20}) {
+        for (final int size : new int[] {5, 10, 30}) {
             int maxIndex = size >>> 1;
             for (int i = 0; i < 5; i++) {
                 builder.add(Arguments.of(rng.ints(size, 0, maxIndex).toArray(), -1));
             }
         }
+        // A lot of duplicates
+        builder.add(Arguments.of(rng.ints(50, 0, 3).toArray(), -1));
+        builder.add(Arguments.of(rng.ints(50, 0, 5).toArray(), -1));
+        builder.add(Arguments.of(rng.ints(50, 0, 10).toArray(), -1));
+        // Sparse
+        builder.add(Arguments.of(rng.ints(25, 0, 100000).toArray(), -1));
+        // Ascending
+        builder.add(Arguments.of(IntStream.range(99, 134).toArray(), -1));
+        builder.add(Arguments.of(IntStream.range(99, 134).map(x -> x * 2).toArray(), -1));
+        builder.add(Arguments.of(IntStream.range(99, 134).map(x -> x * 3).toArray(), -1));
         return builder.build();
     }
 

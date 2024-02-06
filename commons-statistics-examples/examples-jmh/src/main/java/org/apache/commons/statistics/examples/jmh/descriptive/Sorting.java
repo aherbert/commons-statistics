@@ -16,6 +16,8 @@
  */
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
+import java.util.Arrays;
+
 /**
  * Support class for sorting arrays.
  *
@@ -27,6 +29,9 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * @since 1.1
  */
 final class Sorting {
+    /** The upper threshold to use a modified insertion sort to find unique indices. */
+    private static final int UNIQUE_INSERTION_SORT = 20;
+
     /** No instances. */
     private Sorting() {}
 
@@ -527,24 +532,6 @@ final class Sorting {
      * @return the number of indices
      */
     static int sortIndices(int[] data, int n) {
-        // TODO ... Combine the best methods for different size data
-        return 0;
-    }
-
-    // The following methods all perform the same function and are present
-    // for performance testing.
-
-    /**
-     * Sort the unique indices in-place to the start of the array. The number of
-     * indices is returned.
-     *
-     * <p>Uses an insertion sort modified to ignore duplicates.
-     *
-     * @param data Indices.
-     * @param n Number of indices.
-     * @return the number of indices
-     */
-    static int sortIndicesInsertionSort(int[] data, int n) {
         // Simple cases
         if (n < 3) {
             if (n == 2) {
@@ -561,6 +548,110 @@ final class Sorting {
             return n;
         }
 
+        // Strategy: Must be fast on already ascending data.
+        // Note: The recommended way to generate a lot of partition indices from
+        // many quantiles for interpolation is to generate in sequence.
+
+        // n <= small:
+        //   Modified insertion sort (naturally finds ascending data)
+        // n > small:
+        //   Look for ascending sequence and compact
+        // else:
+        //   Remove duplicates using an order(1) data structure and sort
+
+        if (n <= UNIQUE_INSERTION_SORT) {
+            return sortIndicesInsertionSort(data, n);
+        }
+
+        if (isAscending(data, n)) {
+            return compressDuplicates(data, n);
+        }
+
+        // At least 20 indices that are partially unordered.
+        // Find min/max
+        int min = data[0];
+        int max = min;
+        for (int i = 0; ++i < n;) {
+            min = Math.min(min, data[i]);
+            max = Math.max(max, data[i]);
+        }
+
+        // Benchmarking shows the IndexSet is very fast when the long[] efficiently
+        // resides in cache memory. If the indices are very well separated the
+        // distribution is sparse and it is faster to use a HashIndexSet despite
+        // having to perform a sort after making keys unique.
+        // Both structures have Order(1) detection of unique keys (the HashIndexSet
+        // is configured with a load factor that should see low collision rates).
+        // IndexSet     sort Order(n)        (data is stored sorted and must be read)
+        // HashIndexSet sort Order(n log n)  (unique data is sorted separately)
+
+        // For now base the choice on memory consumption alone which is a fair
+        // approximation when n < 1000.
+        // Above 1000 indices we assume that sorting the indices is a small cost
+        // compared to sorting/partitioning the data that requires so many indices.
+        // If the input data is small upstream code should detect this, e.g.
+        // indices.length >> data.length, and choose to sort the data rather than
+        // partitioning so many indices.
+
+        // If the HashIndexSet uses < 50% memory of IndexSet then prefer that.
+        // This detects obvious cases of sparse keys where the IndexSet is
+        // outperformed by the HashIndexSet. Otherwise we can assume the
+        // memory consumption of the IndexSet is small compared to the data to be
+        // partitioned at these target indices (max 1/64 for double[] data); any
+        // time taken here for sorting indices should be less than partitioning time.
+
+        // TODO:
+        // Requires more analysis of performance crossover.
+        // Note: Expected behaviour under extreme use-cases should be documented.
+
+        if (HashIndexSet.memoryFootprint(n) < (IndexSet.memoryFootprint(min, max) >>> 1)) {
+            return sortIndicesHashIndexSet(data, n);
+        }
+
+        // Repeat code from sortIndicesIndexSet as we have the min/max
+        final IndexSet set = IndexSet.ofRange(min, max);
+        for (int i = 0; ++i < n;) {
+            set.set(data[i]);
+        }
+        return set.toArray(data);
+    }
+
+    /**
+     * Test the data is in ascending order: {@code data[i] <= data[i+1]}  for all {@code i}.
+     * Data is assumed to be at least length 1.
+     *
+     * @param data Data.
+     * @param n Length of data.
+     * @return true if ascending
+     */
+    private static boolean isAscending(int[] data, int n) {
+        int v = data[0];
+        for (int i = 0; ++i < n;) {
+            if (data[i] < v) {
+                // descending
+                return false;
+            }
+            v = data[i];
+        }
+        return true;
+    }
+
+    // The following methods all perform the same function and are present
+    // for performance testing.
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <p>Uses an insertion sort modified to ignore duplicates.
+     *
+     * <p>Warning: Requires {@code n > 0}.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesInsertionSort(int[] data, int n) {
         // Insert min at start to act as a sentinal
         int min = data[0];
         int mini = 0;
@@ -614,27 +705,13 @@ final class Sorting {
      *
      * <p>Uses a heap sort modified to ignore duplicates.
      *
+     * <p>Warning: Requires {@code n > 0}.
+     *
      * @param data Indices.
      * @param n Number of indices.
      * @return the number of indices
      */
     static int sortIndicesHeapSort(int[] data, int n) {
-        // Simple cases
-        if (n < 3) {
-            if (n == 2) {
-                int i0 = data[0];
-                int i1 = data[1];
-                if (i0 > i1) {
-                    data[0] = i1;
-                    data[1] = i0;
-                } else if (i0 == i1) {
-                    return 1;
-                }
-            }
-            // n=0,1,2 unique values
-            return n;
-        }
-
         // Build the min heap using Floyd's heap-construction algorithm
         // Start at parent of the last element in the heap (n-1)
         int offset = n - 1;
@@ -649,9 +726,6 @@ final class Sorting {
         //                             root
         // |--------------|k|-min-heap-|r|
         //                 |  <-swap->  |
-
-        // TODO: Get a reference for heap sort. Is this loop optimal?
-        // Also check the partition code use of a heap.
 
         // Move top of heap to the sorted end and move the end
         // to the top.
@@ -735,29 +809,29 @@ final class Sorting {
      * Sort the unique indices in-place to the start of the array. The number of
      * indices is returned.
      *
-     * <p>Uses a sort and a second-pass to ignore duplicates.
+     * <p>Uses a full sort and a second-pass to ignore duplicates.
+     *
+     * <p>Warning: Requires {@code n > 0}.
      *
      * @param data Indices.
      * @param n Number of indices.
      * @return the number of indices
      */
     static int sortIndicesSort(int[] data, int n) {
-        // Simple cases
-        if (n < 3) {
-            if (n == 2) {
-                int i0 = data[0];
-                int i1 = data[1];
-                if (i0 > i1) {
-                    data[0] = i1;
-                    data[1] = i0;
-                } else if (i0 == i1) {
-                    return 1;
-                }
-            }
-            // n=0,1,2 unique values
-            return n;
-        }
         java.util.Arrays.sort(data, 0, n);
+        return compressDuplicates(data, n);
+    }
+
+    /**
+     * Compress duplicates in the ascending data.
+     *
+     * <p>Warning: Requires {@code n > 0}.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of unique indices
+     */
+    private static int compressDuplicates(int[] data, int n) {
         // Compress to remove duplicates
         int i = 0;
         int unique = 1;
@@ -779,29 +853,52 @@ final class Sorting {
      * Sort the unique indices in-place to the start of the array. The number of
      * indices is returned.
      *
-     * <p>Uses an IndexSet to ignore duplicates.
+     * <p>Uses an {@link IndexSet} to ignore duplicates. The sorted array is
+     * extracted from the {@link IndexSet} storage in order.
+     *
+     * <p>Warning: Requires {@code n > 0}.
      *
      * @param data Indices.
      * @param n Number of indices.
      * @return the number of indices
      */
     static int sortIndicesIndexSet(int[] data, int n) {
-        // Simple cases
-        if (n < 3) {
-            if (n == 2) {
-                int i0 = data[0];
-                int i1 = data[1];
-                if (i0 > i1) {
-                    data[0] = i1;
-                    data[1] = i0;
-                } else if (i0 == i1) {
-                    return 1;
-                }
-            }
-            // n=0,1,2 unique values
-            return n;
-        }
         // Delegate to IndexSet
+        // Storage (bytes) = 8 * ceil((max - min) / 64), irrespective of n.
+        // This can be use a lot of memory when the indices are spread out.
         return IndexSet.of(data, n).toArray(data);
+    }
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <p>Uses a {@link HashIndexSet} to ignore duplicates and then performs
+     * a full sort of the unique values.
+     *
+     * <p>Warning: Requires {@code n > 0}.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesHashIndexSet(int[] data, int n) {
+        // Compress to remove duplicates.
+        // Duplicates are checked using a HashIndexSet.
+        // Storage (bytes) = 4 * next-power-of-2(n*2) => 2-4 times n
+        final HashIndexSet set = new HashIndexSet(n);
+        int i = 0;
+        int unique = 1;
+        set.add(data[0]);
+        while (++i < n) {
+            final int v = data[i];
+            if (set.add(v)) {
+                data[unique++] = v;
+            }
+        }
+        // Sort unique data.
+        // This can exploit the input already being sorted.
+        Arrays.sort(data, 0, unique);
+        return unique;
     }
 }
