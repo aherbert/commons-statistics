@@ -567,9 +567,13 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBM(double[] values, int[] indices) {
-        // TODO - fix this
-        Assumptions.assumeTrue(indices.length <= 2);
-        assertPartition(values, indices, new Partition()::partitionISBM);
+        assertPartition(values, indices, new Partition(KeyStrategy.ORDERED_KEYS)::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMIndexSet(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(KeyStrategy.INDEX_SET)::partitionISBM);
     }
 
 //    @ParameterizedTest

@@ -126,10 +126,7 @@ public class MedianPerformance {
         /** Name of the source. */
         @Param({SORT, CM, SP, SP_NAN, SBM, BM, DP, DP5,
             SBM2,
-            // With many iterations (of data) this is slower then the default median-of-3 strategy
-            //MEDIAN_CENTRAL,
-            // Not obviously better
-            //MEDIAN_DYNAMIC
+            ISBM,
         })
         private String name;
 
