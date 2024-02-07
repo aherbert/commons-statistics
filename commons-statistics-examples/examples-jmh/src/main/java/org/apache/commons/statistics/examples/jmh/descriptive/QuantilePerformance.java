@@ -695,7 +695,7 @@ public class QuantilePerformance {
      */
     static Partition createPartition(String name) {
         final int minQuickSelectSize = getMinQuickSelectSize(name);
-        final int minHeapSelectSize = QuantilePerformance.getMinHeapSelectSize(name);
+        final int minHeapSelectSize = getMinHeapSelectSize(name);
         final PivotingStrategy s = getPivotStrategy(name);
         final KeyStrategy keyStrategy = getKeyStrategy(name);
         return new Partition(s, minQuickSelectSize, minHeapSelectSize, keyStrategy);
@@ -756,12 +756,23 @@ public class QuantilePerformance {
      * @return the pivot strategy
      */
     static PivotingStrategy getPivotStrategy(String name) {
+        return getPivotStrategyOrEsle(name, PivotingStrategy.MEDIAN_OF_3);
+    }
+
+    /**
+     * Gets the pivot strategy for the recursive partition algorithm.
+     *
+     * @param name Algorithm name.
+     * @param defaultValue Default value.
+     * @return the pivot strategy
+     */
+    static PivotingStrategy getPivotStrategyOrEsle(String name, PivotingStrategy defaultValue) {
         for (final PivotingStrategy s : PivotingStrategy.values()) {
             if (name.contains(s.name())) {
                 return s;
             }
         }
-        return PivotingStrategy.MEDIAN_OF_3;
+        return defaultValue;
     }
 
     /**
@@ -771,12 +782,23 @@ public class QuantilePerformance {
      * @return the sequential strategy
      */
     static KeyStrategy getKeyStrategy(String name) {
+        return getKeyStrategyOrElse(name, KeyStrategy.INDEX_SET);
+    }
+
+    /**
+     * Gets the sequential strategy for the recursive partition algorithm.
+     *
+     * @param name Algorithm name.
+     * @param defaultValue Default value.
+     * @return the sequential strategy
+     */
+    static KeyStrategy getKeyStrategyOrElse(String name, KeyStrategy defaultValue) {
         for (final KeyStrategy s : KeyStrategy.values()) {
             if (name.contains(s.name())) {
                 return s;
             }
         }
-        return KeyStrategy.INDEX_SET;
+        return defaultValue;
     }
 
     /**
