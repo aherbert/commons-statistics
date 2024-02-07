@@ -99,7 +99,10 @@ final class Partition {
         /** Process in input order using an IndexSet to cover the entire range. */
         INDEX_SET,
         /** Process in input order using a PivotSet to cover the minimum range. */
-        PIVOT_CACHE;
+        PIVOT_CACHE,
+        /** Sort unique keys and process using recursion with division of the keys
+         * for each sub-partition. */
+        ORDERED_KEYS;
     }
 
     /**
@@ -2929,8 +2932,24 @@ final class Partition {
             return;
         }
 
-        // TODO: Try different key strategies
-        throw new IllegalStateException("Unsupported introselect: " + keyStrategy);
+        // TODO: detect possible saturated range
+//      if (keySaturation(k, n)) {
+//          Arrays.sort(a, 0, right + 1);
+//          return;
+//      }
+
+        if (keyStrategy == KeyStrategy.ORDERED_KEYS) {
+            // Sorting to unique keys is an overhead. This can be eliminated
+            // by requesting the caller passes sorted keys (or quantiles in order).
+            final int unique = Sorting.sortIndices(k, n);
+            introselect(part, a, 0, right, k, 0, unique - 1, maxDepth);
+        } else if (keyStrategy == KeyStrategy.INDEX_SET) {
+            // Note: Here we do not have to sort keys.
+            final IndexSet keys = IndexSet.of(k, n);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else {
+            throw new IllegalStateException("Unsupported introselect: " + keyStrategy);
+        }
     }
 
     /**
@@ -3000,6 +3019,184 @@ final class Partition {
             if (kb > k1) {
                 final int other = ka > k1 ? ka : kb;
                 introselect(part, a, k1 + 1, right, other, kb, maxDepth - 1);
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts an ordered array of indices {@code k} and pointers
+     * to the first and last positions in {@code k} that define the range indices
+     * to partition.
+     *
+     * <pre>{@code
+     * left <= k[ia] <= k[ib] <= right  : ia <= ib
+     * }</pre>
+     *
+     * <p>A binary search is used to search for keys in {@code [ia, ib]}
+     * to create {@code [ia, ib1]} and {@code [ia1, ib]} if partitioning splits the range.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Indices to partition (ordered).
+     * @param ia Index of first key.
+     * @param ib Index of last key.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    private void introselect(SPEPartition part, double[] a, int left, int right,
+        int[] k, int ia, int ib, int maxDepth) {
+        // Switch to paired key implementation if possible.
+        // Note: adjacent indices can refer to well separated keys
+        if (ib - ia <= 1) {
+            introselect(part, a, left, right, k[ia], k[ib], maxDepth);
+            return;
+        }
+        // Continue with at least 3 keys
+        if (right - left < minQuickSelectSize) {
+            // Full sort of small data
+            Sorting.sort(a, left, right, left > 0);
+            return;
+        }
+        // It is possible to use heapselect when ka and kb are close to the same end
+        // |l|-----|ka|--------|kb|------|r|
+        //  ---------s2----------
+        //          ----------s4-----------
+        final int ka = k[ia];
+        final int kb = k[ib];
+        final int s2 = kb - left;
+        final int s4 = right - ka;
+        if (maxDepth == 0 || Math.min(s2, s4) < minHeapSelectSize) {
+            // Too much recursion, or ka and kb are both close to the same end
+            heapSelectRange(a, left, right, ka, kb);
+        } else {
+            // Pick a pivot and partition
+            final int[] upper = {0};
+            final int k0 = part.partition(a, left, right,
+                pivotingStrategy.pivotIndex(a, left, right),
+                upper);
+            final int k1 = upper[0];
+            // Recursion to max depth
+            // Note: Here we possibly branch left and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set on either side.
+            //                   k0 k1
+            // |l|--|ka|--k----k--|P|------k--|kb|------|r|
+            //       ia       ib1  |      ia1  ib
+            // Search less/greater is bounded at ia/ib
+            if (ka < k0) {
+                final int ib1 = kb < k0 ? ib : searchLessOrEqual(k, ia, ib, k0 - 1);
+                introselect(part, a, left, k0 - 1, k, ia, ib1, maxDepth - 1);
+            }
+            if (kb > k1) {
+                final int ia1 = ka > k1 ? ia : searchGreaterOrEqual(k, ia, ib, k1 + 1);
+                introselect(part, a, k1 + 1, right, k, ia1, ib, maxDepth - 1);
+            }
+        }
+    }
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts a {@link IndexSet} of indices {@code k} and the
+     * first index {@code ka} and last index {@code kb} that define the range of indices
+     * to partition. The {@link IndexSet} is used to search for keys in {@code [ka, kb]}
+     * to create {@code [ka, kb1]} and {@code [ka1, kb]} if partitioning splits the range.
+     *
+     * <pre>{@code
+     * left <= ka <= kb <= right
+     * }</pre>
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Indices to partition (ordered).
+     * @param ka First key.
+     * @param kb Last key.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    private void introselect(SPEPartition part, double[] a, int left, int right,
+        IndexSet k, int ka, int kb, int maxDepth) {
+
+        // Note:
+        // Here is a difference between the IndexSet and int[] keys implementations.
+        // This implementation can only detect a paired key (k, k+1). Actually we
+        // use (k, k+2) since if these are partitioned then k+1 is also partitioned.
+        // The int[] keys implementation can detect two keys even if they are separated
+        // by a large distance.
+
+        // Switch to paired key implementation if possible
+        if (kb - ka <= 2) {
+            introselect(part, a, left, right, ka, kb, maxDepth);
+            return;
+        }
+        // Continue with at least 3 keys
+        if (right - left < minQuickSelectSize) {
+            // Full sort of small data
+            Sorting.sort(a, left, right, left > 0);
+            return;
+        }
+        // It is possible to use heapselect when ka and kb are close to the same end
+        // |l|-----|ka|--------|kb|------|r|
+        //  ---------s2----------
+        //          ----------s4-----------
+        final int s2 = kb - left;
+        final int s4 = right - ka;
+        if (maxDepth == 0 || Math.min(s2, s4) < minHeapSelectSize) {
+            // Too much recursion, or ka and kb are both close to the ends
+            heapSelectRange(a, left, right, ka, kb);
+        } else {
+            // Pick a pivot and partition
+            final int[] upper = {0};
+            final int k0 = part.partition(a, left, right,
+                pivotingStrategy.pivotIndex(a, left, right),
+                upper);
+            final int k1 = upper[0];
+            // Recursion to max depth
+            // Note: Here we possibly branch left and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set on either side.
+            //                   k0 k1
+            // |l|--|ka|--k----k--|P|------k--|kb|------|r|
+            //                kb1  |      ka1
+            // Search previous/next is bounded at ka/kb
+            if (ka < k0) {
+                final int kb1 = kb < k0 ? kb : k.previousSetBit(k0 - 1);
+                introselect(part, a, left, k0 - 1, k, ka, kb1, maxDepth - 1);
+            }
+            if (kb > k1) {
+                final int ka1 = ka > k1 ? ka : k.nextSetBit(k1 + 1);
+                introselect(part, a, k1 + 1, right, k, ka1, kb, maxDepth - 1);
             }
         }
     }
@@ -4397,7 +4594,9 @@ final class Partition {
 
         // TODO: this factor should be tuned for practical performance
         // Increase by factor of 1.5
-        return (maxDepth * 3) >>> 1;
+        //return (maxDepth * 3) >>> 1;
+        return maxDepth * 2;
+        //return maxDepth * 3;
     }
 
     /**
