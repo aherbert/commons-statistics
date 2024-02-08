@@ -69,7 +69,6 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-// Make IndexSet implement PivotCache and have the inner class for ScanningPivotCache
 interface PivotCache extends PivotStore {
 
     /**
