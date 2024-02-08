@@ -2403,10 +2403,16 @@ class KthSelector {
     private static int partitionDNF(double[] data, int begin, int end, int pivot, int[] upper) {
         // Dutch National Flag partitioning:
         // https://www.baeldung.com/java-sorting-arrays-with-repeated-entries
-        // Move values less than the partition value to the start.
-        // Move values greater than than the partition value to the end.
-        // Skip equal values.
-        // At the end fill the gap with the partition value.
+        // https://en.wikipedia.org/wiki/Dutch_national_flag_problem
+
+        // Partition data using pivot P into less-than, greater-than or equal.
+        // i traverses the unknown region ??? and values moved to the correct end.
+        //
+        // left    lt      i            gt       right
+        // |  < P  |   P   |     ???    |   > P  |
+        //
+        // We can delay filling in [lt, gt) with P until the end and only
+        // move values in the wrong place.
 
         final double value = data[pivot];
 
@@ -2416,40 +2422,101 @@ class KthSelector {
             c = countSignedZeros(data, begin, end);
         }
 
-        int lt = begin;
-        int gt = end - 1;
-        int i = begin;
-        while (i <= gt) {
+        // Pointers positioned to use pre-increment/decrement: ++x / --x
+        int lt = begin - 1;
+        int gt = end;
+
+//        // DNF partitioning which inspects one position per loop iteration
+//        for (int i = begin; i < gt; i++) {
+//            final double v = data[i];
+//            if (v < value) {
+//                data[++lt] = v;
+//            } else if (v > value) {
+//                 data[i] = data[--gt];
+//                 data[gt] = v;
+//                 // Ensure data[i] is inspected next time
+//                 i--;
+//            }
+//            // else v == value and is in the central region to fill at the end
+//        }
+//
+//        // Modified DNF partitioning with fast-forward of the greater-than
+//        // pointer. Note the fast-forward must check bounds.
+//        for (int i = begin; i < gt; i++) {
+//            final double v = data[i];
+//            if (v < value) {
+//                data[++lt] = v;
+//            } else if (v > value) {
+//                // Fast-forward here:
+//                while (--gt > i && data[gt] > value);
+//                // here data[gt] <= value
+//                // if data[gt] == value we can skip over it
+//                if (data[gt] < value) {
+//                    data[++lt] = data[gt];
+//                }
+//                // Move v to the >P side
+//                data[gt] = v;
+//            }
+//            // else v == value and is in the central region to fill at the end
+//        }
+
+        // TODO - benchmark this as DNF2
+        // It may be faster when lots of equals values are found but slower
+        // for unequal data
+
+        // Modified DNF partitioning with fast-forward of the greater-than
+        // pointer. Here we write in the pivot value at i during the sweep.
+        // This acts as a sentinal when fast-forwarding greater-than.
+        // It is over-written by any future <P value.
+        // [begin, lt] < pivot
+        // (lt, i)    == pivot
+        // [i, gt)    == ???
+        // [gt, end)   > pivot
+        for (int i = lt; ++i < gt;) {
             final double v = data[i];
-            if (v < value) {
-                data[lt++] = v;
-                i++;
-            } else if (v > value) {
-                data[i] = data[gt];
-                data[gt--] = v;
-            } else {
-                // v == value
-                i++;
+            if (v != value) {
+                // Overwrite with the pivot value
+                data[i] = value;
+                if (v < value) {
+                    // Move v to the <P side
+                    data[++lt] = v;
+                } else {
+                    // Fast-forward here cannot pass sentinal
+                    // while (data[--gt] > value)
+                    do {
+                        --gt;
+                    } while (data[gt] > value);
+                    // Now data[gt] <= value
+                    // if data[gt] == value we can skip over it
+                    if (data[gt] < value) {
+                        data[++lt] = data[gt];
+                    }
+                    // Move v to the >P side
+                    data[gt] = v;
+                }
             }
         }
-        final int from = lt;
-        upper[0] = gt + 1;
+
+        // Equal in (lt, gt) so increment lt
+        lt++;
+        upper[0] = gt;
 
         // Special case: fixed signed zeros
         if (c != 0) {
-            i = lt;
+            int i = lt;
             while (c-- > 0) {
                 data[i++] = -0.0;
             }
-            while (i <= gt) {
+            while (i < gt) {
                 data[i++] = 0.0;
             }
-        } else {
-            for (i = lt; i <= gt; i++) {
-                data[i] = value;
-            }
+//        } else {
+//            // Only required if we did not fill in
+//            for (int i = lt; i < gt; i++) {
+//                data[i] = value;
+//            }
         }
-        return from;
+        return lt;
     }
 
     /**

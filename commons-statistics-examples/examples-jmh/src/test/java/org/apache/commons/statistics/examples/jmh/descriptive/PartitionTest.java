@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Test for {@link Partition}.
@@ -403,16 +402,55 @@ class PartitionTest {
         return builder.build();
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 42, 32488})
-    void testFloorLog2(int x) {
-        final double expected = Math.floor(Math.log(x) / Math.log(2));
-        // Special case
-        if (x == 0) {
-            // Here expected = -Infinity; actual = -1
-            Assertions.assertNotEquals(expected, Partition.floorLog2(x));
-        } else {
-            Assertions.assertEquals(expected, Partition.floorLog2(x));
+    @Test
+    void testFloorLog2() {
+        // Here expected = -Infinity; actual = -1
+        Assertions.assertEquals(-1, Partition.floorLog2(0));
+        Assertions.assertEquals(0, Partition.floorLog2(1));
+        // Create a series of powers of 2, start at 2^1
+        long p = 1;
+        for (int i = 1;; i++) {
+            p *= 2;
+            if (p > Integer.MAX_VALUE) {
+                break;
+            }
+            final int x = (int) p;
+            Assertions.assertEquals(i - 1, Partition.floorLog2(x - 1));
+            Assertions.assertEquals(i, Partition.floorLog2(x));
+            Assertions.assertEquals(i, Partition.floorLog2(x + 1));
+        }
+    }
+
+    @Test
+    void testLog3() {
+        // Reasonable behaviour at small x
+        Assertions.assertEquals(0, Partition.log3(0));
+        Assertions.assertEquals(0, Partition.log3(1));
+        Assertions.assertEquals(1, Partition.log3(2));
+        Assertions.assertEquals(1, Partition.log3(3));
+        Assertions.assertEquals(1, Partition.log3(4));
+        Assertions.assertEquals(1, Partition.log3(5));
+        Assertions.assertEquals(1, Partition.log3(6));
+        Assertions.assertEquals(1, Partition.log3(7));
+        Assertions.assertEquals(2, Partition.log3(8));
+        // log3(2^31-1) = 19.5588223...
+        Assertions.assertEquals(19, Partition.log3(Integer.MAX_VALUE));
+        // Create a series of powers of 3, start at 2^3
+        long p = 3;
+        for (int i = 2;; i++) {
+            p *= 3;
+            if (p > Integer.MAX_VALUE) {
+                break;
+            }
+            final int x = (int) p;
+            // Computes round(log3(x)) when x is close to a power of 3
+            Assertions.assertEquals(i, Partition.log3(x - 1));
+            Assertions.assertEquals(i, Partition.log3(x));
+            Assertions.assertEquals(i, Partition.log3(x + 1));
+            // Half-way point is within the bracket [i, i+1]
+            final int y = (int) Math.floor(Math.pow(3, i + 0.5));
+            Assertions.assertTrue(Partition.log3(y) >= i);
+            Assertions.assertTrue(Partition.log3(y + 1) <= i + 1);
         }
     }
 
