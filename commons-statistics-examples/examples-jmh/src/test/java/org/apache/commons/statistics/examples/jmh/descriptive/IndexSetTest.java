@@ -98,6 +98,7 @@ class IndexSetTest {
             ref.set(i);
             Assertions.assertTrue(set.get(i));
         }
+        Assertions.assertEquals(ref.cardinality(), set.cardinality(), "Cardinality");
     }
 
     @ParameterizedTest

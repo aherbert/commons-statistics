@@ -41,7 +41,7 @@ import java.util.function.IntConsumer;
  *
  * @since 1.1
  */
-final class IndexSet implements PivotCache {
+final class IndexSet implements PivotCache, IndexInterval {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
@@ -201,6 +201,19 @@ final class IndexSet implements PivotCache {
     // Adapt method API from BitSet
 
     /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet}.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet}
+     */
+    public int cardinality() {
+        int c = 0;
+        for (final long x : data) {
+            c += Long.bitCount(x);
+        }
+        return c;
+    }
+
+    /**
      * Returns the value of the bit with the specified index.
      *
      * @param bitIndex the bit index (assumed to be positive)
@@ -277,12 +290,6 @@ final class IndexSet implements PivotCache {
             data[j] |= end;
         }
     }
-
-    // TODO
-    // previousSetBit(from, to) : to < from
-    // nextSetBit(from, to) : to > from
-    // Create an introselect recursing into the required ranges
-    // to partition [k1, k2] in the range.
 
     /**
      * Returns the index of the nearest bit that is set to {@code true} that occurs on or
@@ -596,14 +603,24 @@ final class IndexSet implements PivotCache {
     @Override
     public int previousPivot(int k) {
         // Assume scanning in [left <= k <= right]
-        return IndexSet.this.previousSetBitOrElse(k, lowerPivot);
+        return previousSetBitOrElse(k, lowerPivot);
     }
 
     @Override
     public int nextPivotOrElse(int k, int other) {
         // Assume scanning in [left <= k <= right]
         final int p = upperPivot == UPPER_DEFAULT ? other : upperPivot;
-        return IndexSet.this.nextSetBitOrElse(k, p);
+        return nextSetBitOrElse(k, p);
+    }
+
+    @Override
+    public int previousIndex(int k) {
+        return previousSetBit(k);
+    }
+
+    @Override
+    public int nextIndex(int k) {
+        return nextSetBit(k);
     }
 
     /**
@@ -806,7 +823,7 @@ final class IndexSet implements PivotCache {
             } else if (index > right) {
                 upperPivot = Math.min(index, upperPivot);
             } else {
-                IndexSet.this.add(index);
+                IndexSet.this.set(index);
             }
         }
 
@@ -841,7 +858,7 @@ final class IndexSet implements PivotCache {
                 // Clip the range between [left, right]
                 final int i = Math.max(fromIndex, left);
                 final int j = Math.min(toIndex, right);
-                IndexSet.this.add(i, j);
+                IndexSet.this.set(i, j);
             } else if (toIndex < left) {
                 lowerPivot = Math.max(toIndex, lowerPivot);
             } else {

@@ -96,9 +96,11 @@ final class Partition {
     enum KeyStrategy {
         /** Sort unique keys, collate ranges and process in ascending order. */
         SEQUENTIAL,
-        /** Process in input order using an IndexSet to cover the entire range. */
+        /** Process in input order using an {@link IndexSet} to cover the entire range. */
         INDEX_SET,
-        /** Process in input order using a PivotSet to cover the minimum range. */
+        /** Process in input order using a CompressedIndexSet to cover the entire range. */
+        COMPRESSED_INDEX_SET,
+        /** Process in input order using a {@link PivotCache} to cover the minimum range. */
         PIVOT_CACHE,
         /** Sort unique keys and process using recursion with division of the keys
          * for each sub-partition. */
@@ -2562,6 +2564,96 @@ final class Partition {
     }
 
     /**
+     * Performs an analysis of keys to determine if they saturate the range to partition.
+     * Returns {@code true} if a full sort is recommended.
+     *
+     * <p>This method is used to avoid the overhead of partitioning when there are so many
+     * keys that they effectively cover the entire range. In this case it is far simpler
+     * to use {@code Arrays.sort}. This method has to know under what conditions the
+     * partition algorithm is outperformed by sorting all the data by the JDK sort
+     * function.
+     *
+     * <p>The {@code saturation} parameter is the fraction of the range that must be
+     * partitioned to recommend a full sort.
+     *
+     * <p>The approach is to first assume that keys could be uniformly spaced through the
+     * range. If the number of keys could not cover the entire range given a minimum
+     * spacing then this returns {@code false}. A small number of keys is also ignored as
+     * the analysis of the saturation level consumes time and resources likely to be
+     * larger than the difference between a full sort, and a full sort via the partition
+     * algorithm.
+     *
+     * <p>If the keys could cover the range then the range of the keys is obtained
+     * (min/max). If the length of the range is too small to saturate the range of the
+     * data this returns {@code false}.
+     *
+     * <p>Otherwise keys are compressed by a power of 2 and recorded into a BitSet-type
+     * structure. If the cardinality of the BitSet when decompressed is close to the
+     * length of the data then the keys are identified as saturated.
+     *
+     * <p>The minimum spacing and compression use the same {@code compression} argument.
+     *
+     * <p>Example using data of size 20, 4 minimum keys, a compression level of 1 and
+     * 0.9 saturation. Here compression is visualised by deleting every other index after
+     *
+     * <pre>
+     * -------k------------   false: not enough keys: 1 &lt; 4
+     *
+     * ---k---kk----k------   false: keys cannot saturate the range: 4 &lt; (20 / 2)
+     *
+     * --kkkkkkkk----------   false: range of keys cannot saturate the range: (9 - 2 + 1) &lt; 0.9 * 20
+     *
+     * -k-k---k---k---k---k   false: compressed keys do not saturate the range:
+     *  cc-c-c-c-c            6 * 2 &lt; 0.9 * 20
+     *
+     * -k-k-k-k-k-k-k-k-k-k   true: compressed keys saturate the range)
+     *  cccccccccc            10 * 2 &gt; 0.9 * 20
+     *
+     * kkkkk-kkkkkkkkkkk-kk   true: compressed keys saturate the range)
+     * cccccccccc             10 * 2 &gt; 0.9 * 20
+     * </pre>
+     *
+     * @param size Length of the data to partition.
+     * @param k Indices.
+     * @param n Count of indices (must be strictly positive).
+     * @param minKeys Minimum number of keys.
+     * @param compression Compression level (log2 units in [1, 31]).
+     * @param saturation Saturation level for a full sort.
+     * @return true if the keys saturate the range
+     */
+    // package-private for testing
+    static boolean keysAreSaturated(int size, int[] k, int n, int minKeys,
+        int compression, double saturation) {
+        // Check if the number of keys are small, or if they could saturated the range
+        if (k.length < Math.max(minKeys, (n >>> compression))) {
+            return false;
+        }
+        // Keys could cover the entire data.
+        // Set the limit on the number of indices that have to be sorted.
+        final double limit = size * saturation;
+        // Check the range.
+        int min = k[0];
+        int max = min;
+        for (int i = 0; ++i < n;) {
+            min = Math.min(min, k[i]);
+            max = Math.max(max, k[i]);
+        }
+        if ((max - min + 1) < limit) {
+            return false;
+        }
+        // Compress
+        min >>>= compression;
+        max >>>= compression;
+        final IndexSet keys = IndexSet.ofRange(min, max);
+        for (final int i : k) {
+            keys.set(i >>> compression);
+        }
+        // Estimate number of indices to be sorted
+        final long target = (long) keys.cardinality() << compression;
+        return target >= limit;
+    }
+
+    /**
      * Partition the array such that indices {@code k} correspond to their correctly
      * sorted value in the equivalent fully sorted array. For all indices {@code k}
      * and any index {@code i}:
@@ -2785,7 +2877,7 @@ final class Partition {
     private void introsort(SPEPartition part, double[] a, int left, int right, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        int l = left;
+        final int l = left;
         int r = right;
         final int[] upper = {0};
         while (true) {
@@ -2946,11 +3038,14 @@ final class Partition {
             return;
         }
 
-        // TODO: detect possible saturated range
-//      if (keySaturation(k, n)) {
-//          Arrays.sort(a, 0, right + 1);
-//          return;
-//      }
+        // Detect possible saturated range.
+        // minimum keys = 10
+        // min separation = 2^3  (could use log2(minQuickSelectSize) here)
+        // saturation = 0.95
+        //if (keysAreSaturated(right + 1, k, n, 10, 3, 0.95)) {
+        //    Arrays.sort(a, 0, right + 1);
+        //    return;
+        //}
 
         // TODO:
         // Try a version with compressed keys using an index set that stores
@@ -3004,7 +3099,7 @@ final class Partition {
         int ka, int kb, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        int l = left;
+        final int l = left;
         int r = right;
         int kb1 = kb;
         final int[] upper = {0};
@@ -3098,7 +3193,7 @@ final class Partition {
         int[] k, int ia, int ib, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        int l = left;
+        final int l = left;
         int r = right;
         int ib1 = ib;
         final int[] upper = {0};
@@ -3110,7 +3205,7 @@ final class Partition {
             }
 
             // Switch to paired key implementation if possible.
-            // Note: adjacent indices can refer to well separated keys
+            // Note: adjacent indices can refer to well separated keys.
             if (ib1 - ia <= 1) {
                 introselect(part, a, l, r, k[ia], k[ib1], maxDepth);
                 return;
@@ -3171,9 +3266,9 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link IndexSet} of indices {@code k} and the
+     * <p>This function accepts a {@link IndexInterval} of indices {@code k} and the
      * first index {@code ka} and last index {@code kb} that define the range of indices
-     * to partition. The {@link IndexSet} is used to search for keys in {@code [ka, kb]}
+     * to partition. The {@link IndexInterval} is used to search for keys in {@code [ka, kb]}
      * to create {@code [ka, kb1]} and {@code [ka1, kb]} if partitioning splits the range.
      *
      * <pre>{@code
@@ -3191,16 +3286,16 @@ final class Partition {
      * @param a Values.
      * @param left Lower bound of data (inclusive, assumed to be strictly positive).
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param k Indices to partition (ordered).
+     * @param k Interval of indices to partition (ordered).
      * @param ka First key.
      * @param kb Last key.
      * @param maxDepth Maximum depth for recursion.
      */
     private void introselect(SPEPartition part, double[] a, int left, int right,
-        IndexSet k, int ka, int kb, int maxDepth) {
+        IndexInterval k, int ka, int kb, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        int l = left;
+        final int l = left;
         int r = right;
         int kb1 = kb;
         final int[] upper = {0};
@@ -3215,15 +3310,17 @@ final class Partition {
             // Note:
             // Here is a difference between the IndexSet and int[] keys implementations.
             // This implementation can only detect a paired key (k, k+1). Actually we
-            // use (k, k+2) since if these are partitioned then k+1 is also partitioned.
+            // can use (k, k+2) since if these are partitioned then k+1 is also partitioned.
             // In contrast the int[] keys implementation can detect two keys even if they
             // are separated by a large distance.
+            // With keys only separated by 2 it is not worth switching to the
+            // twin key implementation.
 
-            // Switch to paired key implementation if possible
-            if (kb1 - ka <= 2) {
-                introselect(part, a, l, r, ka, kb1, maxDepth);
-                return;
-            }
+            //// Switch to paired key implementation if possible
+            //if (kb1 - ka <= 2) {
+            //    introselect(part, a, l, r, ka, kb1, maxDepth);
+            //    return;
+            //}
 
             // Continue with at least 3 keys
 
@@ -3256,7 +3353,7 @@ final class Partition {
             maxDepth--;
             // Recurse right side if required
             if (kb1 > p1) {
-                final int ka1 = ka > p1 ? ka : k.nextSetBit(p1 + 1);
+                final int ka1 = ka > p1 ? ka : k.nextIndex(p1 + 1);
                 introselect(part, a, p1 + 1, r, k, ka1, kb1, maxDepth - 1);
             }
             if (ka >= p0) {
@@ -3265,7 +3362,7 @@ final class Partition {
             }
             // Continue on the left side
             r = p0 - 1;
-            kb1 = kb1 < p0 ? kb1 : k.previousSetBit(p0 - 1);
+            kb1 = kb1 < p0 ? kb1 : k.previousIndex(p0 - 1);
         }
     }
 
