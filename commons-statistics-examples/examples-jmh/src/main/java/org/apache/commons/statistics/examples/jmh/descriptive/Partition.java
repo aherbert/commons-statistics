@@ -2781,6 +2781,9 @@ final class Partition {
      * @see <a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
      */
     private void introsort(SPEPartition part, double[] a, int left, int right, int maxDepth) {
+        // TODO - update this.
+        // Only one side requires recursion. The other side
+        // can remain within this function call.
         if (right - left < minQuickSelectSize) {
             // Full sort of small data
             Sorting.sort(a, left, right, left > 0);
@@ -3062,6 +3065,10 @@ final class Partition {
      */
     private void introselect(SPEPartition part, double[] a, int left, int right,
         int[] k, int ia, int ib, int maxDepth) {
+        // TODO - update this.
+        // Only one side requires recursion. The other side
+        // can remain within this function call.
+
         // Switch to paired key implementation if possible.
         // Note: adjacent indices can refer to well separated keys
         if (ib - ia <= 1) {
@@ -4593,6 +4600,8 @@ final class Partition {
         final int maxDepth = floorLog2(n);
 
         // TODO: this factor should be tuned for practical performance
+        // return d * m + c
+
         // Increase by factor of 1.5
         //return (maxDepth * 3) >>> 1;
         return maxDepth * 2;
@@ -4602,11 +4611,54 @@ final class Partition {
     /**
      * Compute {@code floor(log 2 (x))}. This is valid for all strictly positive {@code x}.
      *
+     * <p>Returns -1 for {@code x = 0} in place of -infinity.
+     *
      * @param x Value.
      * @return {@code floor(log 2 (x))}
      */
     static int floorLog2(int x) {
         return 31 - Integer.numberOfLeadingZeros(x);
+    }
+
+    /**
+     * Creates the maximum recursion depth for dual-pivot quickselect recursion.
+     *
+     * <p>Warning: A length of zero will create a high recursion depth.
+     * In practice this does not matter as the sort / partition of a length
+     * zero array should ignore the data.
+     *
+     * @param n Length of data (must be strictly positive).
+     * @return the maximum recursion depth
+     */
+    private int createMaxDepthDualPivot(int n) {
+        // Ideal dual pivot recursion will take log3(n) steps as data is
+        // divided into length (n/3) at each iteration.
+        final int maxDepth = log3(n);
+
+        // TODO: this factor should be tuned for practical performance
+        // return d * m + c
+
+        // Increase by factor of 1.5
+        //return (maxDepth * 3) >>> 1;
+        return maxDepth * 2;
+        //return maxDepth * 3;
+    }
+
+    /**
+     * Compute an approximation to {@code log3 (x)}.
+     *
+     * <p>The result is between {@code floor(log3(x))} and {@code ceil(log3(x))}.
+     * The result is correctly rounded when {@code x +/- 1} is a power of 3.
+     *
+     * @param x Value.
+     * @return {@code log3(x))}
+     */
+    static int log3(int x) {
+        // log3(2) ~ 1.5849625
+        // log3(x) ~ log2(x) * 0.630929753... ~ log2(x) * 323 / 512 (0.630859375)
+        // This result is always between floor(log3(x)) and ceil(log3(x)).
+        // It is correctly rounded when x +/- 1 is a power of 3.
+        return ((floorLog2(x) + 1) * 323) >>> 9;
     }
 
     /**
