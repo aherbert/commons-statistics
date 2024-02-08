@@ -176,12 +176,9 @@ class PartitionTest {
             final int target = k;
             double[] x = values.clone();
             replaceNegativeZeros(x, from, to);
-            int lower = Partition.partitionMinK(x, from, to, k, 0);
+            Partition.partitionMinK(x, from, to, k, 0);
             restoreNegativeZeros(x, from, to);
-            Assertions.assertTrue(k >= lower);
-            for (int i = lower; i <= k; i++) {
-                Assertions.assertEquals(sorted[i], x[i], () -> Integer.toString(target));
-            }
+            Assertions.assertEquals(sorted[k], x[k], () -> Integer.toString(target));
             // Check the data is the same
             Arrays.sort(x, from, to + 1);
             Assertions.assertArrayEquals(sorted, x, "Data destroyed");
@@ -189,10 +186,9 @@ class PartitionTest {
                 // Sort an extra 1
                 x = values.clone();
                 replaceNegativeZeros(x, from, to);
-                lower = Partition.partitionMinK(x, from, to, k, 1);
+                Partition.partitionMinK(x, from, to, k, 1);
                 restoreNegativeZeros(x, from, to);
-                Assertions.assertTrue(k - 1 >= lower);
-                for (int i = lower; i <= k; i++) {
+                for (int i = k - 1; i <= k; i++) {
                     Assertions.assertEquals(sorted[i], x[i], () -> (target - 1) + " to " + target);
                 }
                 // Check the data is the same
@@ -203,10 +199,9 @@ class PartitionTest {
                     x = values.clone();
                     replaceNegativeZeros(x, from, to);
                     // Test clipping with size of range below k too large: it should be k - from
-                    lower = Partition.partitionMinK(x, from, to, k, k - from + 42);
+                    Partition.partitionMinK(x, from, to, k, k - from + 42);
                     restoreNegativeZeros(x, from, to);
-                    Assertions.assertEquals(from, lower);
-                    for (int i = lower; i <= k; i++) {
+                    for (int i = from; i <= k; i++) {
                         Assertions.assertEquals(sorted[i], x[i], () -> "Full sort to " + Integer.toString(target));
                     }
                     // Check the data is the same
@@ -226,12 +221,9 @@ class PartitionTest {
             final int target = k;
             double[] x = values.clone();
             replaceNegativeZeros(x, from, to);
-            int upper = Partition.partitionMaxK(x, from, to, k, 0);
+            Partition.partitionMaxK(x, from, to, k, 0);
             restoreNegativeZeros(x, from, to);
-            Assertions.assertTrue(k <= upper);
-            for (int i = k; i <= upper; i++) {
-                Assertions.assertEquals(sorted[i], x[i], () -> Integer.toString(target));
-            }
+            Assertions.assertEquals(sorted[k], x[k], () -> Integer.toString(target));
             // Check the data is the same
             Arrays.sort(x, from, to + 1);
             Assertions.assertArrayEquals(sorted, x, "Data destroyed");
@@ -239,10 +231,9 @@ class PartitionTest {
                 // Sort an extra 1
                 x = values.clone();
                 replaceNegativeZeros(x, from, to);
-                upper = Partition.partitionMaxK(x, from, to, k, 1);
+                Partition.partitionMaxK(x, from, to, k, 1);
                 restoreNegativeZeros(x, from, to);
-                Assertions.assertTrue(k + 1 <= upper);
-                for (int i = k; i <= upper; i++) {
+                for (int i = k; i <= k + 1; i++) {
                     Assertions.assertEquals(sorted[i], x[i], () -> target + " to " + (target + 1));
                 }
                 // Check the data is the same
@@ -253,10 +244,9 @@ class PartitionTest {
                     x = values.clone();
                     replaceNegativeZeros(x, from, to);
                     // Test clipping with size of range above k too large: it should be to - k
-                    upper = Partition.partitionMaxK(x, from, to, k, to - k + 42);
+                    Partition.partitionMaxK(x, from, to, k, to - k + 42);
                     restoreNegativeZeros(x, from, to);
-                    Assertions.assertEquals(to, upper);
-                    for (int i = k; i <= upper; i++) {
+                    for (int i = k; i <= to; i++) {
                         Assertions.assertEquals(sorted[i], x[i], () -> "Full sort from " + Integer.toString(target));
                     }
                     // Check the data is the same

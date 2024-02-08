@@ -907,6 +907,8 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Respects the ordering of signed zeros.
      *
+     * <p>Assumes {@code left <= right}.
+     *
      * @param data Data.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
@@ -1005,6 +1007,8 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Respects the ordering of signed zeros.
      *
+     * <p>Assumes {@code left <= right}.
+     *
      * @param data Data.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
@@ -1074,23 +1078,26 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Does not respect the ordering of signed zeros.
      *
+     * <p>Assumes {@code left <= right}.
+     *
      * @param data Data.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
     static void partitionMinIgnoreZeros(double[] data, int left, int right) {
-        int i = left;
-        double min = data[i];
-        int j = i;
-        while (++i <= right) {
+        // Sweep towards the end point where the swap takes place
+        double min = data[right];
+        int j = right;
+        for (int i = right; --i >= left;) {
             if (data[i] < min) {
                 min = data[i];
                 j = i;
             }
         }
         //swap(data, left, j)
-        data[j] = data[left];
+        final double v = data[left];
         data[left] = min;
+        data[j] = v;
     }
 
     /**
@@ -1165,23 +1172,26 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Does not respect the ordering of signed zeros.
      *
+     * <p>Assumes {@code left <= right}.
+     *
      * @param data Data.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
     static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
-        int i = right;
-        double max = data[i];
-        int j = i;
-        while (--i >= left) {
+        // Sweep towards the end point where the swap takes place
+        double max = data[left];
+        int j = left;
+        for (int i = left; ++i <= right;) {
             if (data[i] > max) {
                 max = data[i];
                 j = i;
             }
         }
         //swap(data, right, j)
-        data[j] = data[right];
+        final double v = data[right];
         data[right] = max;
+        data[j] = v;
     }
 
     /**
@@ -1360,17 +1370,13 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Does not respects the ordering of signed zeros.
      *
-     * <p>This may sort more than {@code count} if {@code k} is close to {@code left}.
-     * The lower bound of the sorted range is returned.
-     *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Index to select.
      * @param count Size of range to sort below k.
-     * @return Lower bound (inclusive) of the sorted range.
      */
-    static int partitionMinK(double[] a, int left, int right, int k, int count) {
+    static void partitionMinK(double[] a, int left, int right, int k, int count) {
         // Size of the heap
         int n = k - left + 1;
         // Optimise
@@ -1380,8 +1386,7 @@ final class Partition {
             } else {
                 partitionMin2IgnoreZeros(a, left, right);
             }
-            // This is always 'left' even when count == 0
-            return left;
+            return;
         }
         // Build the heap using Floyd's heap-construction algorithm
         // Start at parent of the last element in the heap (n-1)
@@ -1403,27 +1408,23 @@ final class Partition {
 
         // The max heap has been constructed in-place so a[left] is the max.
         // To partition a[k] we have to move the top of the heap to the position
-        // immediately before the end of the reduced size heap; the previous end
+        // immediately after the end of the reduced size heap; the previous end
         // of the heap [k] is placed at the top. Heap is above left:
         // root
         // |l|-max-heap-|k|--------------|
         //  |  <-swap->  |
-        // The heap can be restored by sifting down the top.
+        // The heap can be restored by sifting down the new top.
 
         // Always require the top 1
         // swap(a[left], a[k])
         a[left] = a[k];
         a[k] = max;
-        int low = k;
 
         if (count > 0) {
-            // Here we sift down the last element moved to the top
-            // of the heap and repeat until we achieve count
-
-            // Count limited by the heap size (previously reduced by 1)
-            int c = Math.min(count, --n);
-            low -= c;
-            while (c-- > 0) {
+            // Heap size
+            n--;
+            // Sifting limited to heap size of 3
+            for (int c = Math.min(count, n - 2); --c >= 0;) {
                 // Sift down top element and reduce heap size by 1
                 maxHeapSiftDown(a, left, 0, n--);
                 // Move top of heap (now size n-1) to the sorted end
@@ -1431,8 +1432,13 @@ final class Partition {
                 a[left] = a[left + n];
                 a[left + n] = v;
             }
+            // Sift heap of size 2
+            if (n == 2 && a[left + 1] < a[left]) {
+                final double v = a[left];
+                a[left] = a[left + 1];
+                a[left + 1] = v;
+            }
         }
-        return low;
     }
 
     /**
@@ -1492,17 +1498,13 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Does not respects the ordering of signed zeros.
      *
-     * <p>This may sort more than {@code count} if {@code k} is close to {@code right}.
-     * The upper bound of the sorted range is returned.
-     *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Index to select.
      * @param count Size of range to sort below k.
-     * @return Upper bound (inclusive) of the sorted range.
      */
-    static int partitionMaxK(double[] a, int left, int right, int k, int count) {
+    static void partitionMaxK(double[] a, int left, int right, int k, int count) {
         // Size of the heap
         int n = right - k + 1;
         // Optimise
@@ -1512,8 +1514,7 @@ final class Partition {
             } else {
                 partitionMax2IgnoreZeros(a, left, right);
             }
-            // This is always 'right' even when count == 0
-            return right;
+            return;
         }
         // Build the heap using Floyd's heap-construction algorithm
         // Start at parent of the last element in the heap (n-1)
@@ -1540,22 +1541,18 @@ final class Partition {
         //                             root
         // |--------------|k|-min-heap-|r|
         //                 |  <-swap->  |
-        // The heap can be restored by sifting down the top.
+        // The heap can be restored by sifting down the new top.
 
         // Always require the top 1
         // swap(a[right], a[k])
         a[right] = a[k];
         a[k] = min;
-        int upper = k;
 
         if (count > 0) {
-            // Here we sift down the last element moved to the top
-            // of the heap and repeat until we achieve count
-
-            // Count limited by the heap size (previously reduced by 1)
-            int c = Math.min(count, --n);
-            upper += c;
-            while (c-- > 0) {
+            // Heap size
+            n--;
+            // Sifting limited to heap size of 3
+            for (int c = Math.min(count, n - 2); --c >= 0;) {
                 // Sift down top element and reduce heap size by 1
                 minHeapSiftDown(a, right, 0, n--);
                 // Move top of heap (now size n-1) to the sorted end
@@ -1563,8 +1560,13 @@ final class Partition {
                 a[right] = a[right - n];
                 a[right - n] = v;
             }
+            // Sift heap of size 2
+            if (n == 2 && a[right - 1] > a[right]) {
+                final double v = a[right];
+                a[right] = a[right - 1];
+                a[right - 1] = v;
+            }
         }
-        return upper;
     }
 
     /**
@@ -2744,7 +2746,7 @@ final class Partition {
             // Nothing to sort
             return;
         }
-        introsort(part, a, 0, end - 1, createMaxDepth(end));
+        introsort(part, a, 0, end - 1, createMaxDepthSinglePivot(end));
         // Restore signed zeros
         if (cn != 0) {
             // Find a zero
@@ -2781,24 +2783,33 @@ final class Partition {
      * @see <a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
      */
     private void introsort(SPEPartition part, double[] a, int left, int right, int maxDepth) {
-        // TODO - update this.
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        if (right - left < minQuickSelectSize) {
+        int l = left;
+        int r = right;
+        final int[] upper = {0};
+        while (true) {
             // Full sort of small data
-            Sorting.sort(a, left, right, left > 0);
-        } else if (maxDepth == 0) {
-            // Too much recursion
-            heapSort(a, left, right);
-        } else {
+            if (r - l < minQuickSelectSize) {
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSort(a, l, r);
+                return;
+            }
+
             // Pick a pivot and partition
-            final int[] upper = {0};
-            final int p0 = part.partition(a, left, right,
-                pivotingStrategy.pivotIndex(a, left, right),
+            final int p0 = part.partition(a, l, r,
+                pivotingStrategy.pivotIndex(a, l, r),
                 upper);
             final int p1 = upper[0];
-            introsort(part, a, left, p0 - 1, maxDepth - 1);
-            introsort(part, a, p1 + 1, right, maxDepth - 1);
+
+            // Recurse right side
+            introsort(part, a, p1 + 1, r, --maxDepth);
+            // Continue on the left side
+            r = p0 - 1;
         }
     }
 
@@ -2922,7 +2933,7 @@ final class Partition {
      * @param n Count of indices (assumed to be strictly positive).
      */
     private void introselect(SPEPartition part, double[] a, int right, int[] k, int n) {
-        final int maxDepth = createMaxDepth(right + 1);
+        final int maxDepth = createMaxDepthSinglePivot(right + 1);
         // Handle cases without multiple keys
         if (n == 1) {
             introselect(part, a, 0, right, k[0], k[0], maxDepth);
@@ -2940,6 +2951,11 @@ final class Partition {
 //          Arrays.sort(a, 0, right + 1);
 //          return;
 //      }
+
+        // TODO:
+        // Try a version with compressed keys using an index set that stores
+        // e.g. every other k. It will make scanning left/right faster when
+        // not saturated.
 
         if (keyStrategy == KeyStrategy.ORDERED_KEYS) {
             // Sorting to unique keys is an overhead. This can be eliminated
@@ -2986,43 +3002,58 @@ final class Partition {
      */
     private void introselect(SPEPartition part, double[] a, int left, int right,
         int ka, int kb, int maxDepth) {
-        if (right - left < minQuickSelectSize) {
+        // Only one side requires recursion. The other side
+        // can remain within this function call.
+        int l = left;
+        int r = right;
+        int kb1 = kb;
+        final int[] upper = {0};
+        while (true) {
             // Full sort of small data
-            Sorting.sort(a, left, right, left > 0);
-            return;
-        }
-        // It is possible to use heapselect when ka and kb are close to the ends
-        // |l|-----|ka|--------|kb|------|r|
-        //  ---s1----
-        //                      -----s3----
-        //  ---------s2----------
-        //          ----------s4-----------
-        final int s1 = ka - left;
-        final int s2 = kb - left;
-        final int s3 = right - kb;
-        final int s4 = right - ka;
-        if (maxDepth == 0 || Math.min(s1 + s3, Math.min(s2, s4)) < minHeapSelectSize) {
-            // Too much recursion, or ka and kb are both close to the ends
-            heapSelect(a, left, right, ka, kb);
-        } else {
+            if (r - l < minQuickSelectSize) {
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+
+            // It is possible to use heapselect when ka and kb1 are close to the ends
+            // |l|-----|ka|--------|kb1|------|r|
+            //  ---s1----
+            //                      -----s3----
+            //  ---------s2----------
+            //          ----------s4-----------
+            final int s1 = ka - l;
+            final int s2 = kb1 - l;
+            final int s3 = r - kb1;
+            final int s4 = r - ka;
+            if (maxDepth == 0 || Math.min(s1 + s3, Math.min(s2, s4)) < minHeapSelectSize) {
+                // Too much recursion, or ka and kb1 are both close to the ends
+                heapSelect(a, l, r, ka, kb1);
+                return;
+            }
+
             // Pick a pivot and partition
-            final int[] upper = {0};
-            final int k0 = part.partition(a, left, right,
-                pivotingStrategy.pivotIndex(a, left, right),
+            final int p0 = part.partition(a, l, r,
+                pivotingStrategy.pivotIndex(a, l, r),
                 upper);
-            final int k1 = upper[0];
+            final int p1 = upper[0];
+
             // Recursion to max depth
-            // Note: Here we possibly branch left and right with one or two
-            // of ka and kb. It is possible that the partition has split the pair
+            // Note: Here we possibly branch left and right with multiple keys.
+            // of ka and kb1. It is possible that the partition has split the pair
             // and the recursion proceeds with a single point.
-            if (ka < k0) {
-                final int other = kb < k0 ? kb : ka;
-                introselect(part, a, left, k0 - 1, ka, other, maxDepth - 1);
+            maxDepth--;
+            // Recurse right side if required
+            if (kb1 > p1) {
+                final int other = ka > p1 ? ka : kb1;
+                introselect(part, a, p1 + 1, r, other, kb1, maxDepth);
             }
-            if (kb > k1) {
-                final int other = ka > k1 ? ka : kb;
-                introselect(part, a, k1 + 1, right, other, kb, maxDepth - 1);
+            if (ka >= p0) {
+                // No left side
+                return;
             }
+            // Continue on the left side
+            r = p0 - 1;
+            kb1 = kb1 < p0 ? kb1 : ka;
         }
     }
 
@@ -3065,56 +3096,69 @@ final class Partition {
      */
     private void introselect(SPEPartition part, double[] a, int left, int right,
         int[] k, int ia, int ib, int maxDepth) {
-        // TODO - update this.
         // Only one side requires recursion. The other side
         // can remain within this function call.
-
-        // Switch to paired key implementation if possible.
-        // Note: adjacent indices can refer to well separated keys
-        if (ib - ia <= 1) {
-            introselect(part, a, left, right, k[ia], k[ib], maxDepth);
-            return;
-        }
-        // Continue with at least 3 keys
-        if (right - left < minQuickSelectSize) {
+        int l = left;
+        int r = right;
+        int ib1 = ib;
+        final int[] upper = {0};
+        while (true) {
             // Full sort of small data
-            Sorting.sort(a, left, right, left > 0);
-            return;
-        }
-        // It is possible to use heapselect when ka and kb are close to the same end
-        // |l|-----|ka|--------|kb|------|r|
-        //  ---------s2----------
-        //          ----------s4-----------
-        final int ka = k[ia];
-        final int kb = k[ib];
-        final int s2 = kb - left;
-        final int s4 = right - ka;
-        if (maxDepth == 0 || Math.min(s2, s4) < minHeapSelectSize) {
-            // Too much recursion, or ka and kb are both close to the same end
-            heapSelectRange(a, left, right, ka, kb);
-        } else {
+            if (r - l < minQuickSelectSize) {
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+
+            // Switch to paired key implementation if possible.
+            // Note: adjacent indices can refer to well separated keys
+            if (ib1 - ia <= 1) {
+                introselect(part, a, l, r, k[ia], k[ib1], maxDepth);
+                return;
+            }
+
+            // Continue with at least 3 keys
+
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            final int ka = k[ia];
+            final int kb = k[ib1];
+            final int s2 = kb - l;
+            final int s4 = r - ka;
+            if (maxDepth == 0 || Math.min(s2, s4) < minHeapSelectSize) {
+                // Too much recursion, or ka and kb are both close to the same end
+                heapSelectRange(a, l, r, ka, kb);
+                return;
+            }
+
             // Pick a pivot and partition
-            final int[] upper = {0};
-            final int k0 = part.partition(a, left, right,
-                pivotingStrategy.pivotIndex(a, left, right),
+            final int p0 = part.partition(a, l, r,
+                pivotingStrategy.pivotIndex(a, l, r),
                 upper);
-            final int k1 = upper[0];
+            final int p1 = upper[0];
+
             // Recursion to max depth
             // Note: Here we possibly branch left and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set on either side.
-            //                   k0 k1
+            //                   p0 p1
             // |l|--|ka|--k----k--|P|------k--|kb|------|r|
-            //       ia       ib1  |      ia1  ib
-            // Search less/greater is bounded at ia/ib
-            if (ka < k0) {
-                final int ib1 = kb < k0 ? ib : searchLessOrEqual(k, ia, ib, k0 - 1);
-                introselect(part, a, left, k0 - 1, k, ia, ib1, maxDepth - 1);
+            //       ia       iba  |      ia1  ib1
+            // Search less/greater is bounded at ia/ib1
+            maxDepth--;
+            // Recurse right side if required
+            if (kb > p1) {
+                final int ia1 = ka > p1 ? ia : searchGreaterOrEqual(k, ia, ib1, p1 + 1);
+                introselect(part, a, p1 + 1, r, k, ia1, ib1, maxDepth);
             }
-            if (kb > k1) {
-                final int ia1 = ka > k1 ? ia : searchGreaterOrEqual(k, ia, ib, k1 + 1);
-                introselect(part, a, k1 + 1, right, k, ia1, ib, maxDepth - 1);
+            if (ka >= p0) {
+                // No left side
+                return;
             }
+            // Continue on the left side
+            r = p0 - 1;
+            ib1 = kb < p0 ? ib1 : searchLessOrEqual(k, ia, ib1, r);
         }
     }
     /**
@@ -3154,57 +3198,74 @@ final class Partition {
      */
     private void introselect(SPEPartition part, double[] a, int left, int right,
         IndexSet k, int ka, int kb, int maxDepth) {
-
-        // Note:
-        // Here is a difference between the IndexSet and int[] keys implementations.
-        // This implementation can only detect a paired key (k, k+1). Actually we
-        // use (k, k+2) since if these are partitioned then k+1 is also partitioned.
-        // The int[] keys implementation can detect two keys even if they are separated
-        // by a large distance.
-
-        // Switch to paired key implementation if possible
-        if (kb - ka <= 2) {
-            introselect(part, a, left, right, ka, kb, maxDepth);
-            return;
-        }
-        // Continue with at least 3 keys
-        if (right - left < minQuickSelectSize) {
+        // Only one side requires recursion. The other side
+        // can remain within this function call.
+        int l = left;
+        int r = right;
+        int kb1 = kb;
+        final int[] upper = {0};
+        while (true) {
             // Full sort of small data
-            Sorting.sort(a, left, right, left > 0);
-            return;
-        }
-        // It is possible to use heapselect when ka and kb are close to the same end
-        // |l|-----|ka|--------|kb|------|r|
-        //  ---------s2----------
-        //          ----------s4-----------
-        final int s2 = kb - left;
-        final int s4 = right - ka;
-        if (maxDepth == 0 || Math.min(s2, s4) < minHeapSelectSize) {
-            // Too much recursion, or ka and kb are both close to the ends
-            heapSelectRange(a, left, right, ka, kb);
-        } else {
+            if (r - l < minQuickSelectSize) {
+                // Full sort of small data
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+
+            // Note:
+            // Here is a difference between the IndexSet and int[] keys implementations.
+            // This implementation can only detect a paired key (k, k+1). Actually we
+            // use (k, k+2) since if these are partitioned then k+1 is also partitioned.
+            // In contrast the int[] keys implementation can detect two keys even if they
+            // are separated by a large distance.
+
+            // Switch to paired key implementation if possible
+            if (kb1 - ka <= 2) {
+                introselect(part, a, l, r, ka, kb1, maxDepth);
+                return;
+            }
+
+            // Continue with at least 3 keys
+
+            // It is possible to use heapselect when ka and kb1 are close to the same end
+            // |l|-----|ka|--------|kb1|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            final int s2 = kb1 - l;
+            final int s4 = r - ka;
+            if (maxDepth == 0 || Math.min(s2, s4) < minHeapSelectSize) {
+                // Too much recursion, or ka and kb1 are both close to the same end
+                heapSelectRange(a, l, r, ka, kb1);
+                return;
+            }
+
             // Pick a pivot and partition
-            final int[] upper = {0};
-            final int k0 = part.partition(a, left, right,
-                pivotingStrategy.pivotIndex(a, left, right),
+            final int p0 = part.partition(a, l, r,
+                pivotingStrategy.pivotIndex(a, l, r),
                 upper);
-            final int k1 = upper[0];
+            final int p1 = upper[0];
+
             // Recursion to max depth
             // Note: Here we possibly branch left and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set on either side.
-            //                   k0 k1
-            // |l|--|ka|--k----k--|P|------k--|kb|------|r|
+            //                   p0 p1
+            // |l|--|ka|--k----k--|P|------k--|kb1|------|r|
             //                kb1  |      ka1
-            // Search previous/next is bounded at ka/kb
-            if (ka < k0) {
-                final int kb1 = kb < k0 ? kb : k.previousSetBit(k0 - 1);
-                introselect(part, a, left, k0 - 1, k, ka, kb1, maxDepth - 1);
+            // Search previous/next is bounded at ka/kb1
+            maxDepth--;
+            // Recurse right side if required
+            if (kb1 > p1) {
+                final int ka1 = ka > p1 ? ka : k.nextSetBit(p1 + 1);
+                introselect(part, a, p1 + 1, r, k, ka1, kb1, maxDepth - 1);
             }
-            if (kb > k1) {
-                final int ka1 = ka > k1 ? ka : k.nextSetBit(k1 + 1);
-                introselect(part, a, k1 + 1, right, k, ka1, kb, maxDepth - 1);
+            if (ka >= p0) {
+                // No left side
+                return;
             }
+            // Continue on the left side
+            r = p0 - 1;
+            kb1 = kb1 < p0 ? kb1 : k.previousSetBit(p0 - 1);
         }
     }
 
@@ -3596,29 +3657,28 @@ final class Partition {
         // Edge of range partitioning
         // Currently only support min/max heap partitioning of size 1
 
-        if (k == l) {
+        // Doing the sort first ensures the partition min/max can assume l <= r
+        if (r - l <= minQuickSelectSize) {
+            // Switch to insertion sort for small range
+            // This is the expected exit point of this function.
+            Sorting.sort(a, l, r, l > 0);
+            if (pivots != null) {
+                // Note: r+1 is a pivot or the end of the data and k+1 sorted
+                pivots.add(l, r);
+            }
+        } else if (k == l) {
             // Here we use special support to partition (k,k+1)
             partitionMin2IgnoreZeros(a, k, r);
             if (pivots != null) {
                 pivots.add(k, k + 1);
             }
-            return;
-        }
-
-        // Here r+1 is a pivot or the end of the data so k+1 is sorted
-        if (k == r) {
+        } else {
+            // k == r
+            // Note: r+1 is a pivot or the end of the data and k+1 sorted
             partitionMaxIgnoreZeros(a, l, k);
             if (pivots != null) {
                 pivots.add(k);
             }
-            return;
-        }
-
-        // Switch to insertion sort for small range.
-        // This is the expected exit point of this function.
-        Sorting.sort(a, l, r, l > 0);
-        if (pivots != null) {
-            pivots.add(l, r);
         }
     }
 
@@ -3671,7 +3731,9 @@ final class Partition {
                     if (k < r) {
                         partitionMin(a, k + 1, r);
                     }
-                    pivots.add(k + 1);
+                    if (pivots != null) {
+                        pivots.add(k + 1);
+                    }
                 }
                 return;
             }
@@ -3680,29 +3742,33 @@ final class Partition {
         // Edge of range partitioning
         // Currently only support min/max heap partitioning of size 1
 
-        if (k == l) {
+        // Doing the sort first ensures the partition min/max can assume l <= r
+        if (r - l <= minQuickSelectSize) {
+            // Switch to insertion sort for small range
+            Sorting.sort(a, l, r, l > 0);
+            fixContinuousSignedZeros(a, l, r);
+            if (pivots != null) {
+                // Note: r+1 is a pivot or the end of the data and k+1 sorted
+                pivots.add(l, r);
+            }
+        } else if (k == l) {
             partitionMin(a, k, r);
             if (pivots != null) {
                 pivots.add(k);
             }
+            // Here we must partition k+1
             if (flags < 0) {
                 partitionMin(a, k + 1, r);
                 if (pivots != null) {
                     pivots.add(k);
                 }
             }
-        // From here r+1 is a pivot or the end of the data and k+1 sorted.
-        } else if (k == r) {
+        } else {
+            // k == r
+            // Note: r+1 is a pivot or the end of the data and k+1 sorted
             partitionMax(a, l, k);
             if (pivots != null) {
                 pivots.add(k);
-            }
-        } else {
-            // Switch to insertion sort for small range
-            Sorting.sort(a, l, r, l > 0);
-            fixContinuousSignedZeros(a, l, r);
-            if (pivots != null) {
-                pivots.add(l, r);
             }
         }
     }
@@ -4594,7 +4660,7 @@ final class Partition {
      * @param n Length of data (must be strictly positive).
      * @return the maximum recursion depth
      */
-    private int createMaxDepth(int n) {
+    private int createMaxDepthSinglePivot(int n) {
         // Ideal single pivot recursion will take log2(n) steps as data is
         // divided into length (n/2) at each iteration.
         final int maxDepth = floorLog2(n);
