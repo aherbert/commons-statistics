@@ -3430,7 +3430,7 @@ final class Partition {
     void partitionSBM(double[] data, int[] k, int n) {
         // Handle NaN (this does assume n > 0)
         final int right = sortNaN(data);
-        partition((SPEPartitionFunction) this::partitionSBM, data, right, k, n);
+        partition((SPEPartitionFunction) this::partitionSBMWithZeros, data, right, k, n);
     }
 
     /**
@@ -3691,7 +3691,7 @@ final class Partition {
         // Continue until small range or close to the ends
         while (k != l && k != r && r - l > minQuickSelectSize) {
             // Pick a pivot and partition
-            final int k0 = partitionSBM(a, l, r,
+            final int k0 = partitionSBMWithZeros(a, l, r,
                 pivotingStrategy.pivotIndex(a, l, r),
                 upper);
             final int k1 = upper[0];
@@ -3764,7 +3764,7 @@ final class Partition {
         // TODO: support minQuickSelectSize and minSortSize
         while (k != l && k != r && r - l > minQuickSelectSize) {
             // Pick a pivot and partition
-            final int k0 = partitionSBMIgnoreZeros(a, l, r,
+            final int k0 = partitionSBM(a, l, r,
                 pivotingStrategy.pivotIndex(a, l, r),
                 upper);
             final int k1 = upper[0];
@@ -3849,7 +3849,7 @@ final class Partition {
         // Continue until small range or close to the ends
         while (k != l && k != r && r - l > minQuickSelectSize) {
             // Pick a pivot and partition
-            final int k0 = partitionSBM(a, l, r,
+            final int k0 = partitionSBMWithZeros(a, l, r,
                 pivotingStrategy.pivotIndex(a, l, r),
                 upper);
             final int k1 = upper[0];
@@ -3924,7 +3924,7 @@ final class Partition {
     void sortSBM(double[] data) {
         // Handle NaN
         final int right = sortNaN(data);
-        sort((SPEPartitionFunction) this::partitionSBM, data, right);
+        sort((SPEPartitionFunction) this::partitionSBMWithZeros, data, right);
     }
 
     /**
@@ -3941,9 +3941,53 @@ final class Partition {
     }
 
     /**
-     * Sort an array within the ranges identified by the {@code sortRange}.
+     * Sort the data using an intrasort.
      *
-     * <p>Note: Requires that the range contains no NaN values.
+     * <p>Uses a Dutch-National-Flag quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortIDNF1(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionDNF1, data);
+    }
+
+    /**
+     * Sort the data using an intrasort.
+     *
+     * <p>Uses a Dutch-National-Flag quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortIDNF2(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionDNF2, data);
+    }
+
+    /**
+     * Sort the data using an intrasort.
+     *
+     * <p>Uses a Dutch-National-Flag quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortIDNF3(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionDNF3, data);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Implements {@link SPEPartitionFunction}. This method is not static as the
+     * pivot strategy and minimum quick select size are used within the method.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Handles signed zeros.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
@@ -3955,7 +3999,7 @@ final class Partition {
      * @param rightInner Flag to indicate {@code right + 1} is a pivot.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int partitionSBM(double[] data, int left, int right, int[] upper,
+    private int partitionSBMWithZeros(double[] data, int left, int right, int[] upper,
         boolean leftInner, boolean rightInner) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
@@ -4115,9 +4159,11 @@ final class Partition {
     }
 
     /**
-     * Sort an array within the ranges identified by the {@code sortRange}.
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
      *
-     * <p>Note: Requires that the range contains no NaN values.
+     * <p>Note: Requires that the range contains no NaN values. Handles signed zeros.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
@@ -4128,7 +4174,7 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private static int partitionSBM(double[] data, int left, int right, int pivot, int[] upper) {
+    private static int partitionSBMWithZeros(double[] data, int left, int right, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
@@ -4278,7 +4324,9 @@ final class Partition {
     }
 
     /**
-     * Sort an array within the ranges identified by the {@code sortRange}.
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
      *
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
@@ -4292,7 +4340,7 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private static int partitionSBMIgnoreZeros(double[] data, int l, int r, int pivot, int[] upper) {
+    private static int partitionSBM(double[] data, int l, int r, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
@@ -4416,6 +4464,225 @@ final class Partition {
 
         // Equal in [lower, upper]
         return lower;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses a Dutch-National-Flag method handling equal keys (version 1).
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param pivot Pivot index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private static int partitionDNF1(double[] data, int left, int right, int pivot, int[] upper) {
+        // Dutch National Flag partitioning:
+        // https://www.baeldung.com/java-sorting-arrays-with-repeated-entries
+        // https://en.wikipedia.org/wiki/Dutch_national_flag_problem
+
+        // Partition data using pivot P into less-than, greater-than or equal.
+        // i traverses the unknown region ??? and values moved to the correct end.
+        //
+        // left    lt      i            gt       right
+        // |  < P  |   P   |     ???    |   > P  |
+        //
+        // We can delay filling in [lt, gt) with P until the end and only
+        // move values in the wrong place.
+
+        final double value = data[pivot];
+
+        // Pointers positioned to use pre-increment/decrement: ++x / --x
+        int lt = left - 1;
+        int gt = right + 1;
+
+        // DNF partitioning which inspects one position per loop iteration
+        for (int i = left; i < gt; i++) {
+            final double v = data[i];
+            if (v < value) {
+                data[++lt] = v;
+            } else if (v > value) {
+                data[i] = data[--gt];
+                data[gt] = v;
+                // Ensure data[i] is inspected next time
+                i--;
+            }
+            // else v == value and is in the central region to fill at the end
+        }
+
+        // Equal in (lt, gt) so adjust to [lt, gt]
+        ++lt;
+        upper[0] = --gt;
+
+        // Fill the equal values gap
+        for (int i = lt; i <= gt; i++) {
+            data[i] = value;
+        }
+
+        return lt;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses a Dutch-National-Flag method handling equal keys (version 2).
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param pivot Pivot index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private static int partitionDNF2(double[] data, int left, int right, int pivot, int[] upper) {
+        // Dutch National Flag partitioning:
+        // https://www.baeldung.com/java-sorting-arrays-with-repeated-entries
+        // https://en.wikipedia.org/wiki/Dutch_national_flag_problem
+
+        // Partition data using pivot P into less-than, greater-than or equal.
+        // i traverses the unknown region ??? and values moved to the correct end.
+        //
+        // left    lt      i            gt       right
+        // |  < P  |   P   |     ???    |   > P  |
+        //
+        // We can delay filling in [lt, gt) with P until the end and only
+        // move values in the wrong place.
+
+        final double value = data[pivot];
+
+        // Pointers positioned to use pre-increment/decrement: ++x / --x
+        int lt = left - 1;
+        int gt = right + 1;
+
+        // Modified DNF partitioning with fast-forward of the greater-than
+        // pointer. Note the fast-forward must check bounds.
+        for (int i = left; i < gt; i++) {
+            final double v = data[i];
+            if (v < value) {
+                data[++lt] = v;
+            } else if (v > value) {
+                // Fast-forward here:
+                do {
+                    --gt;
+                } while (gt > i && data[gt] > value);
+                // here data[gt] <= value
+                // if data[gt] == value we can skip over it
+                if (data[gt] < value) {
+                    data[++lt] = data[gt];
+                }
+                // Move v to the >P side
+                data[gt] = v;
+            }
+            // else v == value and is in the central region to fill at the end
+        }
+
+        // Equal in (lt, gt) so adjust to [lt, gt]
+        ++lt;
+        upper[0] = --gt;
+
+        // Fill the equal values gap
+        for (int i = lt; i <= gt; i++) {
+            data[i] = value;
+        }
+
+        return lt;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses a Dutch-National-Flag method handling equal keys (version 3).
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param pivot Pivot index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private static int partitionDNF3(double[] data, int left, int right, int pivot, int[] upper) {
+        // Dutch National Flag partitioning:
+        // https://www.baeldung.com/java-sorting-arrays-with-repeated-entries
+        // https://en.wikipedia.org/wiki/Dutch_national_flag_problem
+
+        // Partition data using pivot P into less-than, greater-than or equal.
+        // i traverses the unknown region ??? and values moved to the correct end.
+        //
+        // left    lt      i            gt       right
+        // |  < P  |   P   |     ???    |   > P  |
+        //
+        // This version writes in the value of P as it traverses. Any subsequent
+        // less-than values will overwrite P values trailing behind i.
+
+        final double value = data[pivot];
+
+        // Pointers positioned to use pre-increment/decrement: ++x / --x
+        int lt = left - 1;
+        int gt = right + 1;
+
+        // Note:
+        // This benchmarks as faster than DNF1 and equal to DNF2 on uniform random data.
+        // Both DNF2 & 3 have fast-forward of the gt pointer.
+
+        // Modified DNF partitioning with fast-forward of the greater-than
+        // pointer. Here we write in the pivot value at i during the sweep.
+        // This acts as a sentinal when fast-forwarding greater-than.
+        // It is over-written by any future <P value.
+        // [begin, lt] < pivot
+        // (lt, i)    == pivot
+        // [i, gt)    == ???
+        // [gt, end)   > pivot
+        for (int i = lt; ++i < gt;) {
+            final double v = data[i];
+            if (v != value) {
+                // Overwrite with the pivot value
+                data[i] = value;
+                if (v < value) {
+                    // Move v to the <P side
+                    data[++lt] = v;
+                } else {
+                    // Fast-forward here cannot pass sentinal
+                    // while (data[--gt] > value)
+                    do {
+                        --gt;
+                    } while (data[gt] > value);
+                    // Now data[gt] <= value
+                    // if data[gt] == value we can skip over it
+                    if (data[gt] < value) {
+                        data[++lt] = data[gt];
+                    }
+                    // Move v to the >P side
+                    data[gt] = v;
+                }
+            }
+        }
+
+        // Equal in (lt, gt) so adjust to [lt, gt]
+        ++lt;
+        upper[0] = --gt;
+
+        // In contrast to version 1 and 2 there is no requirement to file the central
+        // region with the pivot value as it was filled during the sweep
+
+        return lt;
+
     }
 
     /**
