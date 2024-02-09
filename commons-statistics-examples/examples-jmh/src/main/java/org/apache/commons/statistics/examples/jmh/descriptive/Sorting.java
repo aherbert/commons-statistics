@@ -610,7 +610,7 @@ final class Sorting {
 
         // Repeat code from sortIndicesIndexSet as we have the min/max
         final IndexSet set = IndexSet.ofRange(min, max);
-        for (int i = 0; ++i < n;) {
+        for (int i = -1; ++i < n;) {
             set.set(data[i]);
         }
         return set.toArray(data);
