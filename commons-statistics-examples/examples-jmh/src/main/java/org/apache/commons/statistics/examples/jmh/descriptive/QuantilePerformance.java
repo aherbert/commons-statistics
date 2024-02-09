@@ -103,9 +103,13 @@ public class QuantilePerformance {
 
     // Introselect functions
 
-    /** Commons Statistics Quantile implementation with Sedgewick's BM quickselect, switching
-     * to heapselect when progress is poor. */
+    /** Commons Statistics Quantile introselect implementation with Sedgewick's Bentley-McIlroy
+     * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
+    /** Commons Statistics Quantile introselect implementation with Dutch National Flag partitioning
+     * partitioning, switching to heapselect when progress is poor. The DNF algorithm is appened
+     * as a suffix. */
+    private static final String IDNF = "IDNF";
 
     /** Pattern for the minimum quickselect size. */
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
@@ -164,11 +168,19 @@ public class QuantilePerformance {
             // which has example of other data types.
 
             if (distribution.startsWith("uni")) {
-                final int discrete = getInteger(distribution, -1);
-                if (discrete > 0) {
-                    // Note: upper bound is inclusive.
-                    // This will handle discrete == 1 (although the stream ... toArray() is inefficient).
-                    sampler = DiscreteUniformSampler.of(rng, 0, discrete - 1)::sample;
+                // Upper bound is at then end of the name
+                final int upper = getInteger(distribution, -1);
+                if (upper > 0) {
+                    // Attempt to get a lower bound, e.g. uniform50_100
+                    final int index = distribution.indexOf('_');
+                    int lower = 0;
+                    if (index > 0) {
+                        lower = getInteger(distribution.substring(0, index), lower);
+                    }
+                    // Note: lower and upper bound are inclusive.
+                    // This will handle a discrete distribution of a single value
+                    // (although the stream ... toArray() is inefficient).
+                    sampler = DiscreteUniformSampler.of(rng, lower, upper)::sample;
                 } else {
                     sampler = rng::nextDouble;
                 }
@@ -500,6 +512,16 @@ public class QuantilePerformance {
             // Introsort
             } else if (name.startsWith(ISBM)) {
                 function = createPartition(name)::sortISBM;
+            } else if (name.startsWith(IDNF)) {
+                final Partition part = createPartition(name);
+                // 3 variants
+                if (name.startsWith(IDNF + "1")) {
+                    function = part::sortIDNF1;
+                } else if (name.startsWith(IDNF + "2")) {
+                    function = part::sortIDNF2;
+                } else {
+                    function = part::sortIDNF3;
+                }
             } else if ("InsertionSort".equals(name)) {
                 function = x -> KthSelector.insertionSort(x, 0, x.length, false);
             } else {
@@ -723,7 +745,8 @@ public class QuantilePerformance {
             i--;
         }
         if (i < value.length()) {
-            return Integer.parseInt(value, i, value.length(), 10);
+            final int x = Integer.parseInt(value, i, value.length(), 10);
+            return (i > 0 && value.charAt(i - 1) == '-') ? -x : x;
         }
         return defaultValue;
     }
