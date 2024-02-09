@@ -98,7 +98,7 @@ class MedianTest {
     @MethodSource(value = {"testMedian"})
     void testMedianK1SBM(double[] values, double expected) {
         Assertions.assertEquals(expected, Median.withDefaults()
-            .withPartition(new Partition(KeyStrategy.PIVOT_CACHE))
+            .withPartition(new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE))
             .evaluateK1SBM(values));
     }
 

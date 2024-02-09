@@ -553,55 +553,55 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionSBMIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.INDEX_SET)::partitionSBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.INDEX_SET)::partitionSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionSBMPivotCache(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionSBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionSBMSequential(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.SEQUENTIAL)::partitionSBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.SEQUENTIAL)::partitionSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionKSBM(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionKSBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionKSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionK1SBM(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionK1SBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionK1SBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionPairedSBM(double[] values, int[] indices) {
-        assertPartitionPaired(values, indices, new Partition(KeyStrategy.INDEX_SET)::partitionPairedSBM);
+        assertPartitionPaired(values, indices, new Partition().setKeyStrategy(KeyStrategy.INDEX_SET)::partitionPairedSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionPairedSBMPivotCache(double[] values, int[] indices) {
-        assertPartitionPaired(values, indices, new Partition(KeyStrategy.PIVOT_CACHE)::partitionPairedSBM);
+        assertPartitionPaired(values, indices, new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionPairedSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBM(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.ORDERED_KEYS)::partitionISBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.ORDERED_KEYS)::partitionISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(KeyStrategy.INDEX_SET)::partitionISBM);
+        assertPartition(values, indices, new Partition().setKeyStrategy(KeyStrategy.INDEX_SET)::partitionISBM);
     }
 
 //    @ParameterizedTest
@@ -743,7 +743,7 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortRangeSBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 0, KeyStrategy.INDEX_SET)::sortRangeSBM);
+            new Partition(PivotingStrategy.DYNAMIC, 3, 0)::sortRangeSBM);
     }
 //
 //    @ParameterizedTest
@@ -762,7 +762,7 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortSBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 0, KeyStrategy.INDEX_SET)::sortSBM);
+            new Partition(PivotingStrategy.DYNAMIC, 3, 0)::sortSBM);
     }
 
     @ParameterizedTest
@@ -793,7 +793,7 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortISBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 3, KeyStrategy.INDEX_SET)::sortISBM);
+            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortISBM);
     }
 
 //

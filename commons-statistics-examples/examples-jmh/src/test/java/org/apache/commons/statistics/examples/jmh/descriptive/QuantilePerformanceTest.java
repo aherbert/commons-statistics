@@ -43,4 +43,28 @@ class QuantilePerformanceTest {
         Assertions.assertEquals(15, QuantilePerformance.getMinHeapSelectSize("beforeHS15after"));
         Assertions.assertEquals(16, QuantilePerformance.getMinHeapSelectSize("beforeQS26_HS16after"));
     }
+
+    @Test
+    void testGetRecursionMultiple() {
+        Assertions.assertEquals(Partition.RECURSION_MULTIPLE, QuantilePerformance.getRecursionMultiple("nothing"));
+        Assertions.assertEquals(1.2, QuantilePerformance.getRecursionMultiple("RM1.2"));
+        Assertions.assertEquals(1.3, QuantilePerformance.getRecursionMultiple("beforeRM1.3"));
+        Assertions.assertEquals(1.4, QuantilePerformance.getRecursionMultiple("RM1.4after"));
+        Assertions.assertEquals(1.5, QuantilePerformance.getRecursionMultiple("beforeRM1.5after"));
+        Assertions.assertEquals(1.6, QuantilePerformance.getRecursionMultiple("beforeQS26_RM1.6after"));
+        Assertions.assertEquals(0, QuantilePerformance.getRecursionMultiple("RM0"));
+        Assertions.assertEquals(3, QuantilePerformance.getRecursionMultiple("RM3"));
+        Assertions.assertEquals(4, QuantilePerformance.getRecursionMultiple("RM4"));
+    }
+
+    @Test
+    void testGetRecursionConstant() {
+        Assertions.assertEquals(Partition.RECURSION_CONSTANT, QuantilePerformance.getRecursionConstant("nothing"));
+        Assertions.assertEquals(0, QuantilePerformance.getRecursionConstant("RC0"));
+        Assertions.assertEquals(12, QuantilePerformance.getRecursionConstant("RC12"));
+        Assertions.assertEquals(13, QuantilePerformance.getRecursionConstant("beforeRC13"));
+        Assertions.assertEquals(14, QuantilePerformance.getRecursionConstant("RC14after"));
+        Assertions.assertEquals(15, QuantilePerformance.getRecursionConstant("beforeRC15after"));
+        Assertions.assertEquals(16, QuantilePerformance.getRecursionConstant("beforeQS26_RC16after"));
+    }
 }
