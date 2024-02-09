@@ -615,6 +615,13 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionISBMSearchKey(double[] values, int[] indices) {
+        assertPartition(values, indices,
+            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.SEARCH_KEY_INTERVAL)::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices,
             new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionISBM);

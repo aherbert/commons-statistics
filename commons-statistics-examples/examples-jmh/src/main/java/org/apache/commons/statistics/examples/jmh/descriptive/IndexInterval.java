@@ -27,6 +27,10 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * <li>Return the next index contained in the interval from a search point {@code k}.
  * </ul>
  *
+ * <p>Note that the interval provides the supported bounds. If a search passes the end
+ * of the bounds then the result is only defined as below or above the bounds. The interval
+ * is intended to be used for searching inside an interval.
+ *
  * <p>Implementations may assume indices are positive.
  *
  * @since 1.1
@@ -48,20 +52,20 @@ interface IndexInterval {
     int right();
 
     /**
-     * Returns the nearest pivot index that occurs on or before the specified starting
-     * index. If none exist then {@code -1} is returned.
+     * Returns the nearest index that occurs on or before the specified starting
+     * index. If none exist then a value below the {@code left} bound of support is returned.
      *
      * @param k Index to start checking from (inclusive).
-     * @return the index of the previous pivot, or {@code -1} if there is no index
+     * @return the previous index, or a value below {@code left} if there is no index
      */
     int previousIndex(int k);
 
     /**
-     * Returns the nearest pivot index that occurs on or after the specified starting
-     * index. If none exist then {@code -1} is returned.
+     * Returns the nearest index that occurs on or after the specified starting
+     * index. If none exist then a value above the {@code right} bound of support is returned.
      *
      * @param k Index to start checking from (inclusive).
-     * @return the index of the next pivot, or {@code -1} if there is no index
+     * @return the next index, or a value above {@code right} if there is no index
      */
     int nextIndex(int k);
 }

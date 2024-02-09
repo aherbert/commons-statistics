@@ -615,12 +615,12 @@ final class IndexSet implements PivotCache, IndexInterval {
 
     @Override
     public int previousIndex(int k) {
-        return previousSetBit(k);
+        return previousSetBitOrElse(k, left - 1);
     }
 
     @Override
     public int nextIndex(int k) {
-        return nextSetBit(k);
+        return nextSetBitOrElse(k, right + 1);
     }
 
     /**
