@@ -81,8 +81,8 @@ public class MedianPerformance {
 
     // Introselect functions
 
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect, switching
-     * to heapselect when progress is poor. */
+    /** Commons Statistics Median introselect implementation with Sedgewick's Bentley-McIlroy
+     * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
 
     /**

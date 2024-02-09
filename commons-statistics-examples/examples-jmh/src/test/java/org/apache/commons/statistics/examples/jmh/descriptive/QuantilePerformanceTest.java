@@ -25,6 +25,13 @@ import org.junit.jupiter.api.Test;
  */
 class QuantilePerformanceTest {
     @Test
+    void testGetInteger() {
+        Assertions.assertEquals(42, QuantilePerformance.getInteger("text", 42));
+        Assertions.assertEquals(33, QuantilePerformance.getInteger("text33", 42));
+        Assertions.assertEquals(-33, QuantilePerformance.getInteger("text-33", 42));
+    }
+
+    @Test
     void testGetMinQuickSelectSize() {
         Assertions.assertEquals(Partition.MIN_QUICKSELECT_SIZE, QuantilePerformance.getMinQuickSelectSize("nothing"));
         Assertions.assertEquals(22, QuantilePerformance.getMinQuickSelectSize("QS22"));

@@ -812,6 +812,27 @@ class PartitionTest {
             new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortISBM);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortIDNF1(double[] values) {
+        assertSort(values,
+            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortIDNF1);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortIDNF2(double[] values) {
+        assertSort(values,
+            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortIDNF2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortIDNF3(double[] values) {
+        assertSort(values,
+            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortIDNF3);
+    }
+
 //
 //    @ParameterizedTest
 //    @MethodSource(value = {"testSort"})
