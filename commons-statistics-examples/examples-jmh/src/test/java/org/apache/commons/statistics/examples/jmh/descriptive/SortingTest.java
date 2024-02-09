@@ -564,6 +564,8 @@ class SortingTest {
         builder.add(Arguments.of(rng.ints(50, 0, 3).toArray(), -1));
         builder.add(Arguments.of(rng.ints(50, 0, 5).toArray(), -1));
         builder.add(Arguments.of(rng.ints(50, 0, 10).toArray(), -1));
+        // Bug where the first index was ignored when using an IndexSet
+        builder.add(Arguments.of(IntStream.range(0, 50).map(x -> 50 - x).toArray(), -1));
         // Sparse
         builder.add(Arguments.of(rng.ints(25, 0, 100000).toArray(), -1));
         // Ascending

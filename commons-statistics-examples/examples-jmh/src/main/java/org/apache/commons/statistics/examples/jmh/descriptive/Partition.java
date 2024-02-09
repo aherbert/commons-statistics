@@ -123,7 +123,9 @@ final class Partition {
         PIVOT_CACHE,
         /** Sort unique keys and process using recursion with division of the keys
          * for each sub-partition. */
-        ORDERED_KEYS;
+        ORDERED_KEYS,
+        /** Sort unique keys and process using recursion with a {@link ScanningKeyIndexInterval}. */
+        SCANNING_KEY_INTERVAL;
     }
 
     /**
@@ -2757,10 +2759,7 @@ final class Partition {
             // Left (inclusive) is always above 0 as we have partitioned upstream already.
             // Right (exclusive) may not have been searched yet so we check right bounds.
             final int l = pivots.previousPivot(s);
-            int r = pivots.nextPivot(e);
-            if (r < 0) {
-                r = right + 1;
-            }
+            final int r = pivots.nextPivotOrElse(e, right + 1);
 
             // Create regions:
             // Partition: l------s--p1
@@ -3091,11 +3090,16 @@ final class Partition {
         // e.g. every other k. It will make scanning left/right faster when
         // not saturated.
 
+        // Note: Sorting to unique keys is an overhead. This can be eliminated
+        // by requesting the caller passes sorted keys (or quantiles in order).
+
         if (keyStrategy == KeyStrategy.ORDERED_KEYS) {
-            // Sorting to unique keys is an overhead. This can be eliminated
-            // by requesting the caller passes sorted keys (or quantiles in order).
             final int unique = Sorting.sortIndices(k, n);
             introselect(part, a, 0, right, k, 0, unique - 1, maxDepth);
+        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INTERVAL) {
+            final int unique = Sorting.sortIndices(k, n);
+            final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.
             final IndexSet keys = IndexSet.of(k, n);
@@ -3345,6 +3349,7 @@ final class Partition {
                 Sorting.sort(a, l, r, l > 0);
                 return;
             }
+
 
             // Note:
             // Here is a difference between the IndexSet and int[] keys implementations.

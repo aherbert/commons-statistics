@@ -793,7 +793,14 @@ final class IndexSet implements PivotCache, IndexInterval {
         @Override
         public int previousPivot(int k) {
             // Assume scanning in [left <= k <= right]
-            return IndexSet.this.previousSetBitOrElse(k, lowerPivot);
+            // Here left is moveable and lower pivot holds the last pivot below it.
+            // The cache will not store any bits below left so if it has moved
+            // searching may find stale bits below the current lower pivot.
+            // So we return the max of the found bit or the lower pivot.
+            if (k < left) {
+                return lowerPivot;
+            }
+            return Math.max(lowerPivot, IndexSet.this.previousSetBitOrElse(k, lowerPivot));
         }
 
         @Override
