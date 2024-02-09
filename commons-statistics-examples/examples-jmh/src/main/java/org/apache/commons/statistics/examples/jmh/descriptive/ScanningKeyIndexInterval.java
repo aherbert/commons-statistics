@@ -24,17 +24,13 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * <p>The scan is fast when the number of keys is small.
  */
 final class ScanningKeyIndexInterval implements IndexInterval {
-    /** The ordered keys for descending search. */
+    /** The ordered keys. */
     private final int[] keys;
     /** The original number of keys + 1. This is more convenient to store for the use cases. */
     private final int np1;
 
     /**
      * Create an instance with the provided keys.
-     *
-     * <p>The functional capacity (number of indices that can be stored) is the next power
-     * of 2 above {@code capacity}; or a minimum size if the requested {@code capacity} is
-     * small.
      *
      * @param indices Indices.
      * @param n Number of indices.
@@ -50,15 +46,14 @@ final class ScanningKeyIndexInterval implements IndexInterval {
     }
 
     /**
-     * Initialise an instance with the {@code indices}. The capacity is defined by the
-     * range required to store the minimum and maximum index.
+     * Initialise an instance with the {@code indices}. The indices are copied.
      *
      * <p>This will error if a memory allocation of an integer array of size {@code n + 2}
      * is invalid. In practice this should be used with a small number of indices.
      *
      * @param indices Indices.
      * @param n Number of indices.
-     * @return the index set
+     * @return the interval
      * @throws IllegalArgumentException if the indices are not unique and ordered; or not
      * in the range {@code [0, 2^31-1)}; or {@code n <= 0}
      */
@@ -116,17 +111,9 @@ final class ScanningKeyIndexInterval implements IndexInterval {
         // be equal to it but then k would not be a valid index into an array.
         // IndexOutOfBoundsException indicates incorrect usage by the caller which should
         // call using a valid positive index k in [0, 2^31-1).
-
-        // Note: We could use unsigned compare and store the sentinal as -1:
-        //   u = k + Integer.MIN_VALUE
-        //   keys[++i] + Integer.MIN_VALUE >= u
-        // Or duplicate all keys as an unsignedKeys array.
-        // Here we simply check if we reached the end during the signed comparison.
-        // This allows caching only a single set of keys in memory for forward/backward scanning.
-
         for (int i = 0;;) {
             if (keys[++i] >= k) {
-                return i == np1 ? -1 : keys[i];
+                return keys[i];
             }
         }
     }
