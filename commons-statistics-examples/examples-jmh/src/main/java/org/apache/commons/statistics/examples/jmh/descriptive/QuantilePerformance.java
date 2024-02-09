@@ -111,6 +111,10 @@ public class QuantilePerformance {
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
     /** Pattern for the minimum heapselect size. */
     private static final Pattern HS_PATTERN = Pattern.compile("HS(\\d+)");
+    /** Pattern for the recursion multiple (simple float format). */
+    private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+.?\\d*)");
+    /** Pattern for the recursion constant. */
+    private static final Pattern RC_PATTERN = Pattern.compile("RC(\\d+)");
 
     /**
      * Source of {@code double} array data.
@@ -697,8 +701,13 @@ public class QuantilePerformance {
         final int minQuickSelectSize = getMinQuickSelectSize(name);
         final int minHeapSelectSize = getMinHeapSelectSize(name);
         final PivotingStrategy s = getPivotStrategy(name);
-        final KeyStrategy keyStrategy = getKeyStrategy(name);
-        return new Partition(s, minQuickSelectSize, minHeapSelectSize, keyStrategy);
+        final Partition p = new Partition(s, minQuickSelectSize, minHeapSelectSize);
+        // Some values do not have to be final as they are not used within optimised
+        // partitioning code.
+        p.setKeyStrategy(getKeyStrategy(name));
+        p.setRecursionMultiple(getRecursionMultiple(name));
+        p.setRecursionConstant(getRecursionConstant(name));
+        return p;
     }
 
     /**
@@ -750,13 +759,41 @@ public class QuantilePerformance {
     }
 
     /**
+     * Gets the recursion multiplication factor.
+     *
+     * @param name Algorithm name.
+     * @return the recursion multiple
+     */
+    static double getRecursionMultiple(String name) {
+        final Matcher m = RM_PATTERN.matcher(name);
+        if (m.find()) {
+            return Double.parseDouble(m.group(1));
+        }
+        return Partition.RECURSION_MULTIPLE;
+    }
+
+    /**
+     * Gets the recursion constant.
+     *
+     * @param name Algorithm name.
+     * @return the recursion constant
+     */
+    static int getRecursionConstant(String name) {
+        final Matcher m = RC_PATTERN.matcher(name);
+        if (m.find()) {
+            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+        }
+        return Partition.RECURSION_CONSTANT;
+    }
+
+    /**
      * Gets the pivot strategy for the recursive partition algorithm.
      *
      * @param name Algorithm name.
      * @return the pivot strategy
      */
     static PivotingStrategy getPivotStrategy(String name) {
-        return getPivotStrategyOrEsle(name, PivotingStrategy.MEDIAN_OF_3);
+        return getPivotStrategyOrEsle(name, Partition.PIVOTING_STRATEGY);
     }
 
     /**
@@ -782,7 +819,7 @@ public class QuantilePerformance {
      * @return the sequential strategy
      */
     static KeyStrategy getKeyStrategy(String name) {
-        return getKeyStrategyOrElse(name, KeyStrategy.INDEX_SET);
+        return getKeyStrategyOrElse(name, Partition.KEY_STRATEGY);
     }
 
     /**

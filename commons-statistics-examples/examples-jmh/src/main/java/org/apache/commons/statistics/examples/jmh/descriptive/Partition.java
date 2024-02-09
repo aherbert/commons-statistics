@@ -45,6 +45,8 @@ import java.util.Arrays;
 final class Partition {
     // This class contains implementations for use in benchmarking.
 
+    /** Default pivoting strategy. */
+    static final PivotingStrategy PIVOTING_STRATEGY = PivotingStrategy.MEDIAN_OF_3;
     /** Minimum selection size for quickselect.
      * Below this switch to insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in the original paper. */
@@ -52,6 +54,12 @@ final class Partition {
     /** Minimum selection size for heapselect.
      * Set to the same value as min select size. This requires tuning for performance. */
     static final int MIN_HEAPSELECT_SIZE = 27;
+    /** Default key strategy. */
+    static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
+    /** Default recursion multiple. */
+    static final double RECURSION_MULTIPLE = 2;
+    /** Default recursion constant. */
+    static final int RECURSION_CONSTANT = 0;
     /** Minimum length between 2 pivots {@code p2 - p1} that requires a full sort. */
     private static final int SORT_BETWEEN_SIZE = 2;
     /** Mask to extract the positive index from an integer. */
@@ -75,6 +83,8 @@ final class Partition {
         }
     };
 
+    // Use final for settings/objects used within partitioning functions
+
     /** A {@link PivotingStrategy} used for pivoting. */
     private final PivotingStrategy pivotingStrategy;
 
@@ -87,8 +97,17 @@ final class Partition {
      * Not supported by all partition methods. */
     private final int minHeapSelectSize;
 
+    // Use final for settings used to configure partitioning functions
+
     /** Setting to indicate strategy for processing of multiple keys. */
-    private final KeyStrategy keyStrategy;
+    private KeyStrategy keyStrategy = KEY_STRATEGY;
+
+    /** Multiplication factor {@code m} applied to the length based recursion factor {@code x}.
+     * The recursion is set using {@code m * x + c}. */
+    private double recursionMultiple = RECURSION_MULTIPLE;
+    /** Constant {@code c} added to the length based recursion factor {@code x}.
+     * The recursion is set using {@code m * x + c}. */
+    private int recursionConstant = RECURSION_CONSTANT;
 
     /**
      * Define the strategy for processing multiple keys.
@@ -852,11 +871,10 @@ final class Partition {
     }
 
     /**
-     * Constructor with default {@link PivotingStrategy#MEDIAN_OF_3 median of 3} pivoting
-     * strategy.
+     * Constructor with defaults.
      */
     Partition() {
-        this(PivotingStrategy.MEDIAN_OF_3);
+        this(PIVOTING_STRATEGY);
     }
 
     /**
@@ -865,7 +883,7 @@ final class Partition {
      * @param pivotingStrategy Pivoting strategy to use.
      */
     Partition(PivotingStrategy pivotingStrategy) {
-        this(pivotingStrategy, MIN_QUICKSELECT_SIZE, MIN_HEAPSELECT_SIZE, KeyStrategy.INDEX_SET);
+        this(pivotingStrategy, MIN_QUICKSELECT_SIZE, MIN_HEAPSELECT_SIZE);
     }
 
     /**
@@ -874,16 +892,7 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(int minQuickSelectSize) {
-        this(PivotingStrategy.MEDIAN_OF_3, minQuickSelectSize, MIN_HEAPSELECT_SIZE, KeyStrategy.INDEX_SET);
-    }
-
-    /**
-     * Constructor with specified sequential key processing.
-     *
-     * @param keyStrategy Strategy for processing multiple keys.
-     */
-    Partition(KeyStrategy keyStrategy) {
-        this(PivotingStrategy.MEDIAN_OF_3, MIN_QUICKSELECT_SIZE, MIN_HEAPSELECT_SIZE, keyStrategy);
+        this(PIVOTING_STRATEGY, minQuickSelectSize, MIN_HEAPSELECT_SIZE);
     }
 
     /**
@@ -893,14 +902,44 @@ final class Partition {
      * @param pivotingStrategy Pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param minHeapSelectSize Minimum size for heapselect.
-     * @param keyStrategy Strategy for processing multiple keys.
      */
-    Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize,
-        int minHeapSelectSize, KeyStrategy keyStrategy) {
+    Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize, int minHeapSelectSize) {
         this.pivotingStrategy = pivotingStrategy;
         this.minQuickSelectSize = minQuickSelectSize;
         this.minHeapSelectSize = minHeapSelectSize;
-        this.keyStrategy = keyStrategy;
+    }
+
+    /**
+     * Sets the key strategy.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setKeyStrategy(KeyStrategy v) {
+        this.keyStrategy = v;
+        return this;
+    }
+
+    /**
+     * Sets the recursion multiple.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setRecursionMultiple(double v) {
+        this.recursionMultiple = v;
+        return this;
+    }
+
+    /**
+     * Sets the recursion constant.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setRecursionConstant(int v) {
+        this.recursionConstant = v;
+        return this;
     }
 
     /**
@@ -2625,7 +2664,7 @@ final class Partition {
     static boolean keysAreSaturated(int size, int[] k, int n, int minKeys,
         int compression, double saturation) {
         // Check if the number of keys are small, or if they could saturated the range
-        if (k.length < Math.max(minKeys, (n >>> compression))) {
+        if (k.length < Math.max(minKeys, n >>> compression)) {
             return false;
         }
         // Keys could cover the entire data.
@@ -3354,7 +3393,7 @@ final class Partition {
             // Recurse right side if required
             if (kb1 > p1) {
                 final int ka1 = ka > p1 ? ka : k.nextIndex(p1 + 1);
-                introselect(part, a, p1 + 1, r, k, ka1, kb1, maxDepth - 1);
+                introselect(part, a, p1 + 1, r, k, ka1, kb1, maxDepth);
             }
             if (ka >= p0) {
                 // No left side
@@ -4761,14 +4800,8 @@ final class Partition {
         // Ideal single pivot recursion will take log2(n) steps as data is
         // divided into length (n/2) at each iteration.
         final int maxDepth = floorLog2(n);
-
-        // TODO: this factor should be tuned for practical performance
-        // return d * m + c
-
-        // Increase by factor of 1.5
-        //return (maxDepth * 3) >>> 1;
-        return maxDepth * 2;
-        //return maxDepth * 3;
+        // This factor should be tuned for practical performance
+        return (int) Math.floor(maxDepth * recursionMultiple) + recursionConstant;
     }
 
     /**
@@ -4797,14 +4830,8 @@ final class Partition {
         // Ideal dual pivot recursion will take log3(n) steps as data is
         // divided into length (n/3) at each iteration.
         final int maxDepth = log3(n);
-
-        // TODO: this factor should be tuned for practical performance
-        // return d * m + c
-
-        // Increase by factor of 1.5
-        //return (maxDepth * 3) >>> 1;
-        return maxDepth * 2;
-        //return maxDepth * 3;
+        // This factor should be tuned for practical performance
+        return (int) Math.floor(maxDepth * recursionMultiple) + recursionConstant;
     }
 
     /**
