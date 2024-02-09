@@ -125,7 +125,9 @@ final class Partition {
          * for each sub-partition. */
         ORDERED_KEYS,
         /** Sort unique keys and process using recursion with a {@link ScanningKeyIndexInterval}. */
-        SCANNING_KEY_INTERVAL;
+        SCANNING_KEY_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link BinarySearchKeyIndexInterval}. */
+        SEARCH_KEY_INTERVAL;
     }
 
     /**
@@ -3099,6 +3101,10 @@ final class Partition {
         } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INTERVAL) {
+            final int unique = Sorting.sortIndices(k, n);
+            final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.
