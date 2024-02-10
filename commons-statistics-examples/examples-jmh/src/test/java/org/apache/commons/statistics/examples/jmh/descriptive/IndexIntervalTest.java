@@ -1,0 +1,167 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.statistics.examples.jmh.descriptive;
+
+import java.util.function.BiFunction;
+import java.util.stream.Stream;
+import org.apache.commons.rng.UniformRandomProvider;
+import org.apache.commons.rng.simple.RandomSource;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+/**
+ * Test for {@link IndexInterval} implementations.
+ */
+class IndexIntervalTest {
+    @Test
+    void testScanningKeyIndexIntervalInvalidIndicesThrows() {
+        assertInvalidIndicesThrows(ScanningKeyIndexInterval::of);
+        // Invalid indices: not in [0, Integer.MAX_VALUE)
+        Assertions.assertThrows(IllegalArgumentException.class,
+            () -> ScanningKeyIndexInterval.of(new int[] {-1, 2, 3}, 3));
+        Assertions.assertThrows(IllegalArgumentException.class,
+            () -> ScanningKeyIndexInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
+    }
+    @Test
+    void testBinarySearchKeyIndexIntervalInvalidIndicesThrows() {
+        assertInvalidIndicesThrows(BinarySearchKeyIndexInterval::of);
+    }
+
+    private static void assertInvalidIndicesThrows(BiFunction<int[], Integer, IndexInterval> constructor) {
+        // Size zero
+        Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[0], 0));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[10], 0));
+        // Not sorted
+        Assertions.assertThrows(IllegalArgumentException.class,
+            () -> constructor.apply(new int[] {3, 2, 1}, 3));
+        // Not unique
+        Assertions.assertThrows(IllegalArgumentException.class,
+            () -> constructor.apply(new int[] {1, 2, 2, 3}, 4));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPreviousNextIndex"})
+    void testPreviousNextScanningKeyIndexInterval(int[] indices) {
+        assertPreviousNextIndex(ScanningKeyIndexInterval.of(indices, indices.length), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPreviousNextIndex"})
+    void testPreviousNextBinarySearchKeyIndexInterval(int[] indices) {
+        assertPreviousNextIndex(BinarySearchKeyIndexInterval.of(indices, indices.length), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPreviousNextIndex"})
+    void testPreviousNextIndexSet(int[] indices) {
+        // Skip this due to excess memory consumption
+        Assumptions.assumeTrue(indices[indices.length - 1] < Integer.MAX_VALUE - 1);
+        assertPreviousNextIndex(IndexSet.of(indices, indices.length), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPreviousNextIndex"})
+    void testPreviousNextCompressedIndexSet(int[] indices) {
+        // Skip this due to excess memory consumption
+        Assumptions.assumeTrue(indices[indices.length - 1] < Integer.MAX_VALUE - 1);
+        // The test is adjusted as the compressed index set does not store all indices.
+        // So we scan previous and next instead and check we do not miss the index.
+        for (final int c : new int[] {1, 2, 3}) {
+            final IndexInterval interval = CompressedIndexSet.of(c, indices, indices.length);
+            final int nm1 = indices.length - 1;
+            Assertions.assertEquals(indices[0], interval.left());
+            Assertions.assertEquals(indices[nm1], interval.right());
+            // Number of steps between indices should be less twice the
+            // compression level minus 1. Max steps required @ compression 2:
+            // -------i---------n-----
+            // -------cccc---cccc----  Compressed indices cover 4 real indices
+            final int maxSteps = (1 << (c + 1)) - 1;
+            for (int i = 0; i < indices.length; i++) {
+                if (i > 0) {
+                    final int prev = indices[i - 1];
+                    int steps = 1;
+                    int j = interval.previousIndex(indices[i] - 1);
+                    while (j > prev) {
+                        steps++;
+                        j = interval.previousIndex(j - 1);
+                    }
+                    Assertions.assertEquals(prev, j);
+                    Assertions.assertTrue(steps <= maxSteps);
+                }
+                Assertions.assertEquals(indices[i], interval.previousIndex(indices[i]));
+                Assertions.assertEquals(indices[i], interval.nextIndex(indices[i]));
+                if (i < nm1) {
+                    final int next = indices[i + 1];
+                    int steps = 1;
+                    int j = interval.nextIndex(indices[i] + 1);
+                    while (j < next) {
+                        steps++;
+                        j = interval.nextIndex(j + 1);
+                    }
+                    Assertions.assertEquals(next, j);
+                    Assertions.assertTrue(steps <= maxSteps);
+                }
+            }
+        }
+    }
+
+    private static void assertPreviousNextIndex(IndexInterval interval, int[] indices) {
+        final int nm1 = indices.length - 1;
+        Assertions.assertEquals(indices[0], interval.left());
+        Assertions.assertEquals(indices[nm1], interval.right());
+
+        // For performance scanning is not supported outside the range
+        //Assertions.assertTrue(interval.previousIndex(indices[0] - 1) < indices[0]);
+        //Assertions.assertTrue(interval.nextIndex(indices[nm1] + 1) > indices[nm1]);
+
+        for (int i = 0; i < indices.length; i++) {
+            if (i > 0) {
+                Assertions.assertEquals(indices[i - 1], interval.previousIndex(indices[i] - 1));
+            }
+            Assertions.assertEquals(indices[i], interval.previousIndex(indices[i]));
+            Assertions.assertEquals(indices[i], interval.nextIndex(indices[i]));
+            if (i < nm1) {
+                Assertions.assertEquals(indices[i + 1], interval.nextIndex(indices[i] + 1));
+            }
+        }
+    }
+
+    static Stream<int[]> testPreviousNextIndex() {
+        final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
+        final Stream.Builder<int[]> builder = Stream.builder();
+        builder.accept(new int[] {4});
+        builder.accept(new int[] {4, 78});
+        builder.accept(new int[] {4, 78, 999});
+        builder.accept(new int[] {4, 78, 79, 999});
+        builder.accept(new int[] {4, 5, 6, 7, 8});
+        for (final int size : new int[] {10, 50, 500}) {
+            for (final int n : new int[] {2, 5, 10}) {
+                final int[] a = rng.ints(n, 0, size).distinct().sorted().toArray();
+                builder.accept(a.clone());
+                // Force use of index 0 and max index
+                a[0] = 0;
+                a[a.length - 1] = Integer.MAX_VALUE - 1;
+                builder.accept(a);
+            }
+        }
+        return builder.build();
+    }
+}

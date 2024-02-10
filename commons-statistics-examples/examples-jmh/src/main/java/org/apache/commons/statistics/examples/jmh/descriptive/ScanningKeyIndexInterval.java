@@ -26,8 +26,8 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 final class ScanningKeyIndexInterval implements IndexInterval {
     /** The ordered keys. */
     private final int[] keys;
-    /** The original number of keys + 1. This is more convenient to store for the use cases. */
-    private final int np1;
+    /** The original number of keys. */
+    private final int n;
 
     /**
      * Create an instance with the provided keys.
@@ -36,20 +36,12 @@ final class ScanningKeyIndexInterval implements IndexInterval {
      * @param n Number of indices.
      */
     ScanningKeyIndexInterval(int[] indices, int n) {
-        np1 = n + 1;
-        // Copy indices with room for sentinal values.
-        keys = new int[n + 2];
-        System.arraycopy(indices, 0, keys, 1, n);
-        // Set sentinal values
-        keys[0] = -1;
-        keys[np1] = Integer.MAX_VALUE;
+        keys = indices;
+        this.n = n;
     }
 
     /**
-     * Initialise an instance with the {@code indices}. The indices are copied.
-     *
-     * <p>This will error if a memory allocation of an integer array of size {@code n + 2}
-     * is invalid. In practice this should be used with a small number of indices.
+     * Initialise an instance with {@code n} initial {@code indices}. The indices are used in place.
      *
      * @param indices Indices.
      * @param n Number of indices.
@@ -81,22 +73,20 @@ final class ScanningKeyIndexInterval implements IndexInterval {
 
     @Override
     public int left() {
-        return keys[1];
+        return keys[0];
     }
 
     @Override
     public int right() {
-        return keys[np1 - 1];
+        return keys[n - 1];
     }
 
     @Override
     public int previousIndex(int k) {
         // Scan the sorted keys from the end.
-        // No index checks required as the key (assumed to be a positive index)
-        // cannot be less than the sentinal value -1.
-        // IndexOutOfBoundsException indicates incorrect usage by the caller which should
-        // call using a valid positive index k in [0, 2^31-1).
-        for (int i = np1;;) {
+        // Assume left <= k <= right thus no index checks required.
+        // IndexOutOfBoundsException indicates incorrect usage by the caller.
+        for (int i = n;;) {
             if (keys[--i] <= k) {
                 return keys[i];
             }
@@ -106,12 +96,9 @@ final class ScanningKeyIndexInterval implements IndexInterval {
     @Override
     public int nextIndex(int k) {
         // Scan the sorted keys from the start.
-        // No index checks required as the key (assumed to be a positive index)
-        // cannot be greater than the sentinal value MAX_VALUE. It could
-        // be equal to it but then k would not be a valid index into an array.
-        // IndexOutOfBoundsException indicates incorrect usage by the caller which should
-        // call using a valid positive index k in [0, 2^31-1).
-        for (int i = 0;;) {
+        // Assume left <= k <= right thus no index checks required.
+        // IndexOutOfBoundsException indicates incorrect usage by the caller.
+        for (int i = -1;;) {
             if (keys[++i] >= k) {
                 return keys[i];
             }

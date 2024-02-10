@@ -80,18 +80,17 @@ class CompressedIndexSetTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testGetSet"})
-    void testPreviousIndex(int[] indices, int n) {
+    void testPreviousIndexOrLeftMinus1(int[] indices, int n) {
         for (final int c : COMPRESSION) {
             final CompressedIndexSet set = createCompressedIndexSet(c, indices);
             final BitSet ref = new BitSet(n);
             final int left = set.left();
             final int right = set.right();
-            final int range = 1 << c;
             Arrays.sort(indices);
             final int highBit = indices[indices.length - 1];
-            Assertions.assertEquals(set.left() - 1, set.previousIndex(0));
-            Assertions.assertEquals(set.left() - 1, set.previousIndex(highBit));
-            Assertions.assertEquals(set.left() - 1, set.previousIndex(highBit * 2));
+            Assertions.assertEquals(set.left() - 1, set.previousIndexOrLeftMinus1(0));
+            Assertions.assertEquals(set.left() - 1, set.previousIndexOrLeftMinus1(highBit));
+            Assertions.assertEquals(set.left() - 1, set.previousIndexOrLeftMinus1(highBit * 2));
             for (final int i : indices) {
                 final int lo = getCompressedIndexLow(c, left, i);
                 final int hi = getCompressedIndexHigh(c, left, right, i);
@@ -101,7 +100,7 @@ class CompressedIndexSetTest {
                 }
                 if (contains) {
                     for (int j = lo; j <= hi; j++) {
-                        Assertions.assertEquals(j, set.previousIndex(j), () -> "contains: " + i);
+                        Assertions.assertEquals(j, set.previousIndexOrLeftMinus1(j), () -> "contains: " + i);
                     }
                 } else {
                     int prev = ref.previousSetBit(lo);
@@ -110,35 +109,34 @@ class CompressedIndexSetTest {
                     } else {
                         prev = getCompressedIndexHigh(c, left, right, prev);
                     }
-                    Assertions.assertEquals(prev, set.previousIndex(i), () -> "previous upper: " + i);
+                    Assertions.assertEquals(prev, set.previousIndexOrLeftMinus1(i), () -> "previous upper: " + i);
                 }
                 set.set(i);
                 ref.set(i);
                 // Re-check within
                 for (int j = lo; j <= hi; j++) {
-                    Assertions.assertEquals(j, set.previousIndex(j), () -> "within: " + i);
+                    Assertions.assertEquals(j, set.previousIndexOrLeftMinus1(j), () -> "within: " + i);
                 }
                 // Check after
-                Assertions.assertEquals(hi, set.previousIndex(hi + 1), () -> "after: " + i);
-                Assertions.assertEquals(hi, set.previousIndex(hi + 42), () -> "after: " + i);
+                Assertions.assertEquals(hi, set.previousIndexOrLeftMinus1(hi + 1), () -> "after: " + i);
+                Assertions.assertEquals(hi, set.previousIndexOrLeftMinus1(hi + 42), () -> "after: " + i);
             }
         }
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testGetSet"})
-    void testNextIndex(int[] indices, int n) {
+    void testNextIndexOrRightPlus1(int[] indices, int n) {
         for (final int c : COMPRESSION) {
             final CompressedIndexSet set = createCompressedIndexSet(c, indices);
             final BitSet ref = new BitSet(n);
             final int left = set.left();
             final int right = set.right();
-            final int range = 1 << c;
             Arrays.sort(indices);
             final int highBit = indices[indices.length - 1];
-            Assertions.assertEquals(set.right() + 1, set.nextIndex(0));
-            Assertions.assertEquals(set.right() + 1, set.nextIndex(highBit));
-            Assertions.assertEquals(set.right() + 1, set.nextIndex(highBit * 2));
+            Assertions.assertEquals(set.right() + 1, set.nextIndexOrRightPlus1(0));
+            Assertions.assertEquals(set.right() + 1, set.nextIndexOrRightPlus1(highBit));
+            Assertions.assertEquals(set.right() + 1, set.nextIndexOrRightPlus1(highBit * 2));
             // Process in descending order
             for (int i = -1, j = indices.length; ++i < --j;) {
                 final int k = indices[i];
@@ -154,7 +152,7 @@ class CompressedIndexSetTest {
                 }
                 if (contains) {
                     for (int j = lo; j <= hi; j++) {
-                        Assertions.assertEquals(j, set.nextIndex(j), () -> "contains: " + i);
+                        Assertions.assertEquals(j, set.nextIndexOrRightPlus1(j), () -> "contains: " + i);
                     }
                 } else {
                     int next = ref.nextSetBit(lo);
@@ -163,17 +161,48 @@ class CompressedIndexSetTest {
                     } else {
                         next = getCompressedIndexLow(c, left, next);
                     }
-                    Assertions.assertEquals(next, set.nextIndex(i), () -> "next upper: " + i);
+                    Assertions.assertEquals(next, set.nextIndexOrRightPlus1(i), () -> "next upper: " + i);
                 }
                 set.set(i);
                 ref.set(i);
                 // Re-check within
                 for (int j = lo; j <= hi; j++) {
-                    Assertions.assertEquals(j, set.nextIndex(j), () -> "within: " + i);
+                    Assertions.assertEquals(j, set.nextIndexOrRightPlus1(j), () -> "within: " + i);
                 }
                 // Check before
-                Assertions.assertEquals(lo, set.nextIndex(lo - 1), () -> "before: " + i);
-                Assertions.assertEquals(lo, set.nextIndex(lo - 42), () -> "before: " + i);
+                Assertions.assertEquals(lo, set.nextIndexOrRightPlus1(lo - 1), () -> "before: " + i);
+                Assertions.assertEquals(lo, set.nextIndexOrRightPlus1(lo - 42), () -> "before: " + i);
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet"})
+    void testNextPreviousIndex(int[] indices, int ignored) {
+        for (final int c : COMPRESSION) {
+            final CompressedIndexSet set = CompressedIndexSet.of(c, indices, indices.length);
+            final int left = set.left();
+            final int right = set.right();
+            Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.previousIndex(left - 1));
+            Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.previousIndex(right + Long.SIZE << c));
+            Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.nextIndex(left - 1));
+            Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.nextIndex(right + Long.SIZE << c));
+            for (final int i : indices) {
+                // Test against validated method
+                final int lo = getCompressedIndexLow(c, left, i);
+                final int hi = getCompressedIndexHigh(c, left, right, i);
+                // Search with left <= k <= right
+                Assertions.assertTrue(lo >= left && hi <= right);
+                for (int j = lo; j <= hi; j++) {
+                    Assertions.assertEquals(set.previousIndexOrLeftMinus1(j), set.previousIndex(j));
+                    Assertions.assertEquals(set.nextIndexOrRightPlus1(j), set.nextIndex(j));
+                }
+                if (lo > left) {
+                    Assertions.assertEquals(set.previousIndexOrLeftMinus1(lo - 1), set.previousIndex(lo - 1));
+                }
+                if (hi < right) {
+                    Assertions.assertEquals(set.nextIndexOrRightPlus1(hi + 1), set.nextIndex(hi + 1));
+                }
             }
         }
     }
