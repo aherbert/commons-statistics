@@ -75,13 +75,15 @@ final class BinarySearchKeyIndexInterval implements IndexInterval {
 
     @Override
     public int previousIndex(int k) {
-        // Assume left <= k <= right
+        // Assume left <= k <= right thus no index checks required.
+        // IndexOutOfBoundsException indicates incorrect usage by the caller.
         return keys[Partition.searchLessOrEqual(keys, 0, nm1, k)];
     }
 
     @Override
     public int nextIndex(int k) {
-        // Assume left <= k <= right
+        // Assume left <= k <= right thus no index checks required.
+        // IndexOutOfBoundsException indicates incorrect usage by the caller.
         return keys[Partition.searchGreaterOrEqual(keys, 0, nm1, k)];
     }
 }
