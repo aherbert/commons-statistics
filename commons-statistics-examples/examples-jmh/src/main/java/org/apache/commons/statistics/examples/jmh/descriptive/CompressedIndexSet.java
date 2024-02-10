@@ -20,18 +20,37 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * A fixed size set of indices within an inclusive range {@code [left, right]}.
  *
  * <p>This is a specialised class to implement a data structure similar to a
- * {@link java.util.BitSet}. It uses no bounds range checks and supports only a
- * fixed size. It contains the methods required to store and look-up intervals of indices.
+ * {@link java.util.BitSet}. It supports a fixed size and contains the methods required to
+ * store and look-up intervals of indices.
  *
  * <p>An offset is supported to allow the fixed size to cover a range of indices starting
  * above 0 with the most efficient usage of storage.
  *
  * <p>In contrast to a {@link java.util.BitSet}, the data structure does not store all
- * indices in the range. Indices are compressed by a power of 2. The structure can
- * return with 100% accuracy if a query index is not within the range. It cannot return with
- * 100% accuracy is a query index is contained within the range. The presence of a query index
+ * indices in the range. Indices are compressed by a power of 2. The structure can return
+ * with 100% accuracy if a query index is not within the range. It cannot return with 100%
+ * accuracy if a query index is contained within the range. The presence of a query index
  * is a probabilistic statement that there is an index within a range of the query index.
- * The range is defined by the compression level.
+ * The range is defined by the compression level {@code c}.
+ *
+ * <p>Indices are stored offset from {@code left} and compressed. A compressed index
+ * represents 2<sup>c</sup> indices:
+ *
+ * <pre>
+ *  Interval:         012345678
+ *  Compressed (c=1): 0-1-2-3-4
+ *  Compressed (c=2): 0---1---2
+ *  Compressed (c=2): 0-------1
+ * </pre>
+ *
+ * <p>When scanning for the next index the identified compressed index is decompressed and
+ * the lower bound of the range represented by the index is returned.
+ *
+ * <p>When scanning for the previous index the identified compressed index is decompressed
+ * and the upper bound of the range represented by the index is returned.
+ *
+ * <p>When scanning in either direction, if the search index is inside a compressed index
+ * the search index is returned.
  *
  * <p>See the BloomFilter code in Commons Collections for use of long[] data to store
  * bits.
@@ -50,14 +69,10 @@ final class CompressedIndexSet implements IndexInterval {
 
     /** Left bound of the support. */
     private final int left;
-    /** Left bound of the support. */
+    /** Right bound of the support. */
     private final int right;
     /** Compression level. */
     private final int compression;
-    /** Inclusive width of the interval represented by a compressed index. For example
-     * a compression level of 2 compresses indices [0, 3] to 1 index; this stores
-     * the width 3. */
-    private final int compressionWidth;
 
     /**
      * Create an instance to store indices within the range {@code [left, right]}.
@@ -68,12 +83,10 @@ final class CompressedIndexSet implements IndexInterval {
      */
     private CompressedIndexSet(int compression, int l, int r) {
         this.compression = compression;
-        this.compressionWidth = (1 << compression) - 1;
         this.left = l;
-        // Store the functional upper bound in right.
-        // Compress the index, decompress and add the width of indices represented by a compressed index
-        this.right = (compressIndex(r - l, compression) << compression) + l + compressionWidth;
-        // Allocate storage to store compressed index==right
+        // Note: The functional upper bound may be higher but the next/previous functionality
+        // support scanning in the original [left, right] bound.
+        this.right = r;
         // Note: This may allow directly writing to index > right if there
         // is extra capacity.
         data = new long[getLongIndex(r - l) + 1];
@@ -93,7 +106,7 @@ final class CompressedIndexSet implements IndexInterval {
         checkCompression(compression);
         checkLeft(left);
         checkRange(left, right);
-        return new CompressedIndexSet(left, right, compression);
+        return new CompressedIndexSet(compression, left, right);
     }
 
     /**
@@ -140,17 +153,6 @@ final class CompressedIndexSet implements IndexInterval {
             set.set(indices[i]);
         }
         return set;
-    }
-
-    /**
-     * Gets the compressed index.
-     *
-     * @param index Index.
-     * @param compression Compression level.
-     * @return the compressed index
-     */
-    private static int compressIndex(int index, int compression) {
-        return index >>> compression;
     }
 
     /**
@@ -254,17 +256,17 @@ final class CompressedIndexSet implements IndexInterval {
     public int previousIndex(int k) {
         if (k < left) {
             // index is in an unknown range
-            return -1;
+            return left - 1;
         }
         // Support searching backward through the known range
-        final int index = k > right ? data.length - 1 : compressIndex(k);
+        final int index = compressIndex(k > right ? right : k);
 
         int i = getLongIndex(index);
         long bits = data[i];
 
         // Check if this is within a compressed index. If so return the exact result.
-        if (k <= right && (bits & getLongBit(index)) != 0) {
-            return k;
+        if ((bits & getLongBit(index)) != 0) {
+            return Math.min(k, right);
         }
 
         // Mask bits before the bit index
@@ -273,16 +275,16 @@ final class CompressedIndexSet implements IndexInterval {
         for (;;) {
             if (bits != 0) {
                 //(i+1)       i
-                // |  index   |
-                // |    |     |
+                // |   c      |
+                // |   |      |
                 // 0  001010000
-                final int c = (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits) - 1;
-                // Decompress the index. When inflated this is the lower bound of
-                // the compressed range so add the width of the compressed index for previous scanning.
-                return (c << compression) + left + compressionWidth;
+                final int c = (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits);
+                // Decompress the prior unset bit to an index. When inflated this is the
+                // next index above the upper bound of the compressed range so subtract 1.
+                return (c << compression) - 1 + left;
             }
             if (i == 0) {
-                return -1;
+                return left - 1;
             }
             bits = data[--i];
         }
@@ -292,17 +294,17 @@ final class CompressedIndexSet implements IndexInterval {
     public int nextIndex(int k) {
         if (k > right) {
             // index is in an unknown range
-            return -1;
+            return right + 1;
         }
         // Support searching forward through the known range
-        final int index = k < left ? 0 : compressIndex(k);
+        final int index = compressIndex(k < left ? left : k);
 
         int i = getLongIndex(index);
         long bits = data[i];
 
         // Check if this is within a compressed index. If so return the exact result.
-        if (k >= left && (bits & getLongBit(index)) != 0) {
-            return k;
+        if ((bits & getLongBit(index)) != 0) {
+            return Math.max(k, left);
         }
 
         // Mask bits after the bit index
@@ -311,16 +313,16 @@ final class CompressedIndexSet implements IndexInterval {
         for (;;) {
             if (bits != 0) {
                 //(i+1)       i
-                // |    index |
+                // |      c   |
                 // |      |   |
                 // 0  001010000
-                final int c = i * Long.SIZE + Long.numberOfTrailingZeros(bits) - 1;
-                // Decompress the index. When inflated this is the lower bound of
-                // the compressed range is OK for next scanning.
+                final int c = i * Long.SIZE + Long.numberOfTrailingZeros(bits);
+                // Decompress the set bit to an index. When inflated this is the lower bound of
+                // the compressed range and is OK for next scanning.
                 return (c << compression) + left;
             }
             if (++i == data.length) {
-                return -1;
+                return right + 1;
             }
             bits = data[i];
         }
