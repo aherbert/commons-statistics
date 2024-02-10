@@ -627,6 +627,22 @@ class PartitionTest {
             new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionISBM);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMCompressedIndexSet(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
+            .setCompression(1)::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMCompressedIndexSet2(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
+            .setCompression(2)::partitionISBM);
+    }
+
 //    @ParameterizedTest
 //    @MethodSource(value = {"testPartition"})
 //    void testPartitionDP(double[] values, int[] indices) {
