@@ -286,7 +286,13 @@ class IndexSetTest {
         return builder.build();
     }
 
-    private IndexSet createIndexSet(int[] indices) {
+    /**
+     * Creates the index set using the min/max of the indices.
+     *
+     * @param indices Indices.
+     * @return the set
+     */
+    private static IndexSet createIndexSet(int[] indices) {
         final int min = Arrays.stream(indices).min().getAsInt();
         final int max = Arrays.stream(indices).max().getAsInt();
         return IndexSet.ofRange(min, max);
