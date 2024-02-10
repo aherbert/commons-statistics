@@ -4639,6 +4639,14 @@ final class Partition {
 
         final double value = data[pivot];
 
+        //// Fast-forward initial less-than region ???
+        // This is not noticeable when many repeat values are present.
+        // When no repeat values are present this is slower.
+        //int lt = left;
+        //while (data[lt] < value) {
+        //    lt++;
+        //}
+
         // Pointers positioned to use pre-increment/decrement: ++x / --x
         int lt = left - 1;
         int gt = right + 1;
@@ -4684,7 +4692,7 @@ final class Partition {
         ++lt;
         upper[0] = --gt;
 
-        // In contrast to version 1 and 2 there is no requirement to file the central
+        // In contrast to version 1 and 2 there is no requirement to fill the central
         // region with the pivot value as it was filled during the sweep
 
         return lt;
