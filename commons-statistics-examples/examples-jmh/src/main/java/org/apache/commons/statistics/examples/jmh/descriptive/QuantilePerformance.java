@@ -119,6 +119,8 @@ public class QuantilePerformance {
     private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+.?\\d*)");
     /** Pattern for the recursion constant. */
     private static final Pattern RC_PATTERN = Pattern.compile("RC(\\d+)");
+    /** Pattern for the compression level. */
+    private static final Pattern CL_PATTERN = Pattern.compile("CL(\\d+)");
 
     /**
      * Source of {@code double} array data.
@@ -729,6 +731,7 @@ public class QuantilePerformance {
         p.setKeyStrategy(getKeyStrategy(name));
         p.setRecursionMultiple(getRecursionMultiple(name));
         p.setRecursionConstant(getRecursionConstant(name));
+        p.setCompression(getCompressionLevel(name));
         return p;
     }
 
@@ -807,6 +810,20 @@ public class QuantilePerformance {
             return Integer.parseInt(name, m.start(1), m.end(1), 10);
         }
         return Partition.RECURSION_CONSTANT;
+    }
+
+    /**
+     * Gets the compression level for {@link CompressedIndexSet}.
+     *
+     * @param name Algorithm name.
+     * @return the compression
+     */
+    static int getCompressionLevel(String name) {
+        final Matcher m = CL_PATTERN.matcher(name);
+        if (m.find()) {
+            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+        }
+        return Partition.COMPRESSION;
     }
 
     /**
