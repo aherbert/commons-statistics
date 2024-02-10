@@ -53,7 +53,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * the search index is returned.
  *
  * <p>Note: Search for the {@link IndexInterval} interface outside the supported bounds
- * {@code [left, right]} is not supported and will result in {@link IndexOutOfBoundsException}.
+ * {@code [left, right]} is not supported and will result in an {@link IndexOutOfBoundsException}.
  *
  * <p>See the BloomFilter code in Commons Collections for use of long[] data to store
  * bits.

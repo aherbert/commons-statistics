@@ -60,6 +60,9 @@ final class Partition {
     static final double RECURSION_MULTIPLE = 2;
     /** Default recursion constant. */
     static final int RECURSION_CONSTANT = 0;
+    /** Default compression. */
+    static final int COMPRESSION = 1;
+
     /** Minimum length between 2 pivots {@code p2 - p1} that requires a full sort. */
     private static final int SORT_BETWEEN_SIZE = 2;
     /** Mask to extract the positive index from an integer. */
@@ -108,6 +111,8 @@ final class Partition {
     /** Constant {@code c} added to the length based recursion factor {@code x}.
      * The recursion is set using {@code m * x + c}. */
     private int recursionConstant = RECURSION_CONSTANT;
+    /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
+    private int compression = COMPRESSION;
 
     /**
      * Define the strategy for processing multiple keys.
@@ -943,6 +948,20 @@ final class Partition {
      */
     Partition setRecursionConstant(int v) {
         this.recursionConstant = v;
+        return this;
+    }
+
+    /**
+     * Sets the compression for a {@link CompressedIndexSet}.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setCompression(int v) {
+        if (v < 1 || v > Integer.SIZE - 1) {
+            throw new IllegalArgumentException("Bad compression: " + v);
+        }
+        this.compression = v;
         return this;
     }
 
@@ -3105,6 +3124,10 @@ final class Partition {
         } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_SET) {
+            // Note: Here we do not have to sort keys.
+            final IndexInterval keys = CompressedIndexSet.of(compression, k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.

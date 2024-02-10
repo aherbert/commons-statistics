@@ -74,4 +74,15 @@ class QuantilePerformanceTest {
         Assertions.assertEquals(15, QuantilePerformance.getRecursionConstant("beforeRC15after"));
         Assertions.assertEquals(16, QuantilePerformance.getRecursionConstant("beforeQS26_RC16after"));
     }
+
+    @Test
+    void testGetCompressionLevel() {
+        Assertions.assertEquals(Partition.COMPRESSION, QuantilePerformance.getCompressionLevel("nothing"));
+        Assertions.assertEquals(2, QuantilePerformance.getCompressionLevel("CL2"));
+        Assertions.assertEquals(12, QuantilePerformance.getCompressionLevel("CL12"));
+        Assertions.assertEquals(13, QuantilePerformance.getCompressionLevel("beforeCL13"));
+        Assertions.assertEquals(14, QuantilePerformance.getCompressionLevel("CL14after"));
+        Assertions.assertEquals(15, QuantilePerformance.getCompressionLevel("beforeCL15after"));
+        Assertions.assertEquals(16, QuantilePerformance.getCompressionLevel("beforeQS26_CL16after"));
+    }
 }
