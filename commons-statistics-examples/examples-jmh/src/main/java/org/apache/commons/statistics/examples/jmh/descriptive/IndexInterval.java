@@ -27,9 +27,8 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * <li>Return the next index contained in the interval from a search point {@code k}.
  * </ul>
  *
- * <p>Note that the interval provides the supported bounds. If a search passes the end
- * of the bounds then the result is only defined as below or above the bounds. The interval
- * is intended to be used for searching inside an interval.
+ * <p>Note that the interval provides the supported bounds. If a search begins outside
+ * the supported bounds the result is undefined.
  *
  * <p>Implementations may assume indices are positive.
  *
@@ -53,19 +52,23 @@ interface IndexInterval {
 
     /**
      * Returns the nearest index that occurs on or before the specified starting
-     * index. If none exist then a value below the {@code left} bound of support is returned.
+     * index.
+     *
+     * <p>If {@code k < left} or {@code k > right} the result is undefined.
      *
      * @param k Index to start checking from (inclusive).
-     * @return the previous index, or a value below {@code left} if there is no index
+     * @return the previous index
      */
     int previousIndex(int k);
 
     /**
      * Returns the nearest index that occurs on or after the specified starting
-     * index. If none exist then a value above the {@code right} bound of support is returned.
+     * index.
+     *
+     * <p>If {@code k < left} or {@code k > right} the result is undefined.
      *
      * @param k Index to start checking from (inclusive).
-     * @return the next index, or a value above {@code right} if there is no index
+     * @return the next index
      */
     int nextIndex(int k);
 }
