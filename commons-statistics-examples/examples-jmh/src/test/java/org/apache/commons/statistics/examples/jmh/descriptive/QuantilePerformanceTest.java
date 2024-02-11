@@ -42,13 +42,23 @@ class QuantilePerformanceTest {
     }
 
     @Test
-    void testGetMinHeapSelectSize() {
-        Assertions.assertEquals(Partition.MIN_HEAPSELECT_SIZE, QuantilePerformance.getMinHeapSelectSize("nothing"));
-        Assertions.assertEquals(12, QuantilePerformance.getMinHeapSelectSize("HS12"));
-        Assertions.assertEquals(13, QuantilePerformance.getMinHeapSelectSize("beforeHS13"));
-        Assertions.assertEquals(14, QuantilePerformance.getMinHeapSelectSize("HS14after"));
-        Assertions.assertEquals(15, QuantilePerformance.getMinHeapSelectSize("beforeHS15after"));
-        Assertions.assertEquals(16, QuantilePerformance.getMinHeapSelectSize("beforeQS26_HS16after"));
+    void testGetHeapSelectShift() {
+        Assertions.assertEquals(Partition.HEAPSELECT_SHIFT, QuantilePerformance.getHeapSelectShift("nothing"));
+        Assertions.assertEquals(12, QuantilePerformance.getHeapSelectShift("HS12"));
+        Assertions.assertEquals(13, QuantilePerformance.getHeapSelectShift("beforeHS13"));
+        Assertions.assertEquals(14, QuantilePerformance.getHeapSelectShift("HS14after"));
+        Assertions.assertEquals(15, QuantilePerformance.getHeapSelectShift("beforeHS15after"));
+        Assertions.assertEquals(16, QuantilePerformance.getHeapSelectShift("beforeQS26_HS16after"));
+    }
+
+    @Test
+    void testGetHeapSelectConstant() {
+        Assertions.assertEquals(Partition.HEAPSELECT_CONSTANT, QuantilePerformance.getHeapSelectConstant("nothing"));
+        Assertions.assertEquals(12, QuantilePerformance.getHeapSelectConstant("HC12"));
+        Assertions.assertEquals(13, QuantilePerformance.getHeapSelectConstant("beforeHC13"));
+        Assertions.assertEquals(14, QuantilePerformance.getHeapSelectConstant("HC14after"));
+        Assertions.assertEquals(15, QuantilePerformance.getHeapSelectConstant("beforeHC15after"));
+        Assertions.assertEquals(16, QuantilePerformance.getHeapSelectConstant("beforeQS26_HC16after"));
     }
 
     @Test
