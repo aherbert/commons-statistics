@@ -38,8 +38,12 @@ import org.junit.jupiter.params.provider.MethodSource;
 class PartitionTest {
     /** Default single pivot strategy. */
     private static final PivotingStrategy SP = PivotingStrategy.MEDIAN_OF_3;
+    /** Default single pivot strategy. */
+    private static final DualPivotingStrategy DP = DualPivotingStrategy.SORT_5;
     /** Default minimum quick select length. */
     private static final int QS = 3;
+    /** Default minimum quick select length for dual pivot. */
+    private static final int QS2 = 5;
     /** Default heap select shift. Using 31 disable length dependence. */
     private static final int HS = 31;
     /** Default heap select constant. */
@@ -729,6 +733,13 @@ class PartitionTest {
     void testSortIDNF3(double[] values) {
         assertSort(values,
             new Partition(SP, QS)::sortIDNF3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortIDP(double[] values) {
+        assertSort(values,
+            new Partition(DP, QS2)::sortIDP);
     }
 
     @ParameterizedTest
