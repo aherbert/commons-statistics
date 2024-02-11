@@ -110,6 +110,9 @@ public class QuantilePerformance {
      * partitioning, switching to heapselect when progress is poor. The DNF algorithm is appened
      * as a suffix. */
     private static final String IDNF = "IDNF";
+    /** Commons Statistics Quantile introselect implementation with dual-pivot
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String IDP = "IDP";
 
     /** Pattern for the minimum quickselect size. */
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
@@ -526,6 +529,8 @@ public class QuantilePerformance {
                 } else {
                     function = part::sortIDNF3;
                 }
+            } else if (name.startsWith(IDP)) {
+                function = createPartition(name)::sortIDP;
             } else if ("InsertionSort".equals(name)) {
                 function = x -> KthSelector.insertionSort(x, 0, x.length, false);
             } else {
@@ -724,11 +729,12 @@ public class QuantilePerformance {
      * @return the {@link Partition} instance
      */
     static Partition createPartition(String name) {
+        final PivotingStrategy sp = getPivotStrategy(name);
+        final DualPivotingStrategy dp = getDualPivotStrategy(name);
         final int minQuickSelectSize = getMinQuickSelectSize(name);
         final int heapSelectShift = getHeapSelectShift(name);
         final int heapSelectConstant = getHeapSelectConstant(name);
-        final PivotingStrategy s = getPivotStrategy(name);
-        final Partition p = new Partition(s, minQuickSelectSize, heapSelectShift, heapSelectConstant);
+        final Partition p = new Partition(sp, dp, minQuickSelectSize, heapSelectShift, heapSelectConstant);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(getKeyStrategy(name));
@@ -862,6 +868,32 @@ public class QuantilePerformance {
      */
     static PivotingStrategy getPivotStrategyOrEsle(String name, PivotingStrategy defaultValue) {
         for (final PivotingStrategy s : PivotingStrategy.values()) {
+            if (name.contains(s.name())) {
+                return s;
+            }
+        }
+        return defaultValue;
+    }
+
+    /**
+     * Gets the dual pivot strategy for the recursive partition algorithm.
+     *
+     * @param name Algorithm name.
+     * @return the dual pivot strategy
+     */
+    static DualPivotingStrategy getDualPivotStrategy(String name) {
+        return getDualPivotStrategyOrEsle(name, Partition.DUAL_PIVOTING_STRATEGY);
+    }
+
+    /**
+     * Gets the dual pivot strategy for the recursive partition algorithm.
+     *
+     * @param name Algorithm name.
+     * @param defaultValue Default value.
+     * @return the dual pivot strategy
+     */
+    static DualPivotingStrategy getDualPivotStrategyOrEsle(String name, DualPivotingStrategy defaultValue) {
+        for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
             if (name.contains(s.name())) {
                 return s;
             }

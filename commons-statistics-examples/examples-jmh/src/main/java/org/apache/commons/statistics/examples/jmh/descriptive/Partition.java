@@ -47,6 +47,8 @@ final class Partition {
 
     /** Default pivoting strategy. */
     static final PivotingStrategy PIVOTING_STRATEGY = PivotingStrategy.MEDIAN_OF_3;
+    /** Default pivoting strategy. */
+    static final DualPivotingStrategy DUAL_PIVOTING_STRATEGY = DualPivotingStrategy.SORT_5;
     /** Minimum selection size for quickselect.
      * Below this switch to insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in the original paper. */
@@ -91,6 +93,8 @@ final class Partition {
 
     /** A {@link PivotingStrategy} used for pivoting. */
     private final PivotingStrategy pivotingStrategy;
+    /** A {@link DualPivotingStrategy} used for pivoting. */
+    private final DualPivotingStrategy dualPivotingStrategy;
 
     /** Minimum size for quickselect. Below this threshold partitioning using quickselect
      * is stopped and a full sort is performed. */
@@ -851,6 +855,7 @@ final class Partition {
             sort(a, k3 + 1, right, true, rightInner);
         }
     }
+
     /**
      * Single-pivot partition method handling equal values.
      */
@@ -870,7 +875,7 @@ final class Partition {
          * }</pre>
          * <ul>
          * <li>k0: lower pivot point
-         * <li>k1: upper pivot point
+         * <li>k1: upper pivot point (inclusive)
          * </ul>
          *
          * @param a Data array.
@@ -884,38 +889,123 @@ final class Partition {
     }
 
     /**
-     * Constructor with defaults.
+     * Dual-pivot partition method handling equal values.
      */
-    Partition() {
-        this(PIVOTING_STRATEGY);
+    @FunctionalInterface
+    private interface DPPartition {
+        /**
+         * Partition an array slice around two pivots. Partitioning exchanges array
+         * elements such that all elements smaller than pivot are before it and all
+         * elements larger than pivot are after it.
+         *
+         * <p>Note: Requires that the range contains no NaN values.
+         *
+         * <p>This method returns 4 points describing the pivot ranges of equal values.
+         * <pre>{@code
+         *         |k0  k1|                |k2  k3|
+         * |   <P  | ==P1 |  <P1 && <P2    | ==P2 |   >P   |
+         * }</pre>
+         * <ul>
+         * <li>k0: lower pivot1 point
+         * <li>k1: upper pivot1 point (inclusive)
+         * <li>k2: lower pivot2 point
+         * <li>k3: upper pivot2 point (inclusive)
+         * </ul>
+         *
+         * <p>Bounds are set so {@code i < k0},  {@code i > k3} and {@code k1 < i < k2} are
+         * unsorted. When the range {@code [k0, k3]} contains fully sorted elements the result
+         * is set to {@code k1 = k2 = k3}. This can occur if
+         * {@code P1 == P2} or there are zero or 1 value between the pivots
+         * {@code P1 < v < P2}. Any sort between {@code k1 + 1} and {@code k2 - 1} must handle
+         * a negative length. Any select of an index interval {@code [ka, kb]} that identifies
+         * {@code k1 < kb || ka < k2} must also check {@code k2 - k1 > 1}.
+         *
+         * @param a Data array.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param bounds Points [k1, k2, k3].
+         * @param pivot1 Pivot1 location.
+         * @param pivot2 Pivot2 location.
+         * @return Lower bound (inclusive) of the pivot range [k0].
+         */
+        int partition(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds);
     }
 
     /**
-     * Constructor with specified pivoting strategy.
-     *
-     * @param pivotingStrategy Pivoting strategy to use.
+     * Constructor with defaults.
      */
-    Partition(PivotingStrategy pivotingStrategy) {
-        this(pivotingStrategy, MIN_QUICKSELECT_SIZE, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+    Partition() {
+        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY,
+            MIN_QUICKSELECT_SIZE, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
     }
 
     /**
      * Constructor with specified quickselect size.
      *
+     * <p>Used to test key analysis based on the quickselect size.
+     *
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(int minQuickSelectSize) {
-        this(PIVOTING_STRATEGY, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
     }
 
     /**
      * Constructor with specified pivoting strategy and quickselect size.
      *
+     * <p>Used to test single-pivot quicksort.
+     *
      * @param pivotingStrategy Pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize) {
-        this(pivotingStrategy, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+    }
+
+    /**
+     * Constructor with specified pivoting strategy and quickselect size.
+     *
+     * <p>Used to test dual-pivot quicksort.
+     *
+     * @param dualPivotingStrategy Dual pivoting strategy to use.
+     * @param minQuickSelectSize Minimum size for quickselect.
+     */
+    Partition(DualPivotingStrategy dualPivotingStrategy, int minQuickSelectSize) {
+        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+    }
+
+    /**
+     * Constructor with specified pivoting strategy; quickselect size; and heapselect configuration.
+     *
+     * <p>Used to test single-pivot quickselect.
+     *
+     * @param pivotingStrategy Pivoting strategy to use.
+     * @param minQuickSelectSize Minimum size for quickselect.
+     * @param heapSelectShift Length shift used for heap select distance from end threshold.
+     * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
+     */
+    Partition(PivotingStrategy pivotingStrategy,
+        int minQuickSelectSize, int heapSelectShift,
+        int heapSelectConstant) {
+        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, heapSelectShift, heapSelectConstant);
+    }
+
+    /**
+     * Constructor with specified dual-pivoting strategy; quickselect size; and heapselect configuration.
+     *
+     * <p>Used to test dual-pivot quickselect.
+     *
+     * @param dualPivotingStrategy Dual pivoting strategy to use.
+     * @param minQuickSelectSize Minimum size for quickselect.
+     * @param heapSelectShift Length shift used for heap select distance from end threshold.
+     * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
+     */
+    Partition(DualPivotingStrategy dualPivotingStrategy,
+        int minQuickSelectSize, int heapSelectShift,
+        int heapSelectConstant) {
+        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, heapSelectShift, heapSelectConstant);
     }
 
     /**
@@ -928,12 +1018,14 @@ final class Partition {
      * </pre>
      *
      * @param pivotingStrategy Pivoting strategy to use.
+     * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
      * @param heapSelectConstant Length shift used for heap select distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
-    Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize, int heapSelectShift,
+    Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
+        int minQuickSelectSize, int heapSelectShift,
         int heapSelectConstant) {
         // Shift only uses lowest 5 bits. It should use [0, 31].
         // If bits outside this are set the shift is invalid.
@@ -941,6 +1033,7 @@ final class Partition {
             throw new IllegalArgumentException("Invalid shift: " + heapSelectShift);
         }
         this.pivotingStrategy = pivotingStrategy;
+        this.dualPivotingStrategy = dualPivotingStrategy;
         this.minQuickSelectSize = minQuickSelectSize;
         this.heapSelectShift = heapSelectShift;
         this.heapSelectConstant = heapSelectConstant;
@@ -2891,7 +2984,7 @@ final class Partition {
     }
 
     /**
-     * Sort the array using an introsort. The quicksort partition method is provided as an argument.
+     * Sort the array using an introsort. The single-pivot partition method is provided as an argument.
      * Switches to heapsort when recursive partitioning reaches a maximum depth.
      *
      * <p>The partition method is not required to handle signed zeros.
@@ -2947,7 +3040,7 @@ final class Partition {
     /**
      * Sort the array.
      *
-     * <p>Uses an introsort. The quicksort partition method is provided as an argument.
+     * <p>Uses an introsort. The single-pivot partition method is provided as an argument.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
      * may be destroyed (the mixture updated during partitioning). The caller is
@@ -2987,6 +3080,110 @@ final class Partition {
 
             // Recurse right side
             introsort(part, a, p1 + 1, r, --maxDepth);
+            // Continue on the left side
+            r = p0 - 1;
+        }
+    }
+
+    /**
+     * Sort the array using an introsort. The dual-pivot partition method is provided as an argument.
+     * Switches to heapsort when recursive partitioning reaches a maximum depth.
+     *
+     * <p>The partition method is not required to handle signed zeros.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @see <a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
+     */
+    private void introsort(DPPartition part, double[] a) {
+        // Handle NaN / signed zeros
+        int cn = 0;
+        int end = a.length;
+        for (int i = end; i > 0;) {
+            final double v = a[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                a[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                a[i] = a[--end];
+                a[end] = v;
+            }
+        }
+        if (end <= 1) {
+            // Nothing to sort
+            return;
+        }
+        introsort(part, a, 0, end - 1, createMaxDepthDualPivot(end));
+        // Restore signed zeros
+        if (cn != 0) {
+            // Find a zero
+            int j = Arrays.binarySearch(a, 0.0);
+            // Scan back to before zero
+            while (--j >= 0) {
+                if (a[j] != 0) {
+                    break;
+                }
+            }
+            // Fix. Assume the zeros are all present so just overwrite
+            // the required count of signed zeros.
+            while (--cn >= 0) {
+                a[++j] = -0.0;
+            }
+        }
+    }
+
+    /**
+     * Sort the array.
+     *
+     * <p>Uses an introsort. The dual-pivot partition method is provided as an argument.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
+     * may be destroyed (the mixture updated during partitioning). The caller is
+     * responsible for counting a mixture of signed zeros and restoring them if
+     * required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param maxDepth Maximum depth for recursion.
+     * @see <a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
+     */
+    private void introsort(DPPartition part, double[] a, int left, int right, int maxDepth) {
+        // Only two regions require recursion. The third region
+        // can remain within this function call.
+        final int l = left;
+        int r = right;
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // Full sort of small data
+            if (r - l < minQuickSelectSize) {
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSort(a, l, r);
+                return;
+            }
+
+            // Pick 2 pivots and partition
+            int p0 = dualPivotingStrategy.pivotIndex(a, l, r, upper);
+            p0 = part.partition(a, l, r, p0, upper[0], upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            // Recurse middle and right sides
+            introsort(part, a, p1 + 1, p2 - 1, --maxDepth);
+            introsort(part, a, p3 + 1, r, maxDepth);
             // Continue on the left side
             r = p0 - 1;
         }
@@ -4124,6 +4321,19 @@ final class Partition {
     }
 
     /**
+     * Sort the data using an intrasort.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortIDP(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionDP, data);
+    }
+
+    /**
      * Partition an array slice around a pivot. Partitioning exchanges array elements such
      * that all elements smaller than pivot are before it and all elements larger than
      * pivot are after it.
@@ -4834,7 +5044,234 @@ final class Partition {
         // region with the pivot value as it was filled during the sweep
 
         return lt;
+    }
 
+    /**
+     * Partition an array slice around 2 pivots. Partitioning exchanges array elements
+     * such that all elements smaller than pivot are before it and all elements larger
+     * than pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values. This does not respect the
+     * ordering of signed zeros.
+     *
+     * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
+     *
+     * <p>This method assumes {@code a[pivot1] <= a[pivot2]}.
+     * If {@code pivot1 == pivot2} this triggers a switch to a single-pivot method.
+     * It is assumed this indicates that choosing two pivots failed due to many equal
+     * values. In this case the single-pivot method uses a Dutch National Flag algorithm
+     * suitable for many equal values.
+     *
+     * <p>This method returns 4 points describing the pivot ranges of equal values.
+     *
+     * <pre>{@code
+     *         |k0  k1|                |k2  k3|
+     * |   <P  | ==P1 |  <P1 && <P2    | ==P2 |   >P   |
+     * }</pre>
+     *
+     * <ul> <li>k0: lower pivot1 point <li>k1: upper pivot1 point (inclusive) <li>k2:
+     * lower pivot2 point <li>k3: upper pivot2 point (inclusive) </ul>
+     *
+     * <p>Bounds are set so {@code i < k0},  {@code i > k3} and {@code k1 < i < k2} are
+     * unsorted. When the range {@code [k0, k3]} contains fully sorted elements the result
+     * is set to {@code k1 = k2 = k3}. This can occur if
+     * {@code P1 == P2} or there are zero or 1 value between the pivots
+     * {@code P1 < v < P2}. Any sort between {@code k1 + 1} and {@code k2 - 1} must handle
+     * a negative length. Any select of an index interval {@code [ka, kb]} that identifies
+     * {@code k1 < kb || ka < k2} must also check {@code k2 - k1 > 1}.
+     *
+     * @param a Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param bounds Points [k1, k2, k3].
+     * @param pivot1 Pivot1 location.
+     * @param pivot2 Pivot2 location.
+     * @return Lower bound (inclusive) of the pivot range [k0].
+     */
+    private static int partitionDP(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds) {
+        // Allow caller to choose a single-pivot
+        if (pivot1 == pivot2) {
+            // Switch to a single pivot sort. This is used when there are
+            // estimated to be many equal values so use the fastest equal
+            // value single pivot method.
+            int lower = partitionDNF3(a, left, right, pivot1, bounds);
+            // Set dual pivot range
+            bounds[2] = bounds[0];
+            // No unsorted internal region (set k1 = k2 = k3)
+            bounds[1] = bounds[0];
+            return lower;
+        }
+
+        // Dual-pivot quicksort method by Vladimir Yaroslavskiy.
+        //
+        // Partition data using pivots P1 and P2 into less-than, greater-than or between.
+        // Pivot values P1 & P2 are placed at the end. If P1 < P2, P2 acts as a sentinal.
+        // k traverses the unknown region ??? and values moved if less-than (lt) or
+        // greater-than (gt):
+        //
+        // left        lt                k           gt        right
+        // |P1|  <P1   |   P1 <= & <= P2 |    ???    |    >P2   |P2|
+        //
+        // <P1           (left, lt)
+        // P1<= & <= P2  [lt, k)
+        // >P2           (gt, right)
+        //
+        // At the end pivots are swapped back to behind the lt and gt pointers.
+        //
+        // |  <P1        |P1|     P1<= & <= P2    |P2|      >P2    |
+        //
+        // Adapted from Yaroslavskiy
+        // http://codeblab.com/wp-content/uploads/2009/09/DualPivotQuicksort.pdf
+        //
+        // Modified to allow partial sorting (partitioning):
+        // - Allow the caller to supply the pivot indices
+        // - Ignore insertion sort for tiny array (handled by calling code)
+        // - Ignore recursive calls for a full sort (handled by calling code)
+        // - Change to fast-forward over initial ascending / descending runs
+        // - Change to a single-pivot partition method if the pivots are equal
+        // - Change to fast-forward great when v > v2 and either break the sorting
+        //   loop, or move a[great] direct to the correct location.
+        // - Change to remove the 'div' parameter used to control the pivot selection
+        //   using the medians method (div initialises as 3 for 1/3 and 2/3 and increments
+        //   when the central region is too large).
+        // - Identify a large central region using ~5/8 of the length.
+        // - TODO: Change lt to mark the inclusive end of the less-than region
+        // - TODO: Change gt to mark the inclusive end of the greater-than region
+
+        final double v1 = a[pivot1];
+        final double v2 = a[pivot2];
+
+        // Move ends to the pivot locations.
+        // After sorting the final pivot locations are overwritten.
+        a[pivot1] = a[left];
+        a[pivot2] = a[right];
+        // It is assumed
+        //a[left] = v1
+        //a[right] = v2
+
+        // Can this be written to use pre increment/decrement?
+
+        // pointers
+        // less marks the exclusive end of the less-than region: a[less - 1] < P1
+        // great marks the exclusive end of the greater-than region: a[great + 1] > p2
+        int less = left + 1;
+        int great = right - 1;
+
+        // Fast-forward ascending / descending runs to reduce swaps
+        while (a[less] < v1) {
+            less++;
+        }
+        while (a[great] > v2) {
+            great--;
+        }
+
+        // sorting: unvisited in [less, great]
+        SORTING:
+        for (int k = less; k <= great; k++) {
+            final double v = a[k];
+            if (v < v1) {
+                //swap(a, k, less++)
+                a[k] = a[less];
+                a[less] = v;
+                less++;
+            } else if (v > v2) {
+                // Original
+                //while (k < great && a[great] > pivot2) {
+                //    great--;
+                //}
+                while (a[great] > v2) {
+                    if (great-- == k) {
+                        // Done
+                        break SORTING;
+                    }
+                }
+                // swap(a, k, great--)
+                // if (a[k] < pivot1)
+                //    swap(a, k, less++)
+                final double w = a[great];
+                a[great] = v;
+                great--;
+                // a[k] = w
+                if (w < v1) {
+                    a[k] = a[less];
+                    a[less] = w;
+                    less++;
+                } else {
+                    a[k] = w;
+                }
+            }
+        }
+
+        // less marks the exclusive end of the less-than region: a[less - 1] < P1
+        // great marks the exclusive end of the greater-than region: a[great + 1] > p2
+        // swaps
+        //swap(a, less - 1, left)
+        //swap(a, great + 1, right)
+        a[left] = a[less - 1];
+        a[less - 1] = v1;
+        a[right] = a[great + 1];
+        a[great + 1] = v2;
+
+        // Record the pivot locations
+        int lower = less - 1;
+        bounds[2] = great + 1;
+
+        // equal elements
+        // Original paper: If middle partition is bigger than a threshold
+        // then check for equal elements.
+
+        // Here we look for equal elements if the centre is more than 5/8 the length.
+        // 5/8 = 1/2 + 1/8. Pivots must be different.
+        if ((great - less) > ((right - left) >>> 1) + ((right - left) >>> 3) && v1 != v2) {
+
+            // Fast-forward to reduce swaps
+            while (a[less] == v1) {
+                less++;
+            }
+            while (a[great] == v2) {
+                great--;
+            }
+
+            // This copies the logic in the sorting loop using == comparisons
+            EQUAL:
+            for (int k = less; k <= great; k++) {
+                final double v = a[k];
+                if (v == v1) {
+                    a[k] = a[less];
+                    a[less] = v;
+                    less++;
+                } else if (v == v2) {
+                    while (a[great] == v2) {
+                        if (great-- == k) {
+                            // Done
+                            break EQUAL;
+                        }
+                    }
+                    final double w = a[great];
+                    a[great] = v;
+                    great--;
+                    if (w == v1) {
+                        a[k] = a[less];
+                        a[less] = w;
+                        less++;
+                    } else {
+                        a[k] = w;
+                    }
+                }
+            }
+        }
+
+        // Between pivots in [less, great]
+        if (v1 < v2 && less < great) {
+            // Record the pivot end points
+            bounds[0] = less - 1;
+            bounds[1] = great + 1;
+        } else {
+            // No unsorted internal region (set k1 = k2 = k3)
+            bounds[0] = bounds[1] = bounds[2];
+        }
+
+        return lower;
     }
 
     /**
