@@ -478,7 +478,7 @@ public class QuantilePerformance {
             // Not run by default as it is slow on large data
             //"InsertionSort",
             //"BM25"
-            ISBM,
+            ISBM, IDP,
             })
         private String name;
 
