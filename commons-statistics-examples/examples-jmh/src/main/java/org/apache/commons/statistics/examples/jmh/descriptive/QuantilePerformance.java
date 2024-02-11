@@ -113,8 +113,10 @@ public class QuantilePerformance {
 
     /** Pattern for the minimum quickselect size. */
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
-    /** Pattern for the minimum heapselect size. */
+    /** Pattern for the heapselect shift. */
     private static final Pattern HS_PATTERN = Pattern.compile("HS(\\d+)");
+    /** Pattern for the heapselect constant. */
+    private static final Pattern HC_PATTERN = Pattern.compile("HC(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
     private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+.?\\d*)");
     /** Pattern for the recursion constant. */
@@ -723,9 +725,10 @@ public class QuantilePerformance {
      */
     static Partition createPartition(String name) {
         final int minQuickSelectSize = getMinQuickSelectSize(name);
-        final int minHeapSelectSize = getMinHeapSelectSize(name);
+        final int heapSelectShift = getHeapSelectShift(name);
+        final int heapSelectConstant = getHeapSelectConstant(name);
         final PivotingStrategy s = getPivotStrategy(name);
-        final Partition p = new Partition(s, minQuickSelectSize, minHeapSelectSize);
+        final Partition p = new Partition(s, minQuickSelectSize, heapSelectShift, heapSelectConstant);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(getKeyStrategy(name));
@@ -771,17 +774,31 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the minimum size for the heapselect partition algorithm.
+     * Gets the length shift for the heapselect distance-from-end computation.
      *
      * @param name Algorithm name.
-     * @return the minimum heapselect size
+     * @return the heapselect shift
      */
-    static int getMinHeapSelectSize(String name) {
+    static int getHeapSelectShift(String name) {
         final Matcher m = HS_PATTERN.matcher(name);
         if (m.find()) {
             return Integer.parseInt(name, m.start(1), m.end(1), 10);
         }
-        return Partition.MIN_HEAPSELECT_SIZE;
+        return Partition.HEAPSELECT_SHIFT;
+    }
+
+    /**
+     * Gets the constant for the heapselect distance-from-end computation.
+     *
+     * @param name Algorithm name.
+     * @return the heapselect constant
+     */
+    static int getHeapSelectConstant(String name) {
+        final Matcher m = HC_PATTERN.matcher(name);
+        if (m.find()) {
+            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+        }
+        return Partition.HEAPSELECT_CONSTANT;
     }
 
     /**
