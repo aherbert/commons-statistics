@@ -52,11 +52,23 @@ class DualPivotingStrategyTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testSort5IsSorted"})
+    @MethodSource(value = {"testSort5", "testSort5IsSorted"})
     void testSort5B(double[] a) {
+        assertPivots(a, DualPivotingStrategy.SORT_5B);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5", "testSort5IsSorted"})
+    void testSort5C(double[] a) {
+        assertPivots(a, DualPivotingStrategy.SORT_5C);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort5J(double[] a) {
         // Does not work well for small length
         Assumptions.assumeTrue(a.length > 40);
-        assertPivots(a, DualPivotingStrategy.SORT_5B);
+        assertPivots(a, DualPivotingStrategy.SORT_5J);
     }
 
     private static void assertPivots(double[] a, DualPivotingStrategy s) {
@@ -102,20 +114,27 @@ class DualPivotingStrategyTest {
 
     @Test
     void testMediansIndexing() {
-        // Safe from length 2
         assertIndexing(DualPivotingStrategy.MEDIANS, 2);
     }
 
     @Test
     void testSort5Indexing() {
-        // Safe from length 5
         assertIndexing(DualPivotingStrategy.SORT_5, 5);
     }
 
     @Test
     void testSort5BIndexing() {
-        // Safe from length 5
-        assertIndexing(DualPivotingStrategy.SORT_5B, 4);
+        assertIndexing(DualPivotingStrategy.SORT_5B, 5);
+    }
+
+    @Test
+    void testSort5CIndexing() {
+        assertIndexing(DualPivotingStrategy.SORT_5C, 5);
+    }
+
+    @Test
+    void testSort5JIndexing() {
+        assertIndexing(DualPivotingStrategy.SORT_5J, 4);
     }
 
     private static void assertIndexing(DualPivotingStrategy s, int safeLength) {

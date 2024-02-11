@@ -66,6 +66,7 @@ enum DualPivotingStrategy {
     },
     /**
      * Pivot around the 2nd and 4th values from 5 approximately uniformly spaced within the range.
+     * Uses points +/- sixths from the median: 1/6, 1/3, 1/2, 2/3, 5/6.
      *
      * <p>Requires {@code right - left >= 4}.
      *
@@ -74,11 +75,11 @@ enum DualPivotingStrategy {
     SORT_5 {
         @Override
         int pivotIndex(double[] data, int left, int right, int[] pivot2) {
-            // Here we sort 5 points and choose 2 and 4 as the pivots: 1/6, 1/3, 1/2, 2/3, 5/6
-            // 1/6 ~ 1/8 + 1/32. Ensure the value is above zero to choose different points!
+            // 1/6 = 5/30 ~ 1/8 + 1/32 + 1/64 : 0.1666 ~ 0.1719
+            // Ensure the value is above zero to choose different points!
             // This is safe if len >= 4.
             final int len = right - left;
-            final int sixth = 1 + (len >>> 3) + (len >>> 5);
+            final int sixth = 1 + (len >>> 3) + (len >>> 5) + (len >>> 6);
             final int p3 = left + (len >>> 1);
             final int p2 = p3 - sixth;
             final int p1 = p2 - sixth;
@@ -92,12 +93,98 @@ enum DualPivotingStrategy {
         @Override
         int[] getSampledIndices(int left, int right) {
             final int len = right - left;
-            final int sixth = 1 + (len >>> 3) + (len >>> 5);
+            final int sixth = 1 + (len >>> 3) + (len >>> 5) + (len >>> 6);
             final int p3 = left + (len >>> 1);
             final int p2 = p3 - sixth;
             final int p1 = p2 - sixth;
             final int p4 = p3 + sixth;
             final int p5 = p4 + sixth;
+            return new int[] {p1, p2, p3, p4, p5};
+        }
+
+        @Override
+        int samplingEffect() {
+            return SORT;
+        }
+    },
+    /**
+     * Pivot around the 2nd and 4th values from 5 approximately uniformly spaced within the range.
+     * Uses points +/- sevenths from the median: 3/14, 5/14, 1/2, 9/14, 11/14.
+     *
+     * <p>Requires {@code right - left >= 4}.
+     *
+     * <p>Warning: This has the side effect that the 5 values are also sorted.
+     */
+    SORT_5B {
+        @Override
+        int pivotIndex(double[] data, int left, int right, int[] pivot2) {
+            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+            // Ensure the value is above zero to choose different points!
+            // This is safe if len >= 4.
+            final int len = right - left;
+            final int seventh = 1 + (len >>> 3) + (len >>> 6);
+            final int p3 = left + (len >>> 1);
+            final int p2 = p3 - seventh;
+            final int p1 = p2 - seventh;
+            final int p4 = p3 + seventh;
+            final int p5 = p4 + seventh;
+            Sorting.sort5(data, p1, p2, p3, p4, p5);
+            pivot2[0] = p4;
+            return p2;
+        }
+
+        @Override
+        int[] getSampledIndices(int left, int right) {
+            final int len = right - left;
+            final int seventh = 1 + (len >>> 3) + (len >>> 6);
+            final int p3 = left + (len >>> 1);
+            final int p2 = p3 - seventh;
+            final int p1 = p2 - seventh;
+            final int p4 = p3 + seventh;
+            final int p5 = p4 + seventh;
+            return new int[] {p1, p2, p3, p4, p5};
+        }
+
+        @Override
+        int samplingEffect() {
+            return SORT;
+        }
+    },
+    /**
+     * Pivot around the 2nd and 4th values from 5 approximately uniformly spaced within the range.
+     * Uses points +/- eights from the median: 1/4, 3/8, 1/2, 5/8, 3/4.
+     *
+     * <p>Requires {@code right - left >= 4}.
+     *
+     * <p>Warning: This has the side effect that the 5 values are also sorted.
+     */
+    SORT_5C {
+        @Override
+        int pivotIndex(double[] data, int left, int right, int[] pivot2) {
+            // 1/8 = 0.125
+            // Ensure the value is above zero to choose different points!
+            // This is safe if len >= 4.
+            final int len = right - left;
+            final int eighth = 1 + (len >>> 3);
+            final int p3 = left + (len >>> 1);
+            final int p2 = p3 - eighth;
+            final int p1 = p2 - eighth;
+            final int p4 = p3 + eighth;
+            final int p5 = p4 + eighth;
+            Sorting.sort5(data, p1, p2, p3, p4, p5);
+            pivot2[0] = p4;
+            return p2;
+        }
+
+        @Override
+        int[] getSampledIndices(int left, int right) {
+            final int len = right - left;
+            final int eighth = 1 + (len >>> 3);
+            final int p3 = left + (len >>> 1);
+            final int p2 = p3 - eighth;
+            final int p1 = p2 - eighth;
+            final int p4 = p3 + eighth;
+            final int p5 = p4 + eighth;
             return new int[] {p1, p2, p3, p4, p5};
         }
 
@@ -113,7 +200,7 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 5 values are also sorted.
      */
-    SORT_5B {
+    SORT_5J {
         @Override
         int pivotIndex(double[] data, int left, int right, int[] pivot2) {
             // JDK 11 method
