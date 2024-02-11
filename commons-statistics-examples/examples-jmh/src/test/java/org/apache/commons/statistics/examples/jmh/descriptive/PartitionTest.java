@@ -36,6 +36,15 @@ import org.junit.jupiter.params.provider.MethodSource;
  * Test for {@link Partition}.
  */
 class PartitionTest {
+    /** Default single pivot strategy. */
+    private static final PivotingStrategy SP = PivotingStrategy.MEDIAN_OF_3;
+    /** Default minimum quick select length. */
+    private static final int QS = 3;
+    /** Default heap select shift. Using 31 disable length dependence. */
+    private static final int HS = 31;
+    /** Default heap select constant. */
+    private static final int HC = 2;
+
     /**
      * Partition function. Used to test different implementations.
      */
@@ -324,23 +333,23 @@ class PartitionTest {
             }
         }
         builder.add(Arguments.of(new double[] {-1, -1, -1, 4, 3, 2, 1, y}, 3, 6));
-//        builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
-//        builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
-//        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
-//        for (final int size : new int[] {5, 10}) {
-//            final double[] values = rng.doubles(size).toArray();
-//            builder.add(Arguments.of(values.clone(), 0, size - 1));
-//            builder.add(Arguments.of(values.clone(), size >>> 1, size - 1));
-//            builder.add(Arguments.of(values.clone(), 1, size >>> 1));
-//        }
-//        builder.add(Arguments.of(new double[] {-0.0, 0.0}, 0, 1));
-//        builder.add(Arguments.of(new double[] {0.0, -0.0}, 0, 1));
-//        builder.add(Arguments.of(new double[] {-0.0, -0.0}, 0, 1));
-//        builder.add(Arguments.of(new double[] {0.0, 0.0}, 0, 1));
-//        builder.add(Arguments.of(new double[] {0.0, -0.0, 0.0, -0.0}, 0, 3));
-//        builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0, 0.0}, 0, 3));
-//        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
-//        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
+        builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+        for (final int size : new int[] {5, 10}) {
+            final double[] a = rng.doubles(size).toArray();
+            builder.add(Arguments.of(a.clone(), 0, size - 1));
+            builder.add(Arguments.of(a.clone(), size >>> 1, size - 1));
+            builder.add(Arguments.of(a.clone(), 1, size >>> 1));
+        }
+        builder.add(Arguments.of(new double[] {-0.0, 0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {0.0, -0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {-0.0, -0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {0.0, 0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {0.0, -0.0, 0.0, -0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0, 0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
         return builder.build();
     }
 
@@ -444,193 +453,89 @@ class PartitionTest {
         }
     }
 
-//    @ParameterizedTest
-//    @MethodSource
-//    void testSelect(double[] values) {
-//        final double[] sorted = values.clone();
-//        Arrays.sort(sorted);
-//        final Partition selector = new Partition();
-//        final double[] kp1 = new double[1];
-//        for (int i = 0; i < sorted.length; i++) {
-//            final int k = i;
-//            double[] x = values.clone();
-//            Assertions.assertEquals(sorted[k], selector.selectSP(x, k, null), () -> "k[" + k + "]");
-//            Arrays.sort(x);
-//            Assertions.assertArrayEquals(sorted, x, () -> "Data destroyed: k[" + k + "]");
-//            if (k + 1 < sorted.length) {
-//                x = values.clone();
-//                Assertions.assertEquals(sorted[k], selector.selectSP(x, k, kp1), () -> "k[" + k + "] with k+1");
-//                Assertions.assertEquals(sorted[k + 1], kp1[0], () -> "k+1[" + (k + 1) + "]");
-//                Arrays.sort(x);
-//                Assertions.assertArrayEquals(sorted, x, () -> "Data destroyed: k[" + k + "] with k+1");
-//            }
-//        }
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSelect"})
-//    void testSelectSPN(double[] values) {
-//        final double[] sorted = values.clone();
-//        Arrays.sort(sorted);
-//        final Partition selector = new Partition();
-//        final double[] kp1 = new double[1];
-//        for (int i = 0; i < sorted.length; i++) {
-//            final int k = i;
-//            double[] x = values.clone();
-//            Assertions.assertEquals(sorted[k], selector.selectSPN(x, k, null), () -> "k[" + k + "]");
-//            Arrays.sort(x);
-//            Assertions.assertArrayEquals(sorted, x, () -> "Data destroyed: k[" + k + "]");
-//            if (k + 1 < sorted.length) {
-//                x = values.clone();
-//                Assertions.assertEquals(sorted[k], selector.selectSPN(x, k, kp1), () -> "k[" + k + "] with k+1");
-//                Assertions.assertEquals(sorted[k + 1], kp1[0], () -> "k+1[" + (k + 1) + "]");
-//                Arrays.sort(x);
-//                Assertions.assertArrayEquals(sorted, x, () -> "Data destroyed: k[" + k + "] with k+1");
-//            }
-//        }
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSelect"})
-//    void testSelectSPWithHeap(double[] values) {
-//        final double[] sorted = values.clone();
-//        Arrays.sort(sorted);
-//        final Partition selector = new Partition();
-//        final double[] kp1 = new double[1];
-//        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
-//        final int[] indices = IntStream.range(0, sorted.length).toArray();
-//        for (int n = 0; n < 3; n++) {
-//            TestUtils.shuffle(rng, indices);
-//            final double[] x = values.clone();
-//            final int[] pivotsHeap = Partition.createPivotsHeap(sorted.length);
-//            for (int i = 0; i < sorted.length; i++) {
-//                final int k = indices[i];
-//                Assertions.assertEquals(sorted[k], selector.selectSPH(x, pivotsHeap, k, null), () -> "k[" + k + "]");
-//                if (k + 1 < sorted.length) {
-//                    Assertions.assertEquals(sorted[k], selector.selectSPH(x, pivotsHeap, k, kp1), () -> "k[" + k + "] with k+1");
-//                    Assertions.assertEquals(sorted[k + 1], kp1[0], () -> "k+1[" + (k + 1) + "]");
-//                }
-//            }
-//            Arrays.sort(x);
-//            Assertions.assertArrayEquals(sorted, x, "Data destroyed");
-//        }
-//    }
-//
-//    static Stream<double[]> testSelect() {
-//        final Stream.Builder<double[]> builder = Stream.builder();
-//        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
-//        // Sizes above and below the threshold for partitioning
-//        for (final int size : new int[] {5, 50}) {
-//            final double[] values = IntStream.range(0, size).asDoubleStream().toArray();
-//            final double[] zeros = values.clone();
-//            final double[] nans = values.clone();
-//            Arrays.fill(zeros, 0, size >>> 2, -0.0);
-//            Arrays.fill(zeros, size >>> 2, size >>> 1, 0.0);
-//            Arrays.fill(nans, 0, 2, Double.NaN);
-//            for (int i = 0; i < 25; i++) {
-//                builder.add(TestUtils.shuffle(rng, values.clone()));
-//                builder.add(TestUtils.shuffle(rng, zeros.clone()));
-//            }
-//            for (int i = 0; i < 5; i++) {
-//                builder.add(TestUtils.shuffle(rng, nans.clone()));
-//            }
-//        }
-//        return builder.build();
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testPartition"})
-//    void testPartitionSP(double[] values, int[] indices) {
-//        assertPartition(values, indices, new Partition()::partitionSP);
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testPartition"})
-//    void testPartitionSPN(double[] values, int[] indices) {
-//        assertPartition(values, indices, new Partition()::partitionSPN);
-//    }
-//
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionSBMIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionSBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionSBMPivotCache(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionSBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionSBMSequential(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 0).setKeyStrategy(KeyStrategy.SEQUENTIAL)::partitionSBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.SEQUENTIAL)::partitionSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionKSBM(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionKSBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionKSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionK1SBM(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionK1SBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionK1SBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionPairedSBM(double[] values, int[] indices) {
         assertPartitionPaired(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionPairedSBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionPairedSBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionPairedSBMPivotCache(double[] values, int[] indices) {
         assertPartitionPaired(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionPairedSBM);
+            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionPairedSBM);
     }
+
+    // Introselect versions use heap select configuration.
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBM(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.ORDERED_KEYS)::partitionISBM);
+            new Partition(SP, QS, HS, HC).setKeyStrategy(KeyStrategy.ORDERED_KEYS)::partitionISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMScanningKey(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionISBM);
+            new Partition(SP, QS, HS, HC).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMSearchKey(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.SEARCH_KEY_INTERVAL)::partitionISBM);
+            new Partition(SP, QS, HS, HC).setKeyStrategy(KeyStrategy.SEARCH_KEY_INTERVAL)::partitionISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionISBM);
+            new Partition(SP, QS, HS, HC).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(1)::partitionISBM);
     }
@@ -638,29 +543,11 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexSet2(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(PivotingStrategy.MEDIAN_OF_3, 3, 3)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(2)::partitionISBM);
     }
 
-//    @ParameterizedTest
-//    @MethodSource(value = {"testPartition"})
-//    void testPartitionDP(double[] values, int[] indices) {
-//        assertPartition(values, indices, new Partition()::partitionDP);
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testPartition"})
-//    void testPartitionDP5(double[] values, int[] indices) {
-//        assertPartition(values, indices, new Partition()::partitionDP5);
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testPartition"})
-//    void testPartitionDNF(double[] values, int[] indices) {
-//        assertPartition(values, indices, new Partition()::partitionDNF);
-//    }
-//
     static void assertPartitionPaired(double[] values, int[] indices, DoublePartitionFunction2 function) {
         // Create a paired version of the indices.
         // We apply the partition function to this and test the result as if values
@@ -782,26 +669,14 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortRangeSBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 0)::sortRangeSBM);
+            new Partition(SP, 3)::sortRangeSBM);
     }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSort"})
-//    void testSortSP(double[] values) {
-//        assertSort(values, new Partition()::sortSP);
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSort"})
-//    void testSortBM(double[] values) {
-//        assertSort(values, new Partition()::sortBM);
-//    }
-//
+
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortSBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 0)::sortSBM);
+            new Partition(SP, 3)::sortSBM);
     }
 
     @ParameterizedTest
@@ -832,50 +707,29 @@ class PartitionTest {
     @MethodSource(value = {"testSort"})
     void testSortISBM(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortISBM);
+            new Partition(SP, QS)::sortISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIDNF1(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortIDNF1);
+            new Partition(SP, QS)::sortIDNF1);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIDNF2(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortIDNF2);
+            new Partition(SP, QS)::sortIDNF2);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIDNF3(double[] values) {
         assertSort(values,
-            new Partition(PivotingStrategy.DYNAMIC, 3, 3)::sortIDNF3);
+            new Partition(SP, QS)::sortIDNF3);
     }
-
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSort"})
-//    void testSortDP(double[] values) {
-//        assertSort(values, new Partition(PivotingStrategy.DYNAMIC, 3)::sortDP);
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSort"})
-//    void testSortDP5(double[] values) {
-//        // Requires at least 5 points
-//        assertSort(values, new Partition(PivotingStrategy.DYNAMIC, 5)::sortDP5);
-//    }
-//
-//    @ParameterizedTest
-//    @MethodSource(value = {"testSort"})
-//    void testSortDNF(double[] values) {
-//        assertSort(values, new Partition()::sortDNF);
-//    }
-//
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
