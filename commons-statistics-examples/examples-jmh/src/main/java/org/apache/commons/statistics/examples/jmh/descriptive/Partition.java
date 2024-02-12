@@ -3200,7 +3200,7 @@ final class Partition {
      *
      * <p>All indices are assumed to be within {@code [0, right]}.
      *
-     * <p>Uses an introselect variant. The quickselect is provided as an argument;
+     * <p>Uses an introselect variant. The dual-pivot quickselect is provided as an argument;
      * the fall-back on poor convergence of the quickselect is a heapselect.
      *
      * <p>The partition method is not required to handle signed zeros.
@@ -3751,7 +3751,274 @@ final class Partition {
         }
     }
 
-    // TODO - Add other implementations
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Uses an introselect variant. The dual pivot quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>The partition method is not required to handle signed zeros.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices (assumed to be strictly positive).
+     */
+    void introselect(DPPartition part, double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        int cn = 0;
+        int end = a.length;
+        for (int i = end; i > 0;) {
+            final double v = a[--i];
+            // Count negative zeros using a sign bit check.
+            // This requires a performance test. If the conversion to raw bits
+            // is natively supported this is faster than using the == check.
+            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
+            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
+                cn++;
+                // Change to positive zero.
+                // The later pass then only has to restore negatives.
+                a[i] = 0.0;
+            } else if (v != v) {
+                // Move NaN to end
+                a[i] = a[--end];
+                a[end] = v;
+            }
+        }
+        if (end <= 1) {
+            // Nothing to partition
+            return;
+        }
+
+        // Filter indices invalidated by NaN check
+        int n = count;
+        if (end < k.length) {
+            for (int i = n; i > 0;) {
+                final int v = k[--i];
+                if (v >= end) {
+                    // swap(k, i, --n)
+                    k[i] = k[--n];
+                    k[n] = v;
+                }
+            }
+            if (n == 0) {
+                // NaNs for all k
+                return;
+            }
+        }
+
+        introselect(part, a, end - 1, k, n);
+
+        // Restore signed zeros
+        if (cn != 0) {
+            // Use the partitioned indices to fast-forward as much as possible.
+            // Assumes partitioning has not changed indices (but
+            // reordering is OK).
+            int j = -1;
+            for (int i = 0; i < n; i++) {
+                if (k[i] < 0) {
+                    j = Math.max(j, k[i]);
+                }
+            }
+            // Fix. Assume the zeros are all present so no bounds checks
+            // are used when incrementing j. But we have to check for zeros
+            // before overwrite.
+            for (;;) {
+                if (a[++j] == 0) {
+                    a[j] = -0.0;
+                    if (--cn == 0) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Uses an introselect variant. The dual pivot quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
+     * may be destroyed (the mixture updated during partitioning). The caller is
+     * responsible for counting a mixture of signed zeros and restoring them if
+     * required.
+     *
+     * <p>This function assumes {@code n > 0} and {@code right > 0}; otherwise
+     * there is nothing to do.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices (assumed to be strictly positive).
+     */
+    private void introselect(DPPartition part, double[] a, int right, int[] k, int n) {
+        final int maxDepth = createMaxDepthSinglePivot(right + 1);
+        // Handle cases without multiple keys
+        if (n == 1) {
+            introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+            return;
+        }
+        // Special case for partition around adjacent indices (for interpolation)
+        if (n == 2 && k[0] + 1 == k[1]) {
+            introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+            return;
+        }
+
+        // Detect possible saturated range.
+        // minimum keys = 10
+        // min separation = 2^3  (could use log2(minQuickSelectSize) here)
+        // saturation = 0.95
+        //if (keysAreSaturated(right + 1, k, n, 10, 3, 0.95)) {
+        //    Arrays.sort(a, 0, right + 1);
+        //    return;
+        //}
+
+        // Note: Sorting to unique keys is an overhead. This can be eliminated
+        // by requesting the caller passes sorted keys (or quantiles in order).
+
+        if (keyStrategy == KeyStrategy.SCANNING_KEY_INTERVAL) {
+            final int unique = Sorting.sortIndices(k, n);
+            final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INTERVAL) {
+            final int unique = Sorting.sortIndices(k, n);
+            final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_SET) {
+            // Note: Here we do not have to sort keys.
+            final IndexInterval keys = CompressedIndexSet.of(compression, k, n);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.INDEX_SET) {
+            // Note: Here we do not have to sort keys.
+            final IndexSet keys = IndexSet.of(k, n);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else {
+            throw new IllegalStateException("Unsupported dual-pivot introselect: " + keyStrategy);
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts a {@link IndexInterval} of indices {@code k} and the
+     * first index {@code ka} and last index {@code kb} that define the range of indices
+     * to partition. The {@link IndexInterval} is used to search for keys in {@code [ka, kb]}
+     * to create {@code [ka, kb1]} and {@code [ka1, kb]} if partitioning splits the range.
+     *
+     * <pre>{@code
+     * left <= ka <= kb <= right
+     * }</pre>
+     *
+     * <p>Uses an introselect variant. The dual pivot quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Interval of indices to partition (ordered).
+     * @param ka First key.
+     * @param kb Last key.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    private void introselect(DPPartition part, double[] a, int left, int right,
+        IndexInterval k, int ka, int kb, int maxDepth) {
+        // Left and right sides requires recursion. The other side
+        // can remain within this function call.
+        int l = left;
+        int r = right;
+        int ka1 = ka;
+        int kb1 = kb;
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // length - 1
+            final int n = r - l;
+
+            // It is possible to use heapselect when ka1 and kb1 are close to the same end
+            // |l|-----|ka1|--------|kb1|------|r|
+            //  ---------s2-----------
+            //          ----------s4-----------
+            if (maxDepth == 0 ||
+                Math.min(kb1 - l, r - ka1) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                // Too much recursion, or ka1 and kb1 are both close to the same end
+                heapSelectRange(a, l, r, ka1, kb1);
+                return;
+            }
+
+            if (n < minQuickSelectSize) {
+                // Full sort of small data
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+
+            // Pick 2 pivots and partition
+            int p0 = dualPivotingStrategy.pivotIndex(a, l, r, upper);
+            p0 = part.partition(a, l, r, p0, upper[0], upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            // Recursion to max depth
+            // Note: Here we possibly branch left, middle and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set in each region.
+            //                    p0 p1                p2 p3
+            // |l|--|ka1|--k----k--|P|------k--|kb1|----|P|----|r|
+            //                 kb1  |      ka1
+            // Search previous/next is bounded at ka1/kb1
+            maxDepth--;
+            // Recurse right side if required
+            if (kb1 > p3) {
+                introselect(part, a, p3 + 1, r, k,
+                    ka1 > p3 ? ka1 : k.nextIndex(p3 + 1), kb1, maxDepth);
+            }
+            // Recurse left side if required
+            if (ka1 < p0) {
+                introselect(part, a, l, p0 - 1, k,
+                    ka1, kb1 < p0 ? kb1 : k.previousIndex(p0 - 1), maxDepth);
+            }
+            // Continue in the middle
+            if (ka1 < p2 && kb1 > p1 && p2 - p1 > 1) {
+                l = p1 + 1;
+                r = p2 - 1;
+                ka1 = ka1 > p1 ? ka1 : k.nextIndex(l);
+                kb1 = kb1 < p2 ? kb1 : k.previousIndex(r);
+            } else {
+                // No middle
+                return;
+            }
+        }
+    }
 
     /**
      * Partition the array such that indices {@code k} correspond to their correctly
@@ -3982,6 +4249,29 @@ final class Partition {
      */
     void partitionISBM(double[] data, int[] k, int n) {
         introselect(Partition::partitionSBM, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     *
+     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
+     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionIDP(double[] data, int[] k, int n) {
+        introselect((DPPartition) Partition::partitionDP, data, k, n);
     }
 
     /**
@@ -5098,6 +5388,7 @@ final class Partition {
             // Set dual pivot range
             bounds[2] = bounds[0];
             // No unsorted internal region (set k1 = k2 = k3)
+            // Note: It is extra work for the caller to detect that this region and this can be skipped.
             bounds[1] = bounds[0];
             return lower;
         }
@@ -5158,9 +5449,7 @@ final class Partition {
             --great;
         } while (a[great] > v2);
 
-        // less marks the exclusive end of the less-than region: a[less - 1] < P1
-        // great marks the exclusive end of the greater-than region: a[great + 1] > P2
-
+        // a[less - 1] < P1 : a[great + 1] > P2
         // sorting: unvisited in [less, great]
         SORTING:
         for (int k = less - 1; ++k <= great;) {
@@ -5198,12 +5487,10 @@ final class Partition {
             }
         }
 
-        // less marks the exclusive end of the less-than region: a[less - 1] < P1
-        // great marks the exclusive end of the greater-than region: a[great + 1] > P2
-        // Change to inclusive ends
+        // Change to inclusive ends : a[less] < P1 : a[great] > P2
         less--;
         great++;
-        // swaps
+        // Move the pivots to correct locations
         a[left] = a[less];
         a[less] = v1;
         a[right] = a[great];

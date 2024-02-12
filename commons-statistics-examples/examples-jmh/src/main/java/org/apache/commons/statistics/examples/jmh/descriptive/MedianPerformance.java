@@ -84,6 +84,9 @@ public class MedianPerformance {
     /** Commons Statistics Median introselect implementation with Sedgewick's Bentley-McIlroy
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
+    /** Commons Statistics Median introselect implementation with dual-pivot
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String IDP = "IDP";
 
     /**
      * Source of {@code double} array data.
@@ -126,7 +129,7 @@ public class MedianPerformance {
         /** Name of the source. */
         @Param({SORT, CM, SP, SP_NAN, SBM, BM, DP, DP5,
             SBM2,
-            ISBM,
+            ISBM, IDP,
         })
         private String name;
 
@@ -183,32 +186,34 @@ public class MedianPerformance {
             // Introselect implementations
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name)::evaluateISBM;
+            } else if (name.startsWith(IDP)) {
+                function = withPartition(name)::evaluateIDP;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
         }
-    }
 
-    /**
-     * Creates the {@link Median}.
-     * Parameters for the {@link KthSelector} are derived from the {@code name}.
-     *
-     * @param name Name.
-     * @return the {@link Median} instance
-     */
-    private static Median withKthSelector(String name) {
-        return Median.withDefaults().withKthSelector(QuantilePerformance.createKthSelector(name));
-    }
+        /**
+         * Creates the {@link Median}.
+         * Parameters for the {@link KthSelector} are derived from the {@code name}.
+         *
+         * @param name Name.
+         * @return the {@link Median} instance
+         */
+        private static Median withKthSelector(String name) {
+            return Median.withDefaults().withKthSelector(QuantilePerformance.createKthSelector(name));
+        }
 
-    /**
-     * Creates the {@link Median}.
-     * Parameters for the {@link Partition} are derived from the {@code name}.
-     *
-     * @param name Name.
-     * @return the {@link Median} instance
-     */
-    private static Median withPartition(String name) {
-        return Median.withDefaults().withPartition(QuantilePerformance.createPartition(name));
+        /**
+         * Creates the {@link Median}.
+         * Parameters for the {@link Partition} are derived from the {@code name}.
+         *
+         * @param name Name.
+         * @return the {@link Median} instance
+         */
+        private static Median withPartition(String name) {
+            return Median.withDefaults().withPartition(QuantilePerformance.createPartition(name));
+        }
     }
 
     /**

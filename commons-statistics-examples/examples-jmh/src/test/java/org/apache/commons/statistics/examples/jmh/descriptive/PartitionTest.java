@@ -552,6 +552,43 @@ class PartitionTest {
             .setCompression(2)::partitionISBM);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPScanningKey(double[] values, int[] indices) {
+        assertPartition(values, indices,
+            new Partition(DP, QS2, HS, HC).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPSearchKey(double[] values, int[] indices) {
+        assertPartition(values, indices,
+            new Partition(DP, QS2, HS, HC).setKeyStrategy(KeyStrategy.SEARCH_KEY_INTERVAL)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPIndexSet(double[] values, int[] indices) {
+        assertPartition(values, indices,
+            new Partition(DP, QS2, HS, HC).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPCompressedIndexSet(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
+            .setCompression(1)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPCompressedIndexSet2(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
+            .setCompression(2)::partitionIDP);
+    }
+
     static void assertPartitionPaired(double[] values, int[] indices, DoublePartitionFunction2 function) {
         // Create a paired version of the indices.
         // We apply the partition function to this and test the result as if values

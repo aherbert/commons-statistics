@@ -116,6 +116,12 @@ class MedianTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testMedian"})
+    void testMedianIDP(double[] values, double expected) {
+        Assertions.assertEquals(expected, Median.withDefaults().evaluateIDP(values));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testMedian"})
     void testMedianWithCentralPivotStrategy(double[] values, double expected) {
         final Median m = Median.withDefaults().withKthSelector(new KthSelector(PivotingStrategy.CENTRAL));
         Assertions.assertEquals(expected, m.evaluateSP(values));
