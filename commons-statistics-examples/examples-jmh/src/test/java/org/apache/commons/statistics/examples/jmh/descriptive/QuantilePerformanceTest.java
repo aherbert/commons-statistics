@@ -72,6 +72,8 @@ class QuantilePerformanceTest {
         Assertions.assertEquals(0, QuantilePerformance.getRecursionMultiple("RM0"));
         Assertions.assertEquals(3, QuantilePerformance.getRecursionMultiple("RM3"));
         Assertions.assertEquals(4, QuantilePerformance.getRecursionMultiple("RM4"));
+        Assertions.assertEquals(5, QuantilePerformance.getRecursionMultiple("RM5_"));
+        Assertions.assertEquals(6, QuantilePerformance.getRecursionMultiple("RM6a"));
     }
 
     @Test
