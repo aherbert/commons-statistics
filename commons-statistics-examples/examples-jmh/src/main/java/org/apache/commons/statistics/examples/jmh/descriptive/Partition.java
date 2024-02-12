@@ -1935,7 +1935,7 @@ final class Partition {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
-        // P is placed at the end to act as a sentinal.
+        // P is placed at the end to act as a sentinel.
         // k traverses the unknown region ??? and values moved if equal (l) or greater (g):
         //
         // left    p       i            j         q    right
@@ -1970,7 +1970,7 @@ final class Partition {
         int p = l;
         int q = r;
 
-        // Use the pivot index to set the upper sentinal value
+        // Use the pivot index to set the upper sentinel value
         final int pivot = pivotingStrategy.pivotIndex(data, left, right);
         final double v = data[pivot];
         data[pivot] = data[r];
@@ -4323,7 +4323,7 @@ final class Partition {
     /**
      * Sort the data using an intrasort.
      *
-     * <p>Uses a Bentley-McIlroy quicksort method; falling back
+     * <p>Uses a dual-pivot quicksort method; falling back
      * to heapsort when quicksort recursion is slow.
      *
      * @param data Values.
@@ -4358,7 +4358,7 @@ final class Partition {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
-        // P is placed at the end to act as a sentinal.
+        // P is placed at the end to act as a sentinel.
         // k traverses the unknown region ??? and values moved if equal (l) or greater (g):
         //
         // left    p       i            j         q    right
@@ -4394,7 +4394,7 @@ final class Partition {
         int p = l;
         int q = r;
 
-        // Use the pivot index to set the upper sentinal value
+        // Use the pivot index to set the upper sentinel value
         final int pivot = pivotingStrategy.pivotIndex(data, left, right);
         final double v = data[pivot];
         data[pivot] = data[r];
@@ -4532,7 +4532,7 @@ final class Partition {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
-        // P is placed at the end to act as a sentinal.
+        // P is placed at the end to act as a sentinel.
         // k traverses the unknown region ??? and values moved if equal (l) or greater (g):
         //
         // left    p       i            j         q    right
@@ -4560,7 +4560,7 @@ final class Partition {
         int p = l;
         int q = r;
 
-        // Use the pivot index to set the upper sentinal value
+        // Use the pivot index to set the upper sentinel value
         final double v = data[pivot];
         data[pivot] = data[r];
         data[r] = v;
@@ -4698,7 +4698,7 @@ final class Partition {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
-        // P is placed at the end to act as a sentinal.
+        // P is placed at the end to act as a sentinel.
         // k traverses the unknown region ??? and values moved if equal (l) or greater (g):
         //
         // left    p       i            j         q    right
@@ -4723,7 +4723,7 @@ final class Partition {
         int p = l;
         int q = r;
 
-        // Use the pivot index to set the upper sentinal value
+        // Use the pivot index to set the upper sentinel value
         final double v = data[pivot];
         data[pivot] = data[r];
         data[r] = v;
@@ -5005,7 +5005,7 @@ final class Partition {
 
         // Modified DNF partitioning with fast-forward of the greater-than
         // pointer. Here we write in the pivot value at i during the sweep.
-        // This acts as a sentinal when fast-forwarding greater-than.
+        // This acts as a sentinel when fast-forwarding greater-than.
         // It is over-written by any future <P value.
         // [begin, lt] < pivot
         // (lt, i)    == pivot
@@ -5020,7 +5020,7 @@ final class Partition {
                     // Move v to the <P side
                     data[++lt] = v;
                 } else {
-                    // Fast-forward here cannot pass sentinal
+                    // Fast-forward here cannot pass sentinel
                     // while (data[--gt] > value)
                     do {
                         --gt;
@@ -5088,7 +5088,7 @@ final class Partition {
      * @param pivot2 Pivot2 location.
      * @return Lower bound (inclusive) of the pivot range [k0].
      */
-    private static int partitionDP(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds) {
+    static int partitionDP(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds) {
         // Allow caller to choose a single-pivot
         if (pivot1 == pivot2) {
             // Switch to a single pivot sort. This is used when there are
@@ -5105,7 +5105,7 @@ final class Partition {
         // Dual-pivot quicksort method by Vladimir Yaroslavskiy.
         //
         // Partition data using pivots P1 and P2 into less-than, greater-than or between.
-        // Pivot values P1 & P2 are placed at the end. If P1 < P2, P2 acts as a sentinal.
+        // Pivot values P1 & P2 are placed at the end. If P1 < P2, P2 acts as a sentinel.
         // k traverses the unknown region ??? and values moved if less-than (lt) or
         // greater-than (gt):
         //
@@ -5135,39 +5135,35 @@ final class Partition {
         //   using the medians method (div initialises as 3 for 1/3 and 2/3 and increments
         //   when the central region is too large).
         // - Identify a large central region using ~5/8 of the length.
-        // - TODO: Change lt to mark the inclusive end of the less-than region
-        // - TODO: Change gt to mark the inclusive end of the greater-than region
 
         final double v1 = a[pivot1];
         final double v2 = a[pivot2];
 
-        // Move ends to the pivot locations.
-        // After sorting the final pivot locations are overwritten.
+        // Swap ends to the pivot locations.
         a[pivot1] = a[left];
         a[pivot2] = a[right];
-        // It is assumed
-        //a[left] = v1
-        //a[right] = v2
-
-        // Can this be written to use pre increment/decrement?
+        a[left] = v1;
+        a[right] = v2;
 
         // pointers
-        // less marks the exclusive end of the less-than region: a[less - 1] < P1
-        // great marks the exclusive end of the greater-than region: a[great + 1] > p2
-        int less = left + 1;
-        int great = right - 1;
+        int less = left;
+        int great = right;
 
-        // Fast-forward ascending / descending runs to reduce swaps
-        while (a[less] < v1) {
-            less++;
-        }
-        while (a[great] > v2) {
-            great--;
-        }
+        // Fast-forward ascending / descending runs to reduce swaps.
+        // Cannot overrun as end pivots (v1 <= v2) act as sentinels.
+        do {
+            ++less;
+        } while (a[less] < v1);
+        do {
+            --great;
+        } while (a[great] > v2);
+
+        // less marks the exclusive end of the less-than region: a[less - 1] < P1
+        // great marks the exclusive end of the greater-than region: a[great + 1] > P2
 
         // sorting: unvisited in [less, great]
         SORTING:
-        for (int k = less; k <= great; k++) {
+        for (int k = less - 1; ++k <= great;) {
             final double v = a[k];
             if (v < v1) {
                 //swap(a, k, less++)
@@ -5175,18 +5171,18 @@ final class Partition {
                 a[less] = v;
                 less++;
             } else if (v > v2) {
-                // Original
-                //while (k < great && a[great] > pivot2) {
-                //    great--;
-                //}
+                // Original:
+                // while k < great and a[great] > v2:
+                //     great--
                 while (a[great] > v2) {
                     if (great-- == k) {
                         // Done
                         break SORTING;
                     }
                 }
+                // Original:
                 // swap(a, k, great--)
-                // if (a[k] < pivot1)
+                // if a[k] < v2:
                 //    swap(a, k, less++)
                 final double w = a[great];
                 a[great] = v;
@@ -5203,38 +5199,43 @@ final class Partition {
         }
 
         // less marks the exclusive end of the less-than region: a[less - 1] < P1
-        // great marks the exclusive end of the greater-than region: a[great + 1] > p2
+        // great marks the exclusive end of the greater-than region: a[great + 1] > P2
+        // Change to inclusive ends
+        less--;
+        great++;
         // swaps
-        //swap(a, less - 1, left)
-        //swap(a, great + 1, right)
-        a[left] = a[less - 1];
-        a[less - 1] = v1;
-        a[right] = a[great + 1];
-        a[great + 1] = v2;
+        a[left] = a[less];
+        a[less] = v1;
+        a[right] = a[great];
+        a[great] = v2;
 
         // Record the pivot locations
-        int lower = less - 1;
-        bounds[2] = great + 1;
+        int lower = less;
+        bounds[2] = great;
 
         // equal elements
         // Original paper: If middle partition is bigger than a threshold
         // then check for equal elements.
 
+        // Note: This is extra work. When performing partitioning the region of interest
+        // may be entirely above or below the central region and this can be skipped.
+
         // Here we look for equal elements if the centre is more than 5/8 the length.
         // 5/8 = 1/2 + 1/8. Pivots must be different.
         if ((great - less) > ((right - left) >>> 1) + ((right - left) >>> 3) && v1 != v2) {
 
-            // Fast-forward to reduce swaps
-            while (a[less] == v1) {
-                less++;
-            }
-            while (a[great] == v2) {
-                great--;
-            }
+            // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
+            // Since v1 != v2 these act as sentinels to prevent overrun.
+            do {
+                ++less;
+            } while (a[less] == v1);
+            do {
+                --great;
+            } while (a[great] == v2);
 
             // This copies the logic in the sorting loop using == comparisons
             EQUAL:
-            for (int k = less; k <= great; k++) {
+            for (int k = less - 1; ++k <= great;) {
                 final double v = a[k];
                 if (v == v1) {
                     a[k] = a[less];
@@ -5259,13 +5260,17 @@ final class Partition {
                     }
                 }
             }
+
+            // Change to inclusive ends
+            less--;
+            great++;
         }
 
-        // Between pivots in [less, great]
-        if (v1 < v2 && less < great) {
+        // Between pivots in (less, great)
+        if (v1 < v2 && less < great - 1) {
             // Record the pivot end points
-            bounds[0] = less - 1;
-            bounds[1] = great + 1;
+            bounds[0] = less;
+            bounds[1] = great;
         } else {
             // No unsorted internal region (set k1 = k2 = k3)
             bounds[0] = bounds[1] = bounds[2];
