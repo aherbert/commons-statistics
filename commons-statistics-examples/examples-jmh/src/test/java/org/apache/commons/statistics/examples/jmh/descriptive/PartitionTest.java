@@ -1160,4 +1160,22 @@ class PartitionTest {
         builder.add(Arguments.of(new int[] {1, 1, 1, 1, 3, 3, 3, 3, 3, 5, 5, 5, 5}, allIndices, allIndices));
         return builder.build();
     }
+
+    @ParameterizedTest
+    @MethodSource
+    void testPartitionDP(double[] a, int pivot1, int pivot2, int k0, int[] bounds) {
+        final int r = a.length - 1;
+        final int[] b = new int[3];
+        Assertions.assertEquals(k0, Partition.partitionDP(a, 0, r, pivot1, pivot2, b));
+        Assertions.assertArrayEquals(bounds, b);
+    }
+
+    static Stream<Arguments> testPartitionDP() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        // Test less-than fast-forward bounds check - all values are < the pivots
+        builder.add(Arguments.of(new double[] {3, 4, 10, 12, 5, 6}, 2, 3, 4, new int[] {5, 5, 5}));
+        // Test greater-than fast-forward bounds check - all values are > the pivots
+        builder.add(Arguments.of(new double[] {3, 4, 1, 2, 5, 6}, 2, 3, 0, new int[] {1, 1, 1}));
+        return builder.build();
+    }
 }
