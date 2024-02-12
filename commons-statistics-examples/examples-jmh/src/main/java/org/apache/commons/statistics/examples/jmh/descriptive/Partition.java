@@ -3493,7 +3493,7 @@ final class Partition {
         int ka, int kb, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        final int l = left;
+        int l = left;
         int r = right;
         int kb1 = kb;
         final int[] upper = {0};
@@ -3537,8 +3537,12 @@ final class Partition {
             maxDepth--;
             // Recurse right side if required
             if (kb1 > p1) {
-                final int other = ka > p1 ? ka : kb1;
-                introselect(part, a, p1 + 1, r, other, kb1, maxDepth);
+                if (ka > p1) {
+                    // Entirely on right side
+                    l = p1 + 1;
+                    continue;
+                }
+                introselect(part, a, p1 + 1, r, kb1, kb1, maxDepth);
             }
             if (ka >= p0) {
                 // No left side
@@ -3591,7 +3595,7 @@ final class Partition {
         int[] k, int ia, int ib, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        final int l = left;
+        int l = left;
         int r = right;
         int ib1 = ib;
         final int[] upper = {0};
@@ -3645,8 +3649,12 @@ final class Partition {
             maxDepth--;
             // Recurse right side if required
             if (kb > p1) {
-                final int ia1 = ka > p1 ? ia : searchGreaterOrEqual(k, ia, ib1, p1 + 1);
-                introselect(part, a, p1 + 1, r, k, ia1, ib1, maxDepth);
+                if (ka > p1) {
+                    // Entirely on right side
+                    l = p1 + 1;
+                    continue;
+                }
+                introselect(part, a, p1 + 1, r, k, searchGreaterOrEqual(k, ia, ib1, p1 + 1), ib1, maxDepth);
             }
             if (ka >= p0) {
                 // No left side
@@ -3696,7 +3704,7 @@ final class Partition {
         IndexInterval k, int ka, int kb, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
-        final int l = left;
+        int l = left;
         int r = right;
         int kb1 = kb;
         final int[] upper = {0};
@@ -3738,8 +3746,12 @@ final class Partition {
             maxDepth--;
             // Recurse right side if required
             if (kb1 > p1) {
-                final int ka1 = ka > p1 ? ka : k.nextIndex(p1 + 1);
-                introselect(part, a, p1 + 1, r, k, ka1, kb1, maxDepth);
+                if (ka > p1) {
+                    // Entirely on right side
+                    l = p1 + 1;
+                    continue;
+                }
+                introselect(part, a, p1 + 1, r, k, k.nextIndex(p1 + 1), kb1, maxDepth);
             }
             if (ka >= p0) {
                 // No left side
@@ -3953,8 +3965,9 @@ final class Partition {
      */
     private void introselect(DPPartition part, double[] a, int left, int right,
         IndexInterval k, int ka, int kb, int maxDepth) {
-        // Left and right sides requires recursion. The other side
-        // can remain within this function call.
+        // If partitioning splits the interval then recursion is used for left and/or
+        // right sides and the middle remains within this function. If partitioning does
+        // not split the interval then it remains within this function.
         int l = left;
         int r = right;
         int ka1 = ka;
@@ -3999,24 +4012,34 @@ final class Partition {
             maxDepth--;
             // Recurse right side if required
             if (kb1 > p3) {
-                introselect(part, a, p3 + 1, r, k,
-                    ka1 > p3 ? ka1 : k.nextIndex(p3 + 1), kb1, maxDepth);
+                if (ka1 > p3) {
+                    // Entirely on right-side
+                    l = p3 + 1;
+                    continue;
+                }
+                introselect(part, a, p3 + 1, r, k, k.nextIndex(p3 + 1), kb1, maxDepth);
             }
             // Recurse left side if required
             if (ka1 < p0) {
-                introselect(part, a, l, p0 - 1, k,
-                    ka1, kb1 < p0 ? kb1 : k.previousIndex(p0 - 1), maxDepth);
+                if (kb1 < p0) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    continue;
+                }
+                introselect(part, a, l, p0 - 1, k, ka1, k.previousIndex(p0 - 1), maxDepth);
             }
-            // Continue in the middle
-            if (ka1 < p2 && kb1 > p1 && p2 - p1 > 1) {
-                l = p1 + 1;
-                r = p2 - 1;
-                ka1 = ka1 > p1 ? ka1 : k.nextIndex(l);
-                kb1 = kb1 < p2 ? kb1 : k.previousIndex(r);
-            } else {
+            // Check the interval overlaps the middle; and the middle exists.
+            //                    p0 p1                p2 p3
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:     ----kb1                    ka1----
+            if (kb1 <= p1 || p2 <= ka1 || p2 - p1 <= 2) {
                 // No middle
                 return;
             }
+            l = p1 + 1;
+            r = p2 - 1;
+            ka1 = ka1 >= l ? ka1 : k.nextIndex(l);
+            kb1 = kb1 <= r ? kb1 : k.previousIndex(r);
         }
     }
 
@@ -4620,7 +4643,7 @@ final class Partition {
      */
     void sortIDP(double[] data) {
         // NaN processing is done in the introsort method
-        introsort(Partition::partitionDP, data);
+        introsort((DPPartition) Partition::partitionDP, data);
     }
 
     /**
