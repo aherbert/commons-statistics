@@ -121,7 +121,7 @@ public class QuantilePerformance {
     /** Pattern for the heapselect constant. */
     private static final Pattern HC_PATTERN = Pattern.compile("HC(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
-    private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+.?\\d*)");
+    private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+\\.?\\d*)");
     /** Pattern for the recursion constant. */
     private static final Pattern RC_PATTERN = Pattern.compile("RC(\\d+)");
     /** Pattern for the compression level. */
@@ -348,7 +348,7 @@ public class QuantilePerformance {
             CM, SP, BM, SBM, DP, DP5,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM})
+            ISBM, IDP})
         private String name;
 
         /** The action. */
@@ -408,6 +408,8 @@ public class QuantilePerformance {
             // Introselect implementations
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name)::evaluateISBM;
+            } else if (name.startsWith(IDP)) {
+                function = withPartition(name)::evaluateIDP;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
@@ -550,7 +552,7 @@ public class QuantilePerformance {
             DP, DP5, DNF,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM})
+            ISBM, IDP})
         private String name;
 
         /** The action. */
@@ -661,6 +663,12 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name);
                 function = (data, indices) -> {
                     part.partitionISBM(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(IDP)) {
+                final Partition part = createPartition(name);
+                function = (data, indices) -> {
+                    part.partitionIDP(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else {
