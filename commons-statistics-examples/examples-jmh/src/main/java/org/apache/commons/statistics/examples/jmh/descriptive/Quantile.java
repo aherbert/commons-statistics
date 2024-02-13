@@ -18,6 +18,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * Provides quantile computation.
@@ -67,11 +68,15 @@ public final class Quantile {
 
     /** Default instance.
      * Note: Numpy and R use method 7 as default. Method 8 is recommended by Hyndman and Fan. */
-    private static final Quantile DEFAULT = new Quantile(false, new KthSelector(),
-        new Partition(), EstimationMethod.HF8);
+    private static final Quantile DEFAULT = new Quantile(false, NaNPolicy.INCLUDE,
+        new KthSelector(), new Partition(), EstimationMethod.HF8);
 
     /** Flag to indicate if the data should be overwritten. */
     private final boolean overwrite;
+    /** NaN policy for floating point data. */
+    private final NaNPolicy nanPolicy;
+    /** Transformer factory for double data. */
+    private final Supplier<DoubleDataTransformer> transformer;
     /** Selector for the K-th element in an array. */
     private final KthSelector kthSelector;
     /** Partition method for partial sort of an array. */
@@ -121,17 +126,46 @@ public final class Quantile {
     }
 
     /**
+     * Partition function. Used to decouple the partition of data around indices
+     * and the computation of quantiles from ordered data points.
+     *
+     * <p>The function is not required to handle NaN or signed zeros.
+     */
+    private interface PartitionFunction3 {
+        /**
+         * Partition the array such that indices {@code k} correspond to their correctly
+         * sorted value in the equivalent fully sorted array. For all indices {@code k}
+         * and any index {@code i}:
+         *
+         * <pre>{@code
+         * data[i < k] <= data[k] <= data[k < i]
+         * }</pre>
+         *
+         * @param data Values.
+         * @param length Length of the data.
+         * @param k Indices (may be destructively modified).
+         * @param n Count of indices.
+         */
+        void partition(double[] data, int length, int[] k, int n);
+    }
+
+    /**
+     * Instantiates a new quantile.
+     *
      * @param overwrite Flag to indicate if the data should be overwritten.
+     * @param nanPolicy NaN policy.
      * @param kthSelector Selector for the K-th element in an array.
      * @param partition Partition method for partial sort of an array.
      * @param estimationType Estimation type used to determine the value from the quantile.
      */
-    private Quantile(boolean overwrite, KthSelector kthSelector,
+    private Quantile(boolean overwrite, NaNPolicy nanPolicy, KthSelector kthSelector,
             Partition partition, EstimationMethod estimationType) {
         this.overwrite = overwrite;
+        this.nanPolicy = nanPolicy;
         this.kthSelector = kthSelector;
         this.partition = partition;
         this.estimationType = estimationType;
+        transformer = DoubleDataTransformers.createFactory(nanPolicy, !overwrite);
     }
 
     /**
@@ -139,6 +173,7 @@ public final class Quantile {
      *
      * <ul>
      * <li>{@linkplain #withOverwrite(boolean) Overwrite = false}
+     * <li>{@linkplain #with(NaNPolicy) NaN policy = include}
      * <li>{@linkplain #with(EstimationMethod) Estimation method = HF8}
      * </ul>
      *
@@ -156,7 +191,17 @@ public final class Quantile {
      * @return an instance
      */
     public Quantile withOverwrite(boolean v) {
-        return new Quantile(v, kthSelector, partition, estimationType);
+        return new Quantile(v, nanPolicy, kthSelector, partition, estimationType);
+    }
+
+    /**
+     * Return an instance with the configured {@link NaNPolicy}.
+     *
+     * @param v Value.
+     * @return an instance
+     */
+    public Quantile with(NaNPolicy v) {
+        return new Quantile(overwrite, Objects.requireNonNull(v), kthSelector, partition, estimationType);
     }
 
     /**
@@ -168,7 +213,7 @@ public final class Quantile {
      * @return an instance
      */
     Quantile withKthSelector(KthSelector v) {
-        return new Quantile(overwrite, Objects.requireNonNull(v), partition, estimationType);
+        return new Quantile(overwrite, nanPolicy, Objects.requireNonNull(v), partition, estimationType);
     }
 
     /**
@@ -180,7 +225,7 @@ public final class Quantile {
      * @return an instance
      */
     Quantile withPartition(Partition v) {
-        return new Quantile(overwrite, kthSelector, Objects.requireNonNull(v), estimationType);
+        return new Quantile(overwrite, nanPolicy, kthSelector, Objects.requireNonNull(v), estimationType);
     }
 
     /**
@@ -190,7 +235,7 @@ public final class Quantile {
      * @return an instance
      */
     public Quantile with(EstimationMethod v) {
-        return new Quantile(overwrite, kthSelector, partition, Objects.requireNonNull(v));
+        return new Quantile(overwrite, nanPolicy, kthSelector, partition, Objects.requireNonNull(v));
     }
 
     /**
@@ -524,6 +569,140 @@ public final class Quantile {
 
         // Partition
         part.partition(x, indices, count);
+
+        // Compute
+        for (int k = 0; k < p.length; k++) {
+            final int i = (int) q[k];
+            final double alpha = q[k] - i;
+            if (alpha != 0) {
+                q[k] = DoubleMath.interpolate(x[i], x[i + 1], alpha);
+            } else {
+                q[k] = x[i];
+            }
+        }
+        return q;
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantile of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p><strong>Performance</strong>
+     *
+     * <p>It is not recommended to use this method for repeat calls for different quantiles
+     * within the same values. The {@link #evaluateSP(double[], double...)} method should be used
+     * which provides better performance.
+     *
+     * <p>The partition function is not required to handle NaN or signed zeros.
+     *
+     * @param part Partition function.
+     * @param values Values.
+     * @param p Quantile.
+     * @return the quantile
+     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @see #evaluateSP(double[], double...)
+     */
+    private double evaluate3(PartitionFunction3 part, double[] values, double p) {
+        checkQuantile(p);
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
+        // Special cases
+        if (n <= 1) {
+            t.postProcess(x, null, 0);
+            return n == 0 ? Double.NaN : values[0];
+        }
+        // Length of data to partition
+        final int len = t.length();
+
+        final double pos = estimationType.index(p, n);
+        final int i = (int) pos;
+
+        // Partition and compute
+        // Do the minimal partition work below the data length.
+        if (pos > i) {
+            final int[] k = new int[] {i, i + 1};
+            if (i < len) {
+                final int kn = i <= len ? 2 : 1;
+                part.partition(x, len, k, kn);
+                t.postProcess(x, k, kn);
+            } else {
+                t.postProcess(x, null, 0);
+            }
+            return DoubleMath.interpolate(x[i], x[i + 1], pos - i);
+        }
+        if (i < len) {
+            final int[] k = new int[] {i};
+            part.partition(x, len, k, 1);
+            t.postProcess(x, k, 1);
+        } else {
+            t.postProcess(x, null, 0);
+        }
+        return x[i];
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantiles of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>The partition function is not required to handle NaN or signed zeros.
+     *
+     * @param part Partition function.
+     * @param values Values.
+     * @param p Quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    public double[] evaluate3(PartitionFunction3 part, double[] values, double... p) {
+        if (p.length == 0) {
+            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
+        }
+        for (final double pp : p) {
+            checkQuantile(pp);
+        }
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
+        // Special cases
+        final double[] q = new double[p.length];
+        if (n <= 1) {
+            t.postProcess(x, null, 0);
+            Arrays.fill(q, n == 0 ? Double.NaN : values[0]);
+            return q;
+        }
+
+        // Length of data to partition
+        final int len = t.length();
+
+        // Collect interpolation positions. We use the output q to store factors.
+        final int[] indices = new int[p.length * 2];
+        int count = 0;
+        for (int k = 0; k < p.length; k++) {
+            final double pos = estimationType.index(p[k], n);
+            q[k] = pos;
+            final int i = (int) pos;
+            // Only have to partition up to length
+            if (i < len) {
+                indices[count++] = i;
+                if (pos > i && i <= len) {
+                    // Require the next index for interpolation
+                    indices[count++] = i + 1;
+                }
+            }
+        }
+
+        // Partition
+        if (count != 0) {
+            part.partition(x, len, indices, count);
+        }
+        t.postProcess(x, indices, count);
 
         // Compute
         for (int k = 0; k < p.length; k++) {
@@ -1143,7 +1322,7 @@ public final class Quantile {
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateISBM(double[] values, double p) {
-        return evaluate2(partition::partitionISBM, values, p);
+        return evaluate3(partition::partitionISBM, values, p);
     }
 
     /**
@@ -1163,7 +1342,7 @@ public final class Quantile {
      * or no quantiles are specified.
      */
     public double[] evaluateISBM(double[] values, double... p) {
-        return evaluate2(partition::partitionISBM, values, p);
+        return evaluate3(partition::partitionISBM, values, p);
     }
 
     /**
@@ -1188,7 +1367,7 @@ public final class Quantile {
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateIDP(double[] values, double p) {
-        return evaluate2(partition::partitionIDP, values, p);
+        return evaluate3(partition::partitionIDP, values, p);
     }
 
     /**
@@ -1207,7 +1386,7 @@ public final class Quantile {
      * or no quantiles are specified.
      */
     public double[] evaluateIDP(double[] values, double... p) {
-        return evaluate2(partition::partitionIDP, values, p);
+        return evaluate3(partition::partitionIDP, values, p);
     }
 
     /**

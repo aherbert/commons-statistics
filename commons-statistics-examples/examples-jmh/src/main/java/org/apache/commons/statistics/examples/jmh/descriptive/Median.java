@@ -18,6 +18,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * Returns the median of the available values.
@@ -38,10 +39,15 @@ import java.util.Objects;
  */
 public final class Median {
     /** Default instance. */
-    private static final Median DEFAULT = new Median(false, new KthSelector(), new Partition());
+    private static final Median DEFAULT = new Median(false, NaNPolicy.INCLUDE,
+        new KthSelector(), new Partition());
 
     /** Flag to indicate if the data should be overwritten. */
     private final boolean overwrite;
+    /** NaN policy for floating point data. */
+    private final NaNPolicy nanPolicy;
+    /** Transformer factory for double data. */
+    private final Supplier<DoubleDataTransformer> transformer;
     /** Selector for the K-th element in an array. */
     private final KthSelector kthSelector;
     /** Partition method for partial sort of an array. */
@@ -49,14 +55,17 @@ public final class Median {
 
     /**
      * @param overwrite Flag to indicate if the data should be overwritten.
+     * @param nanPolicy NaN policy.
      * @param kthSelector Selector for the K-th element in an array.
      * @param partition Partition method for partial sort of an array.
      */
-    private Median(boolean overwrite, KthSelector kthSelector,
-            Partition partition) {
+    private Median(boolean overwrite, NaNPolicy nanPolicy,
+            KthSelector kthSelector, Partition partition) {
         this.overwrite = overwrite;
+        this.nanPolicy = nanPolicy;
         this.kthSelector = kthSelector;
         this.partition = partition;
+        transformer = DoubleDataTransformers.createFactory(nanPolicy, !overwrite);
     }
 
     /**
@@ -64,6 +73,7 @@ public final class Median {
      *
      * <ul>
      * <li>{@linkplain #withOverwrite(boolean) Overwrite = false}
+     * <li>{@linkplain #with(NaNPolicy) NaN policy = include}
      * </ul>
      *
      * @return the median
@@ -80,7 +90,17 @@ public final class Median {
      * @return an instance
      */
     public Median withOverwrite(boolean v) {
-        return new Median(v, kthSelector, partition);
+        return new Median(v, nanPolicy, kthSelector, partition);
+    }
+
+    /**
+     * Return an instance with the configured {@link NaNPolicy}.
+     *
+     * @param v Value.
+     * @return an instance
+     */
+    public Median with(NaNPolicy v) {
+        return new Median(overwrite, Objects.requireNonNull(v), kthSelector, partition);
     }
 
     /**
@@ -92,7 +112,7 @@ public final class Median {
      * @return an instance
      */
     Median withKthSelector(KthSelector v) {
-        return new Median(overwrite, Objects.requireNonNull(v), partition);
+        return new Median(overwrite, nanPolicy, Objects.requireNonNull(v), partition);
     }
 
     /**
@@ -104,7 +124,7 @@ public final class Median {
      * @return an instance
      */
     Median withPartition(Partition v) {
-        return new Median(overwrite, kthSelector, Objects.requireNonNull(v));
+        return new Median(overwrite, nanPolicy, kthSelector, Objects.requireNonNull(v));
     }
 
     /**
@@ -544,30 +564,48 @@ public final class Median {
      * @return the median
      */
     public double evaluateISBM(double[] values) {
-        // Implicit NPE
-        final int n = values.length;
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
         // Special cases
         if (n <= 2) {
+            t.postProcess(x, null, 0);
             switch (n) {
             case 2:
-                return DoubleMath.mean(values[0], values[1]);
+                return DoubleMath.mean(x[0], x[1]);
             case 1:
-                return values[0];
+                return x[0];
             default:
                 return Double.NaN;
             }
         }
-        // A sort is required
-        final double[] x = overwrite ? values : values.clone();
-        final int k = n >>> 1;
+        // Median index
+        final int m = n >>> 1;
+        // Length of data to partition
+        final int len = t.length();
         // Odd
         if ((n & 0x1) == 0x1) {
-            partition.partitionISBM(x, new int[] {k}, 1);
-            return x[k];
+            if (m < len) {
+                final int[] k = new int[] {m};
+                partition.partitionISBM(x, len, k, 1);
+                t.postProcess(x, k, 1);
+            } else {
+                t.postProcess(x, null, 0);
+            }
+            return x[m];
         }
-        // Even: require (k-1, k)
-        partition.partitionISBM(x, new int[] {k - 1, k}, 2);
-        return DoubleMath.mean(x[k - 1], x[k]);
+        // Even: require (m-1, m)
+        // Do the minimal partition work
+        final int[] k = new int[] {m - 1, m};
+        if (m - 1 < len) {
+            final int kn = m < len ? 2 : 1;
+            partition.partitionISBM(x, len, k, kn);
+            t.postProcess(x, k, kn);
+        } else {
+            t.postProcess(x, null, 0);
+        }
+        return DoubleMath.mean(x[m - 1], x[m]);
     }
 
     /**
@@ -583,29 +621,47 @@ public final class Median {
      * @return the median
      */
     public double evaluateIDP(double[] values) {
-        // Implicit NPE
-        final int n = values.length;
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
         // Special cases
         if (n <= 2) {
+            t.postProcess(x, null, 0);
             switch (n) {
             case 2:
-                return DoubleMath.mean(values[0], values[1]);
+                return DoubleMath.mean(x[0], x[1]);
             case 1:
-                return values[0];
+                return x[0];
             default:
                 return Double.NaN;
             }
         }
-        // A sort is required
-        final double[] x = overwrite ? values : values.clone();
-        final int k = n >>> 1;
+        // Median index
+        final int m = n >>> 1;
+        // Length of data to partition
+        final int len = t.length();
         // Odd
         if ((n & 0x1) == 0x1) {
-            partition.partitionIDP(x, new int[] {k}, 1);
-            return x[k];
+            if (m < len) {
+                final int[] k = new int[] {m};
+                partition.partitionIDP(x, len, k, 1);
+                t.postProcess(x, k, 1);
+            } else {
+                t.postProcess(x, null, 0);
+            }
+            return x[m];
         }
-        // Even: require (k-1, k)
-        partition.partitionIDP(x, new int[] {k - 1, k}, 2);
-        return DoubleMath.mean(x[k - 1], x[k]);
+        // Even: require (m-1, m)
+        // Do the minimal partition work
+        final int[] k = new int[] {m - 1, m};
+        if (m - 1 < len) {
+            final int kn = m < len ? 2 : 1;
+            partition.partitionIDP(x, len, k, kn);
+            t.postProcess(x, k, kn);
+        } else {
+            t.postProcess(x, null, 0);
+        }
+        return DoubleMath.mean(x[m - 1], x[m]);
     }
 }

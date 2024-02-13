@@ -37,6 +37,7 @@ class MedianTest {
     @Test
     void testNullPropertyThrows() {
         final Median m = Median.withDefaults();
+        Assertions.assertThrows(NullPointerException.class, () -> m.with((NaNPolicy) null));
         Assertions.assertThrows(NullPointerException.class, () -> m.withKthSelector(null));
     }
 
@@ -130,16 +131,26 @@ class MedianTest {
     static Stream<Arguments> testMedian() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final Percentile p = new Percentile(50).withNaNStrategy(NaNStrategy.FIXED);
+        // Note: Cannot use CM when NaN is adjacent to the middle of an odd length
+        // as it always interpolates pairs and uses: low + 0.0 * (NaN - low)
         for (final double[] x : new double[][] {
             {1},
             {1, 2},
             {2, 1},
             {1, Double.NaN},
+            {Double.NaN, Double.NaN},
+            {1, Double.NaN, Double.NaN},
+            {1, 2, Double.NaN, Double.NaN},
+            {Double.NaN, Double.NaN, 1, 2, 3, 4},
             {Double.MAX_VALUE, Double.MAX_VALUE},
             {-Double.MAX_VALUE, -Double.MAX_VALUE / 2},
         }) {
             builder.add(Arguments.of(x, p.evaluate(x)));
         }
+        // Cases where CM Percentile returns NaN
+        builder.add(Arguments.of(new double[]{1, 2, Double.NaN}, 2));
+        builder.add(Arguments.of(new double[]{Double.NaN, 1, 2, 3, Double.NaN}, 3));
+
         // Test against the percentile can fail at 1 ULP so used a fixed seed
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(26378461823L);
         // Sizes above and below the threshold for partitioning
@@ -169,6 +180,7 @@ class MedianTest {
         // Special cases
         builder.add(Arguments.of(new double[] {}, Double.NaN));
         builder.add(Arguments.of(new double[] {-Double.MAX_VALUE, Double.MAX_VALUE}, 0));
+        builder.add(Arguments.of(new double[] {-0.0, -0.0}, -0.0));
         builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0}, -0.0));
         return builder.build();
     }

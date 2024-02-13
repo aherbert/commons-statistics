@@ -18,6 +18,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
+import java.util.function.Supplier;
 
 /**
  * Partition array data.
@@ -65,6 +66,11 @@ final class Partition {
     static final int RECURSION_CONSTANT = 0;
     /** Default compression. */
     static final int COMPRESSION = 1;
+
+    /** Transformer factory for double data with the behaviour of a JDK sort.
+     * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
+    private static final Supplier<DoubleDataTransformer> SORT_TRANSFORMER =
+        DoubleDataTransformers.createFactory(NaNPolicy.INCLUDE, false);
 
     /** Minimum length between 2 pivots {@code p2 - p1} that requires a full sort. */
     private static final int SORT_BETWEEN_SIZE = 2;
@@ -2995,46 +3001,17 @@ final class Partition {
      */
     private void introsort(SPEPartition part, double[] a) {
         // Handle NaN / signed zeros
-        int cn = 0;
-        int end = a.length;
-        for (int i = end; i > 0;) {
-            final double v = a[--i];
-            // Count negative zeros using a sign bit check.
-            // This requires a performance test. If the conversion to raw bits
-            // is natively supported this is faster than using the == check.
-            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
-            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
-                cn++;
-                // Change to positive zero.
-                // The later pass then only has to restore negatives.
-                a[i] = 0.0;
-            } else if (v != v) {
-                // Move NaN to end
-                a[i] = a[--end];
-                a[end] = v;
-            }
-        }
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
         if (end <= 1) {
             // Nothing to sort
             return;
         }
         introsort(part, a, 0, end - 1, createMaxDepthSinglePivot(end));
         // Restore signed zeros
-        if (cn != 0) {
-            // Find a zero
-            int j = Arrays.binarySearch(a, 0.0);
-            // Scan back to before zero
-            while (--j >= 0) {
-                if (a[j] != 0) {
-                    break;
-                }
-            }
-            // Fix. Assume the zeros are all present so just overwrite
-            // the required count of signed zeros.
-            while (--cn >= 0) {
-                a[++j] = -0.0;
-            }
-        }
+        t.postProcess(a);
     }
 
     /**
@@ -3097,46 +3074,17 @@ final class Partition {
      */
     private void introsort(DPPartition part, double[] a) {
         // Handle NaN / signed zeros
-        int cn = 0;
-        int end = a.length;
-        for (int i = end; i > 0;) {
-            final double v = a[--i];
-            // Count negative zeros using a sign bit check.
-            // This requires a performance test. If the conversion to raw bits
-            // is natively supported this is faster than using the == check.
-            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
-            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
-                cn++;
-                // Change to positive zero.
-                // The later pass then only has to restore negatives.
-                a[i] = 0.0;
-            } else if (v != v) {
-                // Move NaN to end
-                a[i] = a[--end];
-                a[end] = v;
-            }
-        }
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
         if (end <= 1) {
             // Nothing to sort
             return;
         }
         introsort(part, a, 0, end - 1, createMaxDepthDualPivot(end));
         // Restore signed zeros
-        if (cn != 0) {
-            // Find a zero
-            int j = Arrays.binarySearch(a, 0.0);
-            // Scan back to before zero
-            while (--j >= 0) {
-                if (a[j] != 0) {
-                    break;
-                }
-            }
-            // Fix. Assume the zeros are all present so just overwrite
-            // the required count of signed zeros.
-            while (--cn >= 0) {
-                a[++j] = -0.0;
-            }
-        }
+        t.postProcess(a);
     }
 
     /**
@@ -3212,25 +3160,10 @@ final class Partition {
      */
     void introselect(SPEPartition part, double[] a, int[] k, int count) {
         // Handle NaN / signed zeros
-        int cn = 0;
-        int end = a.length;
-        for (int i = end; i > 0;) {
-            final double v = a[--i];
-            // Count negative zeros using a sign bit check.
-            // This requires a performance test. If the conversion to raw bits
-            // is natively supported this is faster than using the == check.
-            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
-            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
-                cn++;
-                // Change to positive zero.
-                // The later pass then only has to restore negatives.
-                a[i] = 0.0;
-            } else if (v != v) {
-                // Move NaN to end
-                a[i] = a[--end];
-                a[end] = v;
-            }
-        }
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
         if (end <= 1) {
             // Nothing to partition
             return;
@@ -3256,28 +3189,7 @@ final class Partition {
         introselect(part, a, end - 1, k, n);
 
         // Restore signed zeros
-        if (cn != 0) {
-            // Use the partitioned indices to fast-forward as much as possible.
-            // Assumes partitioning has not changed indices (but
-            // reordering is OK).
-            int j = -1;
-            for (int i = 0; i < n; i++) {
-                if (k[i] < 0) {
-                    j = Math.max(j, k[i]);
-                }
-            }
-            // Fix. Assume the zeros are all present so no bounds checks
-            // are used when incrementing j. But we have to check for zeros
-            // before overwrite.
-            for (;;) {
-                if (a[++j] == 0) {
-                    a[j] = -0.0;
-                    if (--cn == 0) {
-                        break;
-                    }
-                }
-            }
-        }
+        t.postProcess(a, k, n);
     }
 
     /**
@@ -3786,25 +3698,10 @@ final class Partition {
      */
     void introselect(DPPartition part, double[] a, int[] k, int count) {
         // Handle NaN / signed zeros
-        int cn = 0;
-        int end = a.length;
-        for (int i = end; i > 0;) {
-            final double v = a[--i];
-            // Count negative zeros using a sign bit check.
-            // This requires a performance test. If the conversion to raw bits
-            // is natively supported this is faster than using the == check.
-            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
-            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
-                cn++;
-                // Change to positive zero.
-                // The later pass then only has to restore negatives.
-                a[i] = 0.0;
-            } else if (v != v) {
-                // Move NaN to end
-                a[i] = a[--end];
-                a[end] = v;
-            }
-        }
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
         if (end <= 1) {
             // Nothing to partition
             return;
@@ -3830,28 +3727,7 @@ final class Partition {
         introselect(part, a, end - 1, k, n);
 
         // Restore signed zeros
-        if (cn != 0) {
-            // Use the partitioned indices to fast-forward as much as possible.
-            // Assumes partitioning has not changed indices (but
-            // reordering is OK).
-            int j = -1;
-            for (int i = 0; i < n; i++) {
-                if (k[i] < 0) {
-                    j = Math.max(j, k[i]);
-                }
-            }
-            // Fix. Assume the zeros are all present so no bounds checks
-            // are used when incrementing j. But we have to check for zeros
-            // before overwrite.
-            for (;;) {
-                if (a[++j] == 0) {
-                    a[j] = -0.0;
-                    if (--cn == 0) {
-                        break;
-                    }
-                }
-            }
-        }
+        t.postProcess(a, k, n);
     }
 
     /**
@@ -4104,69 +3980,15 @@ final class Partition {
      * @param count Count of indices.
      */
     void partitionK1SBM(double[] data, int[] k, int count) {
-        // This method does all pre-processing for NaNs and signed zeros.
-        // The partition function can then assume no NaNs and can
-        // use zero as any other number. In particular any value == pivotValue
-        // can be moved using the pivotValue.
-        // Note that this is true if all zeros are 0.0, or all are -0.0, but not
-        // a mixture. However counting a mixture is slower.
-
-        // XXX: For testing with no zero processing
-        //partitionK1(this::partitionK1SBM, data, data.length - 1, k, k.length);
-
-        // TODO: Move this to a NaN policy (and zero) strategy in the Quantile class.
-        // Note this will have to be shared with the Median class.
-
-        // Move NaNs and count signed zeros.
-        // Note counting both positive and negative zeros is slower;
-        // Here we just count negatives which are an unlikely data occurrence.
-        int cn = 0;
-        int end = data.length;
-        for (int i = end; i > 0;) {
-            final double v = data[--i];
-            // Count negative zeros using a sign bit check.
-            // This requires a performance test. If the conversion to raw bits
-            // is natively supported this is faster than using the == check.
-            //if (v == 0.0 && Double.doubleToRawLongBits(v) < 0) {
-            if (Double.doubleToRawLongBits(v) == Long.MIN_VALUE) {
-                cn++;
-                // Change to positive zero.
-                // The later pass then only has to restore negatives.
-                data[i] = 0.0;
-            } else if (v != v) {
-                // Move NaN to end
-                data[i] = data[--end];
-                data[end] = v;
-            }
-        }
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(data);
+        final int end = t.length();
         if (end <= 1) {
             // Nothing to partition
             return;
         }
-
-        // FYI: Method to count positive and negative zeros
-//        int c = 0;
-//        int cn = 0;
-//        int right = data.length - 1;
-//        for (int i = data.length; --i >= 0;) {
-//            final double v = data[i];
-//            // NaN check
-//            if (v != v) {
-//                // swap(data, i, right--)
-//                data[i] = data[right];
-//                data[right] = v;
-//                right--;
-//            } else if (v == 0) {
-//                c++;
-//                if (Double.doubleToRawLongBits(v) < 0) {
-//                    cn++;
-//                }
-//                // XXX: For testing (some tests) unify the zeros here
-//                // and downstream detection code should ignore
-//                // correcting zeros.
-//                //data[i] = 0.0;
-//            }
-//        }
 
         // Filter indices invalidated by NaN check
         int n = count;
@@ -4188,67 +4010,7 @@ final class Partition {
         partitionK1(this::partitionK1SBM, data, end - 1, k, n);
 
         // Restore signed zeros
-        if (cn != 0) {
-            // Use the partitioned indices to bracket zero.
-            // For now we just fast-forward as much as possible.
-            // Assumes partitioning has not changed indices (but
-            // reordering is OK).
-            int j = -1;
-            for (int i = 0; i < n; i++) {
-                final int kk = k[i];
-                if (data[kk] < 0) {
-                    j = Math.max(j, kk);
-                }
-            }
-            // Fix. Assume the zeros are all present so no bounds checks
-            // are used when incrementing j
-            for (;;) {
-                if (data[++j] == 0) {
-                    data[j] = -0.0;
-                    if (--cn == 0) {
-                        break;
-                    }
-                }
-            }
-        }
-
-        // FYI: Method to restore a mixture of +/- 0.0
-//        // Fix signed zeros when a mixture of positive and negative.
-//        // i.e. cp > 0 && cn > 0
-//        if (cn > 0 && c > cn) {
-//            // Count of positive zeros
-//            c -= cn;
-//            // Use the partitioned indices to bracket zero.
-//            // For now we just fast-forward as much as possible.
-//            // Assumes partitioning has not changed indices (but
-//            // reordering is OK).
-//            int j = -1;
-//            for (int i = 0; i < n; i++) {
-//                int kk = k[i];
-//                if (data[kk] < 0) {
-//                    j = Math.max(j, kk);
-//                }
-//            }
-//            // Fix. Assume the zeros are all present so no bounds checks
-//            // are used when incrementing j.
-//            for (;;) {
-//                if (data[++j] == 0) {
-//                    data[j] = -0.0;
-//                    if (--cn == 0) {
-//                        break;
-//                    }
-//                }
-//            }
-//            // Finish the positive zeros
-//            for (;;) {
-//                if (data[++j] == 0) {
-//                    data[j] = 0.0;
-//                    if (--c == 0) {
-//                        break;
-//                    }
-//                }
-//            }
-//        }
+        t.postProcess(data, k, n);
     }
 
     /**
@@ -4261,6 +4023,7 @@ final class Partition {
      * }</pre>
      *
      * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
      *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
      * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
@@ -4283,7 +4046,33 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
+     * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param length Length of data.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionISBM(double[] data, int length, int[] k, int n) {
+        introselect(Partition::partitionSBM, data, length - 1, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
      * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
      *
      * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
      * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of the quickselect
@@ -4295,6 +4084,31 @@ final class Partition {
      */
     void partitionIDP(double[] data, int[] k, int n) {
         introselect((DPPartition) Partition::partitionDP, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
+     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param length Length of data.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionIDP(double[] data, int length, int[] k, int n) {
+        introselect((DPPartition) Partition::partitionDP, data, length - 1, k, n);
     }
 
     /**
@@ -5407,7 +5221,7 @@ final class Partition {
             // Switch to a single pivot sort. This is used when there are
             // estimated to be many equal values so use the fastest equal
             // value single pivot method.
-            int lower = partitionDNF3(a, left, right, pivot1, bounds);
+            final int lower = partitionDNF3(a, left, right, pivot1, bounds);
             // Set dual pivot range
             bounds[2] = bounds[0];
             // No unsorted internal region (set k1 = k2 = k3)
@@ -5520,7 +5334,7 @@ final class Partition {
         a[great] = v2;
 
         // Record the pivot locations
-        int lower = less;
+        final int lower = less;
         bounds[2] = great;
 
         // equal elements

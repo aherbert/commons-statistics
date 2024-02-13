@@ -27,14 +27,17 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * This is required to handle {@code NaN} and signed-zeros {@code -0.0}.
  *
  * <p>Note: The {@code <} relation does not provide a total order on all double
- * values: {@code -0.0d == 0.0d} is {@code true} and a {@code NaN}
+ * values: {@code -0.0 == 0.0} is {@code true} and a {@code NaN}
  * value compares neither less than, greater than, nor equal to any value,
  * even itself.
  *
  * <p>The {@link java.util.Arrays#sort(double[])} method respects the order imposed by
- * {@link Double#compare(double, double)}: {@code -0.0d} is treated as less than value
- * {@code 0.0d} and {@code Double.NaN} is considered greater than any
+ * {@link Double#compare(double, double)}: {@code -0.0} is treated as less than value
+ * {@code 0.0} and {@code Double.NaN} is considered greater than any
  * other value and all {@code Double.NaN} values are considered equal.
+ *
+ * <p>This interface allows implementations to respect the behaviour
+ * {@link Double#compare(double, double)}, or implement different behaviour.
  *
  * @since 1.1
  * @see java.util.Arrays#sort(double[])
@@ -63,22 +66,49 @@ interface DoubleDataTransformer {
     double[] preProcess(double[] data);
 
     /**
+     * Get the size of the data.
+     *
+     * <p>Note: Although the pre-processed data array may be longer than this length
+     * some values may have been excluded from the data. This is the effective size
+     * of the data.
+     *
+     * @return the size
+     */
+    int size();
+
+    /**
      * Get the length of the pre-processed data that must be partitioned.
      *
      * <p>Note: Although the pre-processed data array may be longer than this length it is
      * only required to partition indices below this length. For example the end of the
-     * array may contain values to ignore such as {@code NaN}.
+     * array may contain values to ignore from partitioning such as {@code NaN}.
      *
      * @return the length
      */
     int length();
 
     /**
-     * Post-process the data after partitioning.
+     * Post-process the data after partitioning. This method can restore values that
+     * may have been removed from the pre-processed data, for example signed zeros
+     * or revert any special {@code NaN} value processing.
+     *
+     * <p>If no partition indices are available use {@code null} and {@code n = 0}.
      *
      * @param data Data.
      * @param k Partition indices.
      * @param n Count of partition indices.
      */
     void postProcess(double[] data, int[] k, int n);
+
+    /**
+     * Post-process the data after sorting. This method can restore values that
+     * may have been removed from the pre-processed data, for example signed zeros
+     * or revert any special {@code NaN} value processing.
+     *
+     * <p>Warning: Assumes data is fully sorted in {@code [0, length)} (see {@link #length()}).
+     *
+     * @param data Data.
+     */
+    void postProcess(double[] data);
+
 }

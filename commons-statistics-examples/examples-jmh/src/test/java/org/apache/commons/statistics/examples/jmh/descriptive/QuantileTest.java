@@ -46,7 +46,8 @@ class QuantileTest {
     @Test
     void testNullPropertyThrows() {
         final Quantile m = Quantile.withDefaults();
-        Assertions.assertThrows(NullPointerException.class, () -> m.with(null));
+        Assertions.assertThrows(NullPointerException.class, () -> m.with((NaNPolicy) null));
+        Assertions.assertThrows(NullPointerException.class, () -> m.with((EstimationMethod) null));
         Assertions.assertThrows(NullPointerException.class, () -> m.withKthSelector(null));
     }
 
@@ -228,9 +229,25 @@ class QuantileTest {
             new double[] {8.8000, 8.8000, 8.2000, 8.2600, 8.5600, 8.2900, 8.8100, 8.4700, 8.4925});
         // Special values tests
         addQuantiles(builder,
+            new double[] {nan},
+            new double[] {0.5}, 1e-4,
+            new double[] {nan, nan, nan, nan, nan, nan, nan, nan, nan});
+        addQuantiles(builder,
             new double[] {nan, nan},
             new double[] {0.5}, 1e-4,
             new double[] {nan, nan, nan, nan, nan, nan, nan, nan, nan});
+        addQuantiles(builder,
+            new double[] {1, nan},
+            new double[] {0.5}, 1e-4,
+            new double[] {1, nan, 1, 1, nan, nan, nan, nan, nan});
+        addQuantiles(builder,
+            new double[] {1, 2, nan},
+            new double[] {0.5}, 1e-4,
+            new double[] {2, 2, 2, 1.5, 2, 2, 2, 2, 2});
+        addQuantiles(builder,
+            new double[] {1, 2, nan, nan},
+            new double[] {0.5}, 1e-4,
+            new double[] {2, nan, 2, 2, nan, nan, nan, nan, nan});
         // Note: Any method using interpolation between negative zeros will return
         // positive zero because we use the scheme: x + (y - x) * alpha
         // (-0.0 - -0.0) == 0.0
