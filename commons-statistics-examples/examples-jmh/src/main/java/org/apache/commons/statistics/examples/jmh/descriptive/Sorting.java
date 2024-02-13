@@ -98,16 +98,14 @@ final class Sorting {
      * However in this case data will contain the same values and may be partially ordered.
      *
      * @param data Data array.
-     * @param i2 Index.
-     * @param i1 Index.
      * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
      */
     static void sort3(double[] data, int i0, int i1, int i2) {
-        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
-        // Order pairs:
+        // Order pair:
         //[(0,2)]
-        //[(0,1)]
-        //[(1,2)]
+        // Move point 1 above point 2 or below point 0
         double v;
         if (data[i2] < data[i0]) {
             v = data[i2];
@@ -135,56 +133,31 @@ final class Sorting {
      *
      * <p>Data are arranged such that:
      * <pre>{@code
-     * a != b != c != d != e
-     * data[a] < data[b] < data[c] < data[d] < data[e]
+     * a != b != c != d
+     * data[a] < data[b] < data[c] < data[d]
      * }</pre>
      *
      * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
      * However in this case data will contain the same values and may be partially ordered.
      *
      * @param data Data array.
-     * @param i4 Index.
-     * @param i3 Index.
-     * @param i2 Index.
-     * @param i1 Index.
      * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
      */
-    static void sort5(double[] data, int i0, int i1, int i2, int i3, int i4) {
+    static void sort4(double[] data, int i0, int i1, int i2, int i3) {
         // Uses an optimal sorting network from Knuth's Art of Computer Programming.
         // Order pairs:
-        //[(0,3),(1,4)]
         //[(0,2),(1,3)]
-        //[(0,1),(2,4)]
-        //[(1,2),(3,4)]
-        //[(2,3)]
+        //[(0,1),(2,3)]
+        //[(1,2)]
         double u;
         double v;
-        if (data[i4] < data[i1]) {
-            u = data[i4];
-            data[i4] = data[i1];
-            data[i1] = u;
-        }
-        if (data[i3] < data[i0]) {
-            v = data[i3];
-            data[i3] = data[i0];
-            data[i0] = v;
-        }
-
-        if (data[i4] < data[i2]) {
-            u = data[i4];
-            data[i4] = data[i2];
-            data[i2] = u;
-        }
         if (data[i3] < data[i1]) {
-            v = data[i3];
+            u = data[i3];
             data[i3] = data[i1];
-            data[i1] = v;
-        }
-
-        if (data[i4] < data[i3]) {
-            u = data[i4];
-            data[i4] = data[i3];
-            data[i3] = u;
+            data[i1] = u;
         }
         if (data[i2] < data[i0]) {
             v = data[i2];
@@ -207,6 +180,361 @@ final class Sorting {
             u = data[i2];
             data[i2] = data[i1];
             data[i1] = u;
+        }
+    }
+
+    /**
+     * Sorts the given indices in an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
+     * a != b != c != d != e
+     * data[a] < data[b] < data[c] < data[d] < data[e]
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     */
+    static void sort5(double[] data, int i0, int i1, int i2, int i3, int i4) {
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 9 comparisons.
+        // Order pairs:
+        //[(0,3),(1,4)]
+        //[(0,2),(1,3)]
+        //[(0,1),(2,4)]
+        //[(1,2),(3,4)]
+        //[(2,3)]
+        double u;
+        double v;
+        if (data[i4] < data[i1]) {
+            u = data[i4];
+            data[i4] = data[i1];
+            data[i1] = u;
+        }
+        if (data[i3] < data[i0]) {
+            v = data[i3];
+            data[i3] = data[i0];
+            data[i0] = v;
+        }
+
+        if (data[i3] < data[i1]) {
+            u = data[i3];
+            data[i3] = data[i1];
+            data[i1] = u;
+        }
+        if (data[i2] < data[i0]) {
+            v = data[i2];
+            data[i2] = data[i0];
+            data[i0] = v;
+        }
+
+        if (data[i4] < data[i2]) {
+            u = data[i4];
+            data[i4] = data[i2];
+            data[i2] = u;
+        }
+        if (data[i1] < data[i0]) {
+            v = data[i1];
+            data[i1] = data[i0];
+            data[i0] = v;
+        }
+
+        if (data[i4] < data[i3]) {
+            u = data[i4];
+            data[i4] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i2] < data[i1]) {
+            v = data[i2];
+            data[i2] = data[i1];
+            data[i1] = v;
+        }
+
+        if (data[i3] < data[i2]) {
+            u = data[i3];
+            data[i3] = data[i2];
+            data[i2] = u;
+        }
+    }
+
+    /**
+     * Sorts the given indices in an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
+     * a != b != c != d != e != f != g
+     * data[a] < data[b] < data[c] < data[d] < data[e] < data[f] < data[g]
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     * @param i5 Index.
+     * @param i6 Index.
+     */
+    static void sort7(double[] data, int i0, int i1, int i2, int i3, int i4, int i5, int i6) {
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 16 comparisons.
+        // Order pairs:
+        //[(0,6),(2,3),(4,5)]
+        //[(0,2),(1,4),(3,6)]
+        //[(0,1),(2,5),(3,4)]
+        //[(1,2),(4,6)]
+        //[(2,3),(4,5)]
+        //[(1,2),(3,4),(5,6)]
+        double u;
+        double v;
+        double w;
+        if (data[i5] < data[i4]) {
+            u = data[i5];
+            data[i5] = data[i4];
+            data[i4] = u;
+        }
+        if (data[i3] < data[i2]) {
+            v = data[i3];
+            data[i3] = data[i2];
+            data[i2] = v;
+        }
+        if (data[i6] < data[i0]) {
+            w = data[i6];
+            data[i6] = data[i0];
+            data[i0] = w;
+        }
+
+        if (data[i6] < data[i3]) {
+            u = data[i6];
+            data[i6] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i4] < data[i1]) {
+            v = data[i4];
+            data[i4] = data[i1];
+            data[i1] = v;
+        }
+        if (data[i2] < data[i0]) {
+            w = data[i2];
+            data[i2] = data[i0];
+            data[i0] = w;
+        }
+
+        if (data[i4] < data[i3]) {
+            u = data[i4];
+            data[i4] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i5] < data[i2]) {
+            v = data[i5];
+            data[i5] = data[i2];
+            data[i2] = v;
+        }
+        if (data[i1] < data[i0]) {
+            w = data[i1];
+            data[i1] = data[i0];
+            data[i0] = w;
+        }
+
+        if (data[i6] < data[i4]) {
+            u = data[i6];
+            data[i6] = data[i4];
+            data[i4] = u;
+        }
+        if (data[i2] < data[i1]) {
+            v = data[i2];
+            data[i2] = data[i1];
+            data[i1] = v;
+        }
+
+        if (data[i5] < data[i4]) {
+            u = data[i5];
+            data[i5] = data[i4];
+            data[i4] = u;
+        }
+        if (data[i3] < data[i2]) {
+            v = data[i3];
+            data[i3] = data[i2];
+            data[i2] = v;
+        }
+
+        if (data[i6] < data[i5]) {
+            u = data[i6];
+            data[i6] = data[i5];
+            data[i5] = u;
+        }
+        if (data[i4] < data[i3]) {
+            v = data[i4];
+            data[i4] = data[i3];
+            data[i3] = v;
+        }
+        if (data[i2] < data[i1]) {
+            w = data[i2];
+            data[i2] = data[i1];
+            data[i1] = w;
+        }
+    }
+
+    /**
+     * Sorts the given indices in an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
+     * a != b != c != d != e != f != g != h
+     * data[a] < data[b] < data[c] < data[d] < data[e] < data[f] < data[g] < data[h]
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     * @param i5 Index.
+     * @param i6 Index.
+     * @param i7 Index.
+     */
+    static void sort8(double[] data, int i0, int i1, int i2, int i3, int i4, int i5, int i6, int i7) {
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 19 comparisons.
+        // Order pairs:
+        //[(0,2),(1,3),(4,6),(5,7)]
+        //[(0,4),(1,5),(2,6),(3,7)]
+        //[(0,1),(2,3),(4,5),(6,7)]
+        //[(2,4),(3,5)]
+        //[(1,4),(3,6)]
+        //[(1,2),(3,4),(5,6)]
+        double u;
+        double v;
+        double w;
+        double x;
+        if (data[i7] < data[i5]) {
+            u = data[i7];
+            data[i7] = data[i5];
+            data[i5] = u;
+        }
+        if (data[i6] < data[i4]) {
+            v = data[i6];
+            data[i6] = data[i4];
+            data[i4] = v;
+        }
+        if (data[i3] < data[i1]) {
+            w = data[i3];
+            data[i3] = data[i1];
+            data[i1] = w;
+        }
+        if (data[i2] < data[i0]) {
+            x = data[i2];
+            data[i2] = data[i0];
+            data[i0] = x;
+        }
+
+        if (data[i7] < data[i3]) {
+            u = data[i7];
+            data[i7] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i6] < data[i2]) {
+            v = data[i6];
+            data[i6] = data[i2];
+            data[i2] = v;
+        }
+        if (data[i5] < data[i1]) {
+            w = data[i5];
+            data[i5] = data[i1];
+            data[i1] = w;
+        }
+        if (data[i4] < data[i0]) {
+            x = data[i4];
+            data[i4] = data[i0];
+            data[i0] = x;
+        }
+
+        if (data[i7] < data[i6]) {
+            u = data[i7];
+            data[i7] = data[i6];
+            data[i6] = u;
+        }
+        if (data[i5] < data[i4]) {
+            v = data[i5];
+            data[i5] = data[i4];
+            data[i4] = v;
+        }
+        if (data[i3] < data[i2]) {
+            w = data[i3];
+            data[i3] = data[i2];
+            data[i2] = w;
+        }
+        if (data[i1] < data[i0]) {
+            x = data[i1];
+            data[i1] = data[i0];
+            data[i0] = x;
+        }
+
+        if (data[i5] < data[i3]) {
+            u = data[i5];
+            data[i5] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i4] < data[i2]) {
+            v = data[i4];
+            data[i4] = data[i2];
+            data[i2] = v;
+        }
+
+        if (data[i6] < data[i3]) {
+            u = data[i6];
+            data[i6] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i4] < data[i1]) {
+            v = data[i4];
+            data[i4] = data[i1];
+            data[i1] = v;
+        }
+
+        if (data[i6] < data[i5]) {
+            u = data[i6];
+            data[i6] = data[i5];
+            data[i5] = u;
+        }
+        if (data[i4] < data[i3]) {
+            v = data[i4];
+            data[i4] = data[i3];
+            data[i3] = v;
+        }
+        if (data[i2] < data[i1]) {
+            w = data[i2];
+            data[i2] = data[i1];
+            data[i1] = w;
         }
     }
 
@@ -273,16 +601,14 @@ final class Sorting {
      * However in this case data will contain the same values and may be partially ordered.
      *
      * @param data Data array.
-     * @param i2 Index.
-     * @param i1 Index.
      * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
      */
     static void sort3(int[] data, int i0, int i1, int i2) {
-        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
-        // Order pairs:
+        // Order pair:
         //[(0,2)]
-        //[(0,1)]
-        //[(1,2)]
+        // Move point 1 above point 2 or below point 0
         int v;
         if (data[i2] < data[i0]) {
             v = data[i2];
@@ -318,11 +644,11 @@ final class Sorting {
      * However in this case data will contain the same values and may be partially ordered.
      *
      * @param data Data array.
-     * @param i4 Index.
-     * @param i3 Index.
-     * @param i2 Index.
-     * @param i1 Index.
      * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
      */
     static void sort5(int[] data, int i0, int i1, int i2, int i3, int i4) {
         // Uses an optimal sorting network from Knuth's Art of Computer Programming.
@@ -345,21 +671,10 @@ final class Sorting {
             data[i0] = v;
         }
 
-        if (data[i4] < data[i2]) {
-            u = data[i4];
-            data[i4] = data[i2];
-            data[i2] = u;
-        }
         if (data[i3] < data[i1]) {
-            v = data[i3];
+            u = data[i3];
             data[i3] = data[i1];
-            data[i1] = v;
-        }
-
-        if (data[i4] < data[i3]) {
-            u = data[i4];
-            data[i4] = data[i3];
-            data[i3] = u;
+            data[i1] = u;
         }
         if (data[i2] < data[i0]) {
             v = data[i2];
@@ -367,9 +682,9 @@ final class Sorting {
             data[i0] = v;
         }
 
-        if (data[i3] < data[i2]) {
-            u = data[i3];
-            data[i3] = data[i2];
+        if (data[i4] < data[i2]) {
+            u = data[i4];
+            data[i4] = data[i2];
             data[i2] = u;
         }
         if (data[i1] < data[i0]) {
@@ -378,10 +693,21 @@ final class Sorting {
             data[i0] = v;
         }
 
+        if (data[i4] < data[i3]) {
+            u = data[i4];
+            data[i4] = data[i3];
+            data[i3] = u;
+        }
         if (data[i2] < data[i1]) {
-            u = data[i2];
+            v = data[i2];
             data[i2] = data[i1];
-            data[i1] = u;
+            data[i1] = v;
+        }
+
+        if (data[i3] < data[i2]) {
+            u = data[i3];
+            data[i3] = data[i2];
+            data[i2] = u;
         }
     }
 
