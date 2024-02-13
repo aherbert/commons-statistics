@@ -75,9 +75,30 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
+    void testDoubleInsertionSort4(double[] values) {
+        final double[] data = Arrays.copyOf(values, 4);
+        assertDoubleSort(data, x -> Sorting.sort4(x, 0, 1, 2, 3));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
     void testDoubleInsertionSort5(double[] values) {
         final double[] data = Arrays.copyOf(values, 5);
         assertDoubleSort(data, x -> Sorting.sort5(x, 0, 1, 2, 3, 4));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
+    void testDoubleInsertionSort7(double[] values) {
+        final double[] data = Arrays.copyOf(values, 7);
+        assertDoubleSort(data, x -> Sorting.sort7(x, 0, 1, 2, 3, 4, 5, 6));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
+    void testDoubleInsertionSort8(double[] values) {
+        final double[] data = Arrays.copyOf(values, 8);
+        assertDoubleSort(data, x -> Sorting.sort8(x, 0, 1, 2, 3, 4, 5, 6, 7));
     }
 
     @ParameterizedTest
@@ -90,6 +111,16 @@ class SortingTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testDoubleInsertionSort4Internal"})
+    void testDoubleInsertionSort4Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        assertDoubleSortInternal(values, x -> Sorting.sort4(x, a, b, c, d), indices);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testDoubleInsertionSort5Internal"})
     void testDoubleInsertionSort5Internal(double[] values, int[] indices) {
         final int a = indices[0];
@@ -98,6 +129,33 @@ class SortingTest {
         final int d = indices[3];
         final int e = indices[4];
         assertDoubleSortInternal(values, x -> Sorting.sort5(x, a, b, c, d, e), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleInsertionSort7Internal"})
+    void testDoubleInsertionSort7Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        final int f = indices[5];
+        final int g = indices[6];
+        assertDoubleSortInternal(values, x -> Sorting.sort7(x, a, b, c, d, e, f, g), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleInsertionSort8Internal"})
+    void testDoubleInsertionSort8Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        final int f = indices[5];
+        final int g = indices[6];
+        final int h = indices[7];
+        assertDoubleSortInternal(values, x -> Sorting.sort8(x, a, b, c, d, e, f, g, h), indices);
     }
 
     /**
@@ -177,8 +235,8 @@ class SortingTest {
 
     static Stream<double[]> testDoubleSort() {
         final Stream.Builder<double[]> builder = Stream.builder();
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
-        for (final int size : new int[] {5, 10}) {
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+        for (final int size : new int[] {10, 15}) {
             double[] a = new double[size];
             Arrays.fill(a, 1.23);
             builder.add(a.clone());
@@ -211,17 +269,29 @@ class SortingTest {
         return testDoubleInsertionSortInternal(3);
     }
 
+    static Stream<Arguments> testDoubleInsertionSort4Internal() {
+        return testDoubleInsertionSortInternal(4);
+    }
+
     static Stream<Arguments> testDoubleInsertionSort5Internal() {
         return testDoubleInsertionSortInternal(5);
     }
 
+    static Stream<Arguments> testDoubleInsertionSort7Internal() {
+        return testDoubleInsertionSortInternal(7);
+    }
+
+    static Stream<Arguments> testDoubleInsertionSort8Internal() {
+        return testDoubleInsertionSortInternal(8);
+    }
+
     static Stream<Arguments> testDoubleInsertionSortInternal(int k) {
         final Stream.Builder<Arguments> builder = Stream.builder();
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
         for (final int size : new int[] {k, 2 * k, 4 * k}) {
             double[] a = rng.doubles(size).toArray();
             final PermutationSampler s = new PermutationSampler(rng, size, k);
-            for (int i = 0; i < 5; i++) {
+            for (int i = k * k; i-- >= 0;) {
                 a = rng.doubles(size).toArray();
                 final int[] indices = s.sample();
                 builder.add(Arguments.of(a.clone(), indices));
@@ -353,8 +423,8 @@ class SortingTest {
 
     static Stream<int[]> testIntSort() {
         final Stream.Builder<int[]> builder = Stream.builder();
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
-        for (final int size : new int[] {5, 10}) {
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+        for (final int size : new int[] {10, 15}) {
             int[] a = new int[size];
             Arrays.fill(a, 42);
             builder.add(a.clone());
@@ -384,11 +454,11 @@ class SortingTest {
 
     static Stream<Arguments> testIntInsertionSortInternal(int k) {
         final Stream.Builder<Arguments> builder = Stream.builder();
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
         for (final int size : new int[] {k, 2 * k, 4 * k}) {
             int[] a = rng.ints(size).toArray();
             final PermutationSampler s = new PermutationSampler(rng, size, k);
-            for (int i = 0; i < 5; i++) {
+            for (int i = k * k; i-- >= 0;) {
                 a = rng.ints(size).toArray();
                 final int[] indices = s.sample();
                 builder.add(Arguments.of(a.clone(), indices));
@@ -553,7 +623,7 @@ class SortingTest {
         builder.add(Arguments.of(new int[] {1, 2, 3, 4, 5}, 3));
         builder.add(Arguments.of(new int[] {5, 3, 1, 2, 4}, 3));
         // Some random indices with duplicates
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
         for (final int size : new int[] {5, 10, 30}) {
             int maxIndex = size >>> 1;
             for (int i = 0; i < 5; i++) {

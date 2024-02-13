@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Formatter;
 import java.util.stream.Stream;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
 import org.junit.jupiter.api.Assertions;
@@ -69,6 +70,54 @@ class DualPivotingStrategyTest {
         // Does not work well for small length
         Assumptions.assumeTrue(a.length > 40);
         assertPivots(a, DualPivotingStrategy.SORT_5J);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort5of3(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 14);
+        assertPivots(a, DualPivotingStrategy.SORT_5_OF_3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort4of3(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 11);
+        assertPivots(a, DualPivotingStrategy.SORT_4_OF_3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort3of3(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 8);
+        assertPivots(a, DualPivotingStrategy.SORT_3_OF_3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort5of5(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 24);
+        assertPivots(a, DualPivotingStrategy.SORT_5_OF_5);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort7(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 6);
+        assertPivots(a, DualPivotingStrategy.SORT_7);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort8(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 7);
+        assertPivots(a, DualPivotingStrategy.SORT_8);
     }
 
     private static void assertPivots(double[] a, DualPivotingStrategy s) {
@@ -135,6 +184,36 @@ class DualPivotingStrategyTest {
     @Test
     void testSort5JIndexing() {
         assertIndexing(DualPivotingStrategy.SORT_5J, 4);
+    }
+
+    @Test
+    void testSort5of3Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_5_OF_3, 15);
+    }
+
+    @Test
+    void testSort4of3Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_4_OF_3, 12);
+    }
+
+    @Test
+    void testSort3of3Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_3_OF_3, 9);
+    }
+
+    @Test
+    void testSort5of5Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_5_OF_5, 25);
+    }
+
+    @Test
+    void testSort7Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_7, 7);
+    }
+
+    @Test
+    void testSort8Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_8, 8);
     }
 
     private static void assertIndexing(DualPivotingStrategy s, int safeLength) {
@@ -219,6 +298,9 @@ class DualPivotingStrategyTest {
     void testDistribution(DualPivotingStrategy ps, int n, int samples) {
         final String dir = System.getProperty("java.io.tmpdir");
         final Path path = Path.of(dir, String.format("%s_%d_%d.txt", ps, n, samples));
+        final DescriptiveStatistics[] s = new DescriptiveStatistics[] {
+            new DescriptiveStatistics(), new DescriptiveStatistics(), new DescriptiveStatistics()
+        };
         try (BufferedWriter bw = Files.newBufferedWriter(path);
             Formatter f = new Formatter(bw)) {
             final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
@@ -246,7 +328,18 @@ class DualPivotingStrategyTest {
                 }
                 final double third1 = (double) lo / n;
                 final double third3 = (double) hi / n;
-                f.format("%s %s %s%n", third1, 1 - third1 - third3, third3);
+                final double third2 = 1 - third1 - third3;
+                f.format("%s %s %s%n", third1, third2, third3);
+                s[0].addValue(third1);
+                s[1].addValue(third2);
+                s[2].addValue(third3);
+            }
+            TestUtils.printf("%s   n=%d   len=%d%n", ps, samples, n);
+            TestUtils.printf("     * %8s %8s %8s %8s %8s %8s%n", "min", "max", "mean", "sd", "median", "skew");
+            for (DescriptiveStatistics d : s) {
+                TestUtils.printf("     * %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f%n",
+                    d.getMin(), d.getMax(), d.getMean(),
+                    d.getStandardDeviation(), d.getPercentile(0.5), d.getSkewness());
             }
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
@@ -255,12 +348,20 @@ class DualPivotingStrategyTest {
 
     static Stream<Arguments> testDistribution() {
         final Stream.Builder<Arguments> builder = Stream.builder();
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 10000, 10000));
         //builder.add(Arguments.of(DualPivotingStrategy.MEDIANS, 10000, 10000));
+        builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5B, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5C, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5_OF_3, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_4_OF_3, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_3_OF_3, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5_OF_5, 10000, 10000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_7, 10000, 10000));
+        builder.add(Arguments.of(DualPivotingStrategy.SORT_8, 10000, 10000));
 
         // On small data the sort 5 method has skewed density.
-        builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 30, 1000000));
-        builder.add(Arguments.of(DualPivotingStrategy.MEDIANS, 30, 1000000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 30, 1000000));
+        //builder.add(Arguments.of(DualPivotingStrategy.MEDIANS, 30, 1000000));
 
         //builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 1000, 100000));
         return builder.build();
