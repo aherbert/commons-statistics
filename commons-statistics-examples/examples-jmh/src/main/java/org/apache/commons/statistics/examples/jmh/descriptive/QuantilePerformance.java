@@ -875,12 +875,16 @@ public class QuantilePerformance {
      * @return the pivot strategy
      */
     static PivotingStrategy getPivotStrategyOrEsle(String name, PivotingStrategy defaultValue) {
+        // Names can have partial matches. Match the longest name
+        int len = 0;
+        PivotingStrategy result = defaultValue;
         for (final PivotingStrategy s : PivotingStrategy.values()) {
-            if (name.contains(s.name())) {
-                return s;
+            if (name.contains(s.name()) && s.name().length() > len) {
+                result = s;
+                len = s.name().length();
             }
         }
-        return defaultValue;
+        return result;
     }
 
     /**
@@ -901,12 +905,16 @@ public class QuantilePerformance {
      * @return the dual pivot strategy
      */
     static DualPivotingStrategy getDualPivotStrategyOrEsle(String name, DualPivotingStrategy defaultValue) {
+        // Names can have partial matches. Match the longest name
+        int len = 0;
+        DualPivotingStrategy result = defaultValue;
         for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
-            if (name.contains(s.name())) {
-                return s;
+            if (name.contains(s.name()) && s.name().length() > len) {
+                result = s;
+                len = s.name().length();
             }
         }
-        return defaultValue;
+        return result;
     }
 
     /**

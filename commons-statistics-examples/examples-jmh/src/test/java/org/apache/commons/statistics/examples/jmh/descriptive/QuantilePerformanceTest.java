@@ -97,4 +97,28 @@ class QuantilePerformanceTest {
         Assertions.assertEquals(15, QuantilePerformance.getCompressionLevel("beforeCL15after"));
         Assertions.assertEquals(16, QuantilePerformance.getCompressionLevel("beforeQS26_CL16after"));
     }
+
+    @Test
+    void testGetPivotingStrategy() {
+        Assertions.assertEquals(Partition.PIVOTING_STRATEGY, QuantilePerformance.getPivotStrategy("nothing"));
+        // Ensure partial name matching is avoided
+        for (final PivotingStrategy s : PivotingStrategy.values()) {
+            Assertions.assertEquals(s, QuantilePerformance.getPivotStrategy(s.toString()), () -> s.toString());
+            Assertions.assertEquals(s, QuantilePerformance.getPivotStrategy("before" + s), () -> s.toString());
+            Assertions.assertEquals(s, QuantilePerformance.getPivotStrategy(s + "after"), () -> s.toString());
+            Assertions.assertEquals(s, QuantilePerformance.getPivotStrategy("before" + s + "after"), () -> s.toString());
+        }
+    }
+
+    @Test
+    void testGetDualPivotingStrategy() {
+        Assertions.assertEquals(Partition.DUAL_PIVOTING_STRATEGY, QuantilePerformance.getDualPivotStrategy("nothing"));
+        // Ensure partial name matching is avoided
+        for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
+            Assertions.assertEquals(s, QuantilePerformance.getDualPivotStrategy(s.toString()), () -> s.toString());
+            Assertions.assertEquals(s, QuantilePerformance.getDualPivotStrategy("before" + s), () -> s.toString());
+            Assertions.assertEquals(s, QuantilePerformance.getDualPivotStrategy(s + "after"), () -> s.toString());
+            Assertions.assertEquals(s, QuantilePerformance.getDualPivotStrategy("before" + s + "after"), () -> s.toString());
+        }
+    }
 }
