@@ -103,21 +103,10 @@ public class MedianPerformance {
             "1000"})
         private int length;
 
-        /** Extra range to add to the data length.
-         * Use 1 to force use of odd and even length samples for the median. */
-        @Param({"1"})
-        private int range;
-
         /** {@inheritDoc} */
         @Override
         protected int getLength() {
             return length;
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        protected int getRange() {
-            return range;
         }
     }
 
