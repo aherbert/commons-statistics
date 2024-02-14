@@ -262,6 +262,11 @@ public class QuantilePerformance {
         @Param({ALL})
         private String distribution;
 
+        /** Extra range to add to the data length.
+         * E.g. Use 1 to force use of odd and even length samples for the median. */
+        @Param({"1"})
+        private int range;
+
         /** Data. */
         private double[][] data;
 
@@ -431,13 +436,11 @@ public class QuantilePerformance {
          * Gets the maximum addition to extend the length of each sample of data.
          * The actual length is enumerated in {@code [length, length + range]}.
          *
-         * <p>The default value is zero.
-         *
          * @return the range
          * @see #getLength()
          */
         protected int getRange() {
-            return 0;
+            return range;
         }
     }
 
