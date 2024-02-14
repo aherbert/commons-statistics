@@ -48,7 +48,7 @@ public class MedianPerformance {
     /** Commons Statistics Median implementation using a single-pivot quickselect. */
     private static final String SP = "SP";
     /** Commons Statistics Median implementation with special NaN/zero handling. */
-    private static final String SP_NAN = "SP_NaN";
+    private static final String SP_NAN = "NSP";
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect. */
     private static final String SBM = "SBM";
     /** Commons Statistics Median implementation with Bentley-McIlroy (original) quickselect. */
@@ -57,7 +57,7 @@ public class MedianPerformance {
     private static final String DP = "DP";
     /** Commons Statistics Median implementation with a dual-pivot quickselect
      * with 5 sorted points to choose pivots. */
-    private static final String DP5 = "DP_5";
+    private static final String DP5 = "5DP";
     /** Commons Math Median implementation. */
     private static final String CM = "CM";
     /** Median implementation using a sort. */
@@ -149,34 +149,34 @@ public class MedianPerformance {
                 function = m::evaluate;
             // First generation kth-selector functions
             } else if (name.startsWith(SP)) {
-                function = withKthSelector(name)::evaluateSP;
+                function = withKthSelector(name, SP)::evaluateSP;
             } else if (name.startsWith(SP_NAN)) {
-                function = withKthSelector(name)::evaluateSPN;
+                function = withKthSelector(name, SP_NAN)::evaluateSPN;
             } else if (name.startsWith(SBM)) {
-                function = withKthSelector(name)::evaluateSBM;
+                function = withKthSelector(name, SBM)::evaluateSBM;
             } else if (name.startsWith(BM)) {
-                function = withKthSelector(name)::evaluateBM;
+                function = withKthSelector(name, BM)::evaluateBM;
             } else if (name.startsWith(DP)) {
-                function = withKthSelector(name)::evaluateDP;
+                function = withKthSelector(name, DP)::evaluateDP;
             } else if (name.startsWith(DP5)) {
-                function = withKthSelector(name)::evaluateDP5;
+                function = withKthSelector(name, DP5)::evaluateDP5;
             // Second generation partition functions
             } else if (name.startsWith(RANGE_SBM)) {
-                function = withPartition(name)::evaluateRangeSBM;
+                function = withPartition(name, RANGE_SBM)::evaluateRangeSBM;
             } else if (name.startsWith(SBM2)) {
-                function = withPartition(name)::evaluateSBM2;
+                function = withPartition(name, SBM2)::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
-                function = withPartition(name)::evaluateKSBM;
+                function = withPartition(name, KSBM)::evaluateKSBM;
             } else if (name.startsWith(K1SBM)) {
-                function = withPartition(name)::evaluateK1SBM;
+                function = withPartition(name, K1SBM)::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
-                function = withPartition(name)::evaluatePairedSBM;
+                function = withPartition(name, PSBM)::evaluatePairedSBM;
             // Introselect implementations
             } else if (name.startsWith(ISBM)) {
-                function = withPartition(name)::evaluateISBM;
+                function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {
-                function = withPartition(name)::evaluateIDP;
+                function = withPartition(name, IDP)::evaluateIDP;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
@@ -187,10 +187,11 @@ public class MedianPerformance {
          * Parameters for the {@link KthSelector} are derived from the {@code name}.
          *
          * @param name Name.
+         * @param prefix Method prefix.
          * @return the {@link Median} instance
          */
-        private static Median withKthSelector(String name) {
-            return Median.withDefaults().withKthSelector(QuantilePerformance.createKthSelector(name));
+        private static Median withKthSelector(String name, String prefix) {
+            return Median.withDefaults().withKthSelector(QuantilePerformance.createKthSelector(name, prefix));
         }
 
         /**
@@ -198,10 +199,11 @@ public class MedianPerformance {
          * Parameters for the {@link Partition} are derived from the {@code name}.
          *
          * @param name Name.
+         * @param prefix Method prefix.
          * @return the {@link Median} instance
          */
-        private static Median withPartition(String name) {
-            return Median.withDefaults().withPartition(QuantilePerformance.createPartition(name));
+        private static Median withPartition(String name, String prefix) {
+            return Median.withDefaults().withPartition(QuantilePerformance.createPartition(name, prefix));
         }
     }
 

@@ -75,7 +75,7 @@ public class QuantilePerformance {
     private static final String DP = "DP";
     /** Commons Statistics Quantile implementation with a dual-pivot strategy
      * with 5 sorted points to choose pivots. */
-    private static final String DP5 = "DP_5";
+    private static final String DP5 = "5DP";
     /** Commons Math Percentile implementation. */
     private static final String CM = "CM";
     /** Quantile implementation using a sort. */
@@ -587,34 +587,34 @@ public class QuantilePerformance {
                 };
             // First generation kth-selector functions
             } else if (name.startsWith(SPH)) {
-                function = withKthSelector(name)::evaluateSPH;
+                function = withKthSelector(name, SPH)::evaluateSPH;
             } else if (name.startsWith(SPE)) {
-                function = withKthSelector(name)::evaluateSPE;
+                function = withKthSelector(name, SPE)::evaluateSPE;
             } else if (name.startsWith(SP)) {
-                function = withKthSelector(name)::evaluateSP;
+                function = withKthSelector(name, SP)::evaluateSP;
             } else if (name.startsWith(BM)) {
-                function = withKthSelector(name)::evaluateBM;
+                function = withKthSelector(name, BM)::evaluateBM;
             } else if (name.startsWith(SBM)) {
-                function = withKthSelector(name)::evaluateSBM;
+                function = withKthSelector(name, SBM)::evaluateSBM;
             } else if (name.startsWith(DP)) {
-                function = withKthSelector(name)::evaluateDP;
+                function = withKthSelector(name, DP)::evaluateDP;
             } else if (name.startsWith(DP5)) {
-                function = withKthSelector(name)::evaluateDP5;
+                function = withKthSelector(name, DP5)::evaluateDP5;
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
-                function = withPartition(name)::evaluateSBM2;
+                function = withPartition(name, SBM2)::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {
-                function = withPartition(name)::evaluateKSBM;
+                function = withPartition(name, KSBM)::evaluateKSBM;
             } else if (name.startsWith(K1SBM)) {
-                function = withPartition(name)::evaluateK1SBM;
+                function = withPartition(name, K1SBM)::evaluateK1SBM;
             // Paired key implementations
             } else if (name.startsWith(PSBM)) {
-                function = withPartition(name)::evaluatePairedSBM;
+                function = withPartition(name, PSBM)::evaluatePairedSBM;
             // Introselect implementations
             } else if (name.startsWith(ISBM)) {
-                function = withPartition(name)::evaluateISBM;
+                function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {
-                function = withPartition(name)::evaluateIDP;
+                function = withPartition(name, IDP)::evaluateIDP;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
@@ -709,38 +709,38 @@ public class QuantilePerformance {
                 function = Arrays::sort;
             // First generation kth-selector functions
             } else if (name.startsWith(SP)) {
-                function = createKthSelector(name)::sortSP;
+                function = createKthSelector(name, SP)::sortSP;
             } else if (name.startsWith(SBM)) {
-                function = createKthSelector(name)::sortSBM;
+                function = createKthSelector(name, SBM)::sortSBM;
             } else if (name.startsWith(BM)) {
-                function = createKthSelector(name)::sortBM;
+                function = createKthSelector(name, BM)::sortBM;
             } else if (name.startsWith(DP)) {
-                function = createKthSelector(name)::sortDP;
+                function = createKthSelector(name, DP)::sortDP;
             } else if (name.startsWith(DP5)) {
-                function = createKthSelector(name)::sortDP5;
+                function = createKthSelector(name, DP5)::sortDP5;
             } else if (name.startsWith(DNF)) {
-                function = createKthSelector(name)::sortDNF;
+                function = createKthSelector(name, DNF)::sortDNF;
             // 2nd generation partition functions
             } else if (name.startsWith(SBM2)) {
-                function = createPartition(name)::sortSBM;
+                function = createPartition(name, SBM2)::sortSBM;
             // Introsort
             } else if (name.startsWith(ISBM)) {
-                function = createPartition(name)::sortISBM;
+                function = createPartition(name, ISBM)::sortISBM;
             } else if (name.startsWith(IDNF)) {
-                final Partition part = createPartition(name);
                 // 3 variants
-                if (name.startsWith(IDNF + "1")) {
-                    function = part::sortIDNF1;
+                if (name.startsWith(IDNF + "3")) {
+                    function = createPartition(name, IDNF + "3")::sortIDNF3;
                 } else if (name.startsWith(IDNF + "2")) {
-                    function = part::sortIDNF2;
-                } else {
-                    function = part::sortIDNF3;
+                    function = createPartition(name, IDNF + "2")::sortIDNF2;
+                } else if (name.startsWith(IDNF + "1")) {
+                    function = createPartition(name, IDNF + "1")::sortIDNF1;
                 }
             } else if (name.startsWith(IDP)) {
-                function = createPartition(name)::sortIDP;
+                function = createPartition(name, IDP)::sortIDP;
             } else if ("InsertionSort".equals(name)) {
                 function = x -> KthSelector.insertionSort(x, 0, x.length, false);
-            } else {
+            }
+            if (function == null) {
                 throw new IllegalStateException("Unknown sort function: " + name);
             }
         }
@@ -832,7 +832,7 @@ public class QuantilePerformance {
             // First generation kth-selector functions
             } else if (name.startsWith(SPH)) {
                 // Ported CM implementation with a heap
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, SPH);
                 function = (data, indices) -> {
                     final int n = indices.length;
                     // Note: Pivots heap is not optimal here but should be enough for most cases.
@@ -847,56 +847,56 @@ public class QuantilePerformance {
                     return x;
                 };
             } else if (name.startsWith(SP)) {
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, SP);
                 function = (data, indices) -> {
                     selector.partitionSP(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(BM)) {
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, BM);
                 function = (data, indices) -> {
                     selector.partitionBM(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(SBM)) {
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, SBM);
                 function = (data, indices) -> {
                     selector.partitionSBM(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(DP)) {
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, DP);
                 function = (data, indices) -> {
                     selector.partitionDP(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(DP5)) {
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, DP5);
                 function = (data, indices) -> {
                     selector.partitionDP5(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(DNF)) {
-                final KthSelector selector = createKthSelector(name);
+                final KthSelector selector = createKthSelector(name, DNF);
                 function = (data, indices) -> {
                     selector.partitionDNF(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
-                final Partition part = createPartition(name);
+                final Partition part = createPartition(name, SBM2);
                 function = (data, indices) -> {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(KSBM)) {
-                final Partition part = createPartition(name);
+                final Partition part = createPartition(name, KSBM);
                 function = (data, indices) -> {
                     part.partitionKSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(K1SBM)) {
-                final Partition part = createPartition(name);
+                final Partition part = createPartition(name, K1SBM);
                 function = (data, indices) -> {
                     part.partitionK1SBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -904,20 +904,20 @@ public class QuantilePerformance {
             // Paired key implementations.
             // This can be used to show they have no disadvantage for processing single keys.
             } else if (name.startsWith(PSBM)) {
-                final Partition part = createPartition(name);
+                final Partition part = createPartition(name, PSBM);
                 function = (data, indices) -> {
                     part.partitionPairedSBM(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             // Introselect implementations
             } else if (name.startsWith(ISBM)) {
-                final Partition part = createPartition(name);
+                final Partition part = createPartition(name, ISBM);
                 function = (data, indices) -> {
                     part.partitionISBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(IDP)) {
-                final Partition part = createPartition(name);
+                final Partition part = createPartition(name, IDP);
                 function = (data, indices) -> {
                     part.partitionIDP(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -948,12 +948,13 @@ public class QuantilePerformance {
      * Parameters for the {@link KthSelector} are derived from the {@code name}.
      *
      * @param name Name.
+     * @param prefix Method prefix.
      * @return the {@link Quantile} instance
      */
-    private static Quantile withKthSelector(String name) {
+    private static Quantile withKthSelector(String name, String prefix) {
         // For parity with the CM implementation use HF6
         return Quantile.withDefaults().with(EstimationMethod.HF6)
-            .withKthSelector(createKthSelector(name));
+            .withKthSelector(createKthSelector(name, prefix));
     }
 
     /**
@@ -961,65 +962,77 @@ public class QuantilePerformance {
      * Parameters for the {@link Partition} are derived from the {@code name}.
      *
      * @param name Name.
+     * @param prefix Method prefix.
      * @return the {@link Quantile} instance
      */
-    private static Quantile withPartition(String name) {
+    private static Quantile withPartition(String name, String prefix) {
         // For parity with the CM implementation use HF6
         return Quantile.withDefaults().with(EstimationMethod.HF6)
-            .withPartition(createPartition(name));
+            .withPartition(createPartition(name, prefix));
     }
 
     /**
      * Creates the {@link KthSelector}. Parameters are derived from the {@code name}.
      *
+     * <p>After parameters are harvested the only allowed characters are underscores,
+     * otherwise an exception is thrown. This ensures the parameters in the name were
+     * correct.
+     *
      * @param name Name.
+     * @param prefix Method prefix.
      * @return the {@link KthSelector} instance
      */
-    static KthSelector createKthSelector(String name) {
-        final int minQuickSelectSize = getMinQuickSelectSize(name);
-        final PivotingStrategy s = getPivotStrategy(name);
-        return new KthSelector(s, minQuickSelectSize);
+    static KthSelector createKthSelector(String name, String prefix) {
+        final String[] s = {name};
+        final int minQuickSelectSize = getMinQuickSelectSize(s);
+        final PivotingStrategy sp = getPivotStrategy(s);
+        // Check for unharvested parameters
+        for (int i = prefix.length(); i < s[0].length(); i++) {
+            if (s[0].charAt(i) != '_') {
+                throw new IllegalStateException(
+                    String.format("Unharvested KthSelector parameters: %s -> %s", name, s[0]));
+            }
+        }
+        return new KthSelector(sp, minQuickSelectSize);
     }
 
     /**
      * Creates the {@link Partition}. Parameters are derived from the {@code name}.
      *
+     * <p>After parameters are harvested the only allowed characters are underscores,
+     * otherwise an exception is thrown. This ensures the parameters in the name were
+     * correct.
+     *
      * @param name Name.
+     * @param prefix Method prefix.
      * @return the {@link Partition} instance
      */
-    static Partition createPartition(String name) {
-        final PivotingStrategy sp = getPivotStrategy(name);
-        final DualPivotingStrategy dp = getDualPivotStrategy(name);
-        final int minQuickSelectSize = getMinQuickSelectSize(name);
-        final int heapSelectShift = getHeapSelectShift(name);
-        final int heapSelectConstant = getHeapSelectConstant(name);
+    static Partition createPartition(String name, String prefix) {
+        final String[] s = {name};
+        final PivotingStrategy sp = getPivotStrategy(s);
+        final DualPivotingStrategy dp = getDualPivotStrategy(s);
+        final int minQuickSelectSize = getMinQuickSelectSize(s);
+        final int heapSelectShift = getHeapSelectShift(s);
+        final int heapSelectConstant = getHeapSelectConstant(s);
+        final KeyStrategy keyStartegy = getKeyStrategy(s);
+        final double recursionMultiple = getRecursionMultiple(s);
+        final int recursionConstant = getRecursionConstant(s);
+        final int compressionLevel = getCompressionLevel(s);
+        // Check for unharvested parameters
+        for (int i = prefix.length(); i < s[0].length(); i++) {
+            if (s[0].charAt(i) != '_') {
+                throw new IllegalStateException(
+                    String.format("Unharvested Partition parameters: %s -> %s", name, s[0]));
+            }
+        }
         final Partition p = new Partition(sp, dp, minQuickSelectSize, heapSelectShift, heapSelectConstant);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
-        p.setKeyStrategy(getKeyStrategy(name));
-        p.setRecursionMultiple(getRecursionMultiple(name));
-        p.setRecursionConstant(getRecursionConstant(name));
-        p.setCompression(getCompressionLevel(name));
+        p.setKeyStrategy(keyStartegy);
+        p.setRecursionMultiple(recursionMultiple);
+        p.setRecursionConstant(recursionConstant);
+        p.setCompression(compressionLevel);
         return p;
-    }
-
-    /**
-     * Gets an integer number using trailing digits from a string.
-     *
-     * @param value Value.
-     * @param defaultValue Default number.
-     * @return the number (or the default)
-     */
-    static int getInteger(String value, int defaultValue) {
-        int i = value.length();
-        while (i > 0 && Character.isDigit(value.charAt(i - 1))) {
-            i--;
-        }
-        if (i < value.length()) {
-            final int x = Integer.parseInt(value, i, value.length(), 10);
-            return (i > 0 && value.charAt(i - 1) == '-') ? -x : x;
-        }
-        return defaultValue;
     }
 
     /**
@@ -1027,13 +1040,15 @@ public class QuantilePerformance {
      * Below this size the algorithm will change strategy for partitioning,
      * e.g. change to a full sort.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the minimum quickselect size
      */
-    static int getMinQuickSelectSize(String name) {
-        final Matcher m = QS_PATTERN.matcher(name);
+    static int getMinQuickSelectSize(String[] name) {
+        final Matcher m = QS_PATTERN.matcher(name[0]);
         if (m.find()) {
-            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
         }
         return Partition.MIN_QUICKSELECT_SIZE;
     }
@@ -1041,13 +1056,15 @@ public class QuantilePerformance {
     /**
      * Gets the length shift for the heapselect distance-from-end computation.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the heapselect shift
      */
-    static int getHeapSelectShift(String name) {
-        final Matcher m = HS_PATTERN.matcher(name);
+    static int getHeapSelectShift(String[] name) {
+        final Matcher m = HS_PATTERN.matcher(name[0]);
         if (m.find()) {
-            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
         }
         return Partition.HEAPSELECT_SHIFT;
     }
@@ -1055,13 +1072,15 @@ public class QuantilePerformance {
     /**
      * Gets the constant for the heapselect distance-from-end computation.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the heapselect constant
      */
-    static int getHeapSelectConstant(String name) {
-        final Matcher m = HC_PATTERN.matcher(name);
+    static int getHeapSelectConstant(String[] name) {
+        final Matcher m = HC_PATTERN.matcher(name[0]);
         if (m.find()) {
-            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
         }
         return Partition.HEAPSELECT_CONSTANT;
     }
@@ -1069,13 +1088,15 @@ public class QuantilePerformance {
     /**
      * Gets the recursion multiplication factor.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the recursion multiple
      */
-    static double getRecursionMultiple(String name) {
-        final Matcher m = RM_PATTERN.matcher(name);
+    static double getRecursionMultiple(String[] name) {
+        final Matcher m = RM_PATTERN.matcher(name[0]);
         if (m.find()) {
-            return Double.parseDouble(m.group(1));
+            final double d = Double.parseDouble(m.group(1));
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return d;
         }
         return Partition.RECURSION_MULTIPLE;
     }
@@ -1083,13 +1104,15 @@ public class QuantilePerformance {
     /**
      * Gets the recursion constant.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the recursion constant
      */
-    static int getRecursionConstant(String name) {
-        final Matcher m = RC_PATTERN.matcher(name);
+    static int getRecursionConstant(String[] name) {
+        final Matcher m = RC_PATTERN.matcher(name[0]);
         if (m.find()) {
-            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
         }
         return Partition.RECURSION_CONSTANT;
     }
@@ -1097,13 +1120,15 @@ public class QuantilePerformance {
     /**
      * Gets the compression level for {@link CompressedIndexSet}.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the compression
      */
-    static int getCompressionLevel(String name) {
-        final Matcher m = CL_PATTERN.matcher(name);
+    static int getCompressionLevel(String[] name) {
+        final Matcher m = CL_PATTERN.matcher(name[0]);
         if (m.find()) {
-            return Integer.parseInt(name, m.start(1), m.end(1), 10);
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
         }
         return Partition.COMPRESSION;
     }
@@ -1111,87 +1136,93 @@ public class QuantilePerformance {
     /**
      * Gets the pivot strategy for the recursive partition algorithm.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the pivot strategy
      */
-    static PivotingStrategy getPivotStrategy(String name) {
-        return getPivotStrategyOrEsle(name, Partition.PIVOTING_STRATEGY);
+    static PivotingStrategy getPivotStrategy(String[] name) {
+        return getPivotStrategyOrElse(name, Partition.PIVOTING_STRATEGY);
     }
 
     /**
      * Gets the pivot strategy for the recursive partition algorithm.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @param defaultValue Default value.
      * @return the pivot strategy
      */
-    static PivotingStrategy getPivotStrategyOrEsle(String name, PivotingStrategy defaultValue) {
+    static PivotingStrategy getPivotStrategyOrElse(String[] name, PivotingStrategy defaultValue) {
         // Names can have partial matches. Match the longest name
         int len = 0;
         PivotingStrategy result = defaultValue;
         for (final PivotingStrategy s : PivotingStrategy.values()) {
-            if (name.contains(s.name()) && s.name().length() > len) {
+            if (name[0].contains(s.name()) && s.name().length() > len) {
                 result = s;
                 len = s.name().length();
             }
         }
+        name[0] = name[0].replace(result.toString(), "");
         return result;
     }
 
     /**
      * Gets the dual pivot strategy for the recursive partition algorithm.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the dual pivot strategy
      */
-    static DualPivotingStrategy getDualPivotStrategy(String name) {
-        return getDualPivotStrategyOrEsle(name, Partition.DUAL_PIVOTING_STRATEGY);
+    static DualPivotingStrategy getDualPivotStrategy(String[] name) {
+        return getDualPivotStrategyOrElse(name, Partition.DUAL_PIVOTING_STRATEGY);
     }
 
     /**
      * Gets the dual pivot strategy for the recursive partition algorithm.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @param defaultValue Default value.
      * @return the dual pivot strategy
      */
-    static DualPivotingStrategy getDualPivotStrategyOrEsle(String name, DualPivotingStrategy defaultValue) {
+    static DualPivotingStrategy getDualPivotStrategyOrElse(String[] name, DualPivotingStrategy defaultValue) {
         // Names can have partial matches. Match the longest name
         int len = 0;
         DualPivotingStrategy result = defaultValue;
         for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
-            if (name.contains(s.name()) && s.name().length() > len) {
+            if (name[0].contains(s.name()) && s.name().length() > len) {
                 result = s;
                 len = s.name().length();
             }
         }
+        name[0] = name[0].replace(result.toString(), "");
         return result;
     }
 
     /**
      * Gets the sequential strategy for the recursive partition algorithm.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @return the sequential strategy
      */
-    static KeyStrategy getKeyStrategy(String name) {
+    static KeyStrategy getKeyStrategy(String[] name) {
         return getKeyStrategyOrElse(name, Partition.KEY_STRATEGY);
     }
 
     /**
      * Gets the sequential strategy for the recursive partition algorithm.
      *
-     * @param name Algorithm name.
+     * @param name Algorithm name (updated in-place to remove the parameter).
      * @param defaultValue Default value.
      * @return the sequential strategy
      */
-    static KeyStrategy getKeyStrategyOrElse(String name, KeyStrategy defaultValue) {
+    static KeyStrategy getKeyStrategyOrElse(String[] name, KeyStrategy defaultValue) {
+        int len = 0;
+        KeyStrategy result = defaultValue;
         for (final KeyStrategy s : KeyStrategy.values()) {
-            if (name.contains(s.name())) {
-                return s;
+            if (name[0].contains(s.name()) && s.name().length() > len) {
+                result = s;
+                len = s.name().length();
             }
         }
-        return defaultValue;
+        name[0] = name[0].replace(result.toString(), "");
+        return result;
     }
 
     /**
