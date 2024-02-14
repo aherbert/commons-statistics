@@ -4980,12 +4980,18 @@ final class Partition {
 
         final double value = data[pivot];
 
+        // Fast-forward initial less-than region
+        int lt = left;
+        while (data[lt] < value) {
+            lt++;
+        }
+
         // Pointers positioned to use pre-increment/decrement: ++x / --x
-        int lt = left - 1;
+        lt--;
         int gt = right + 1;
 
         // DNF partitioning which inspects one position per loop iteration
-        for (int i = left; i < gt; i++) {
+        for (int i = lt; ++i < gt;) {
             final double v = data[i];
             if (v < value) {
                 data[++lt] = v;
@@ -5043,13 +5049,19 @@ final class Partition {
 
         final double value = data[pivot];
 
+        // Fast-forward initial less-than region
+        int lt = left;
+        while (data[lt] < value) {
+            lt++;
+        }
+
         // Pointers positioned to use pre-increment/decrement: ++x / --x
-        int lt = left - 1;
+        lt--;
         int gt = right + 1;
 
         // Modified DNF partitioning with fast-forward of the greater-than
         // pointer. Note the fast-forward must check bounds.
-        for (int i = left; i < gt; i++) {
+        for (int i = lt; ++i < gt;) {
             final double v = data[i];
             if (v < value) {
                 data[++lt] = v;
@@ -5114,20 +5126,19 @@ final class Partition {
 
         final double value = data[pivot];
 
-        //// Fast-forward initial less-than region ???
-        // This is not noticeable when many repeat values are present.
-        // When no repeat values are present this is slower.
-        //int lt = left;
-        //while (data[lt] < value) {
-        //    lt++;
-        //}
+        // Fast-forward initial less-than region
+        int lt = left;
+        while (data[lt] < value) {
+            lt++;
+        }
 
         // Pointers positioned to use pre-increment/decrement: ++x / --x
-        int lt = left - 1;
+        lt--;
         int gt = right + 1;
 
         // Note:
-        // This benchmarks as faster than DNF1 and equal to DNF2 on uniform random data.
+        // This benchmarks as faster than DNF1 and equal to DNF2 on random data.
+        // On data with (many) repeat values it is faster than DNF2.
         // Both DNF2 & 3 have fast-forward of the gt pointer.
 
         // Modified DNF partitioning with fast-forward of the greater-than
