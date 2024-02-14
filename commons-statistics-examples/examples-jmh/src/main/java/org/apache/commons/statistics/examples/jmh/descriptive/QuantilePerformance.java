@@ -743,6 +743,52 @@ public class QuantilePerformance {
         }
     }
 
+
+    /**
+     * Source of a sort function.
+     */
+    @State(Scope.Benchmark)
+    public static class Sort5FunctionSource {
+        /** Name of the source. */
+        @Param({"sort5", "sort5b"})
+        private String name;
+
+        /** The action. */
+        private Consumer<double[]> function;
+
+        /**
+         * @return the function
+         */
+        public Consumer<double[]> getFunction() {
+            return function;
+        }
+
+        /**
+         * Create the function.
+         */
+        @Setup
+        public void setup() {
+            Objects.requireNonNull(name);
+            // Note: We do not run this on input of length 5. We can run it on input of
+            // any length above 5. So we choose indices using a spacing of 1/4 of the range.
+            // Since we do this for all methods it is a fixed overhead. This allows use
+            // of a variety of data sizes.
+            if ("sort5".equals(name)) {
+                function = x -> {
+                    final int s = x.length >> 2;
+                    Sorting.sort5(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
+                };
+            } else if ("sort5b".equals(name)) {
+                function = x -> {
+                    final int s = x.length >> 2;
+                    Sorting.sort5b(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
+                };
+            } else {
+                throw new IllegalStateException("Unknown sort5 function: " + name);
+            }
+        }
+    }
+
     /**
      * Source of a k-th selector function.
      */
@@ -1247,6 +1293,24 @@ public class QuantilePerformance {
      */
     @Benchmark
     public void sort(SortFunctionSource function, SortSource source, Blackhole bh) {
+        final double[][] data = source.getData();
+        final Consumer<double[]> fun = function.getFunction();
+        for (final double[] x : data) {
+            final double[] y = x.clone();
+            fun.accept(y);
+            bh.consume(y);
+        }
+    }
+
+    /**
+     * Benchmark a sort of 5 data values.
+     *
+     * @param function Source of the function.
+     * @param source Source of the data.
+     * @param bh Data sink.
+     */
+    @Benchmark
+    public void fiveSort(Sort5FunctionSource function, SortSource source, Blackhole bh) {
         final double[][] data = source.getData();
         final Consumer<double[]> fun = function.getFunction();
         for (final double[] x : data) {

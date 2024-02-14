@@ -68,42 +68,49 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
-    void testDoubleInsertionSort3(double[] values) {
+    void testDoubleSort3(double[] values) {
         final double[] data = Arrays.copyOf(values, 3);
         assertDoubleSort(data, x -> Sorting.sort3(x, 0, 1, 2));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
-    void testDoubleInsertionSort4(double[] values) {
+    void testDoubleSort4(double[] values) {
         final double[] data = Arrays.copyOf(values, 4);
         assertDoubleSort(data, x -> Sorting.sort4(x, 0, 1, 2, 3));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
-    void testDoubleInsertionSort5(double[] values) {
+    void testDoubleSort5(double[] values) {
         final double[] data = Arrays.copyOf(values, 5);
         assertDoubleSort(data, x -> Sorting.sort5(x, 0, 1, 2, 3, 4));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
-    void testDoubleInsertionSort7(double[] values) {
+    void testDoubleSort5b(double[] values) {
+        final double[] data = Arrays.copyOf(values, 5);
+        assertDoubleSort(data, x -> Sorting.sort5b(x, 0, 1, 2, 3, 4));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
+    void testDoubleSort7(double[] values) {
         final double[] data = Arrays.copyOf(values, 7);
         assertDoubleSort(data, x -> Sorting.sort7(x, 0, 1, 2, 3, 4, 5, 6));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
-    void testDoubleInsertionSort8(double[] values) {
+    void testDoubleSort8(double[] values) {
         final double[] data = Arrays.copyOf(values, 8);
         assertDoubleSort(data, x -> Sorting.sort8(x, 0, 1, 2, 3, 4, 5, 6, 7));
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleInsertionSort3Internal"})
-    void testDoubleInsertionSort3Internal(double[] values, int[] indices) {
+    @MethodSource(value = {"testDoubleSort3Internal"})
+    void testDoubleSort3Internal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -111,8 +118,8 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleInsertionSort4Internal"})
-    void testDoubleInsertionSort4Internal(double[] values, int[] indices) {
+    @MethodSource(value = {"testDoubleSort4Internal"})
+    void testDoubleSort4Internal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -121,8 +128,8 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleInsertionSort5Internal"})
-    void testDoubleInsertionSort5Internal(double[] values, int[] indices) {
+    @MethodSource(value = {"testDoubleSort5Internal"})
+    void testDoubleSort5Internal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -132,8 +139,19 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleInsertionSort7Internal"})
-    void testDoubleInsertionSort7Internal(double[] values, int[] indices) {
+    @MethodSource(value = {"testDoubleSort5Internal"})
+    void testDoubleSort5bInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        assertDoubleSortInternal(values, x -> Sorting.sort5b(x, a, b, c, d, e), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort7Internal"})
+    void testDoubleSort7Internal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -145,8 +163,8 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleInsertionSort8Internal"})
-    void testDoubleInsertionSort8Internal(double[] values, int[] indices) {
+    @MethodSource(value = {"testDoubleSort8Internal"})
+    void testDoubleSort8Internal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -265,27 +283,27 @@ class SortingTest {
         return builder.build();
     }
 
-    static Stream<Arguments> testDoubleInsertionSort3Internal() {
-        return testDoubleInsertionSortInternal(3);
+    static Stream<Arguments> testDoubleSort3Internal() {
+        return testDoubleSortInternal(3);
     }
 
-    static Stream<Arguments> testDoubleInsertionSort4Internal() {
-        return testDoubleInsertionSortInternal(4);
+    static Stream<Arguments> testDoubleSort4Internal() {
+        return testDoubleSortInternal(4);
     }
 
-    static Stream<Arguments> testDoubleInsertionSort5Internal() {
-        return testDoubleInsertionSortInternal(5);
+    static Stream<Arguments> testDoubleSort5Internal() {
+        return testDoubleSortInternal(5);
     }
 
-    static Stream<Arguments> testDoubleInsertionSort7Internal() {
-        return testDoubleInsertionSortInternal(7);
+    static Stream<Arguments> testDoubleSort7Internal() {
+        return testDoubleSortInternal(7);
     }
 
-    static Stream<Arguments> testDoubleInsertionSort8Internal() {
-        return testDoubleInsertionSortInternal(8);
+    static Stream<Arguments> testDoubleSort8Internal() {
+        return testDoubleSortInternal(8);
     }
 
-    static Stream<Arguments> testDoubleInsertionSortInternal(int k) {
+    static Stream<Arguments> testDoubleSortInternal(int k) {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
         for (final int size : new int[] {k, 2 * k, 4 * k}) {
@@ -333,21 +351,21 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testIntSort"})
-    void testIntInsertionSort3(int[] values) {
+    void testIntSort3(int[] values) {
         final int[] data = Arrays.copyOf(values, 3);
         assertIntSort(data, x -> Sorting.sort3(x, 0, 1, 2));
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testIntSort"})
-    void testIntInsertionSort5(int[] values) {
+    void testIntSort5(int[] values) {
         final int[] data = Arrays.copyOf(values, 5);
         assertIntSort(data, x -> Sorting.sort5(x, 0, 1, 2, 3, 4));
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testIntInsertionSort3Internal"})
-    void testIntInsertionSort3Internal(int[] values, int[] indices) {
+    @MethodSource(value = {"testIntSort3Internal"})
+    void testIntSort3Internal(int[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -355,8 +373,8 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testIntInsertionSort5Internal"})
-    void testIntInsertionSort5Internal(int[] values, int[] indices) {
+    @MethodSource(value = {"testIntSort5Internal"})
+    void testIntSort5Internal(int[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
@@ -444,15 +462,15 @@ class SortingTest {
         return builder.build();
     }
 
-    static Stream<Arguments> testIntInsertionSort3Internal() {
-        return testIntInsertionSortInternal(3);
+    static Stream<Arguments> testIntSort3Internal() {
+        return testIntSortInternal(3);
     }
 
-    static Stream<Arguments> testIntInsertionSort5Internal() {
-        return testIntInsertionSortInternal(5);
+    static Stream<Arguments> testIntSort5Internal() {
+        return testIntSortInternal(5);
     }
 
-    static Stream<Arguments> testIntInsertionSortInternal(int k) {
+    static Stream<Arguments> testIntSortInternal(int k) {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
         for (final int size : new int[] {k, 2 * k, 4 * k}) {
