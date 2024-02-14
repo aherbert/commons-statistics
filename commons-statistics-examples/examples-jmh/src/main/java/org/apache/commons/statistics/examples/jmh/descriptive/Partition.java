@@ -49,7 +49,7 @@ final class Partition {
     /** Default pivoting strategy. */
     static final PivotingStrategy PIVOTING_STRATEGY = PivotingStrategy.MEDIAN_OF_3;
     /** Default pivoting strategy. */
-    static final DualPivotingStrategy DUAL_PIVOTING_STRATEGY = DualPivotingStrategy.SORT_5;
+    static final DualPivotingStrategy DUAL_PIVOTING_STRATEGY = DualPivotingStrategy.SORT_5B;
     /** Minimum selection size for quickselect.
      * Below this switch to insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in the original paper. */
