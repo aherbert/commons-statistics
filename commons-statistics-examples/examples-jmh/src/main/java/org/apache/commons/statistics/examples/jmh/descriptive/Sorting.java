@@ -109,18 +109,17 @@ final class Sorting {
         // Order pair:
         //[(0,2)]
         // Move point 1 above point 2 or below point 0
-        double v;
         if (data[i2] < data[i0]) {
-            v = data[i2];
+            final double v = data[i2];
             data[i2] = data[i0];
             data[i0] = v;
         }
         if (data[i2] < data[i1]) {
-            v = data[i2];
+            final double v = data[i2];
             data[i2] = data[i1];
             data[i1] = v;
         } else if (data[i1] < data[i0]) {
-            v = data[i1];
+            final double v = data[i1];
             data[i1] = data[i0];
             data[i0] = v;
         }
@@ -156,32 +155,30 @@ final class Sorting {
         //[(0,2),(1,3)]
         //[(0,1),(2,3)]
         //[(1,2)]
-        double u;
-        double v;
         if (data[i3] < data[i1]) {
-            u = data[i3];
+            final double u = data[i3];
             data[i3] = data[i1];
             data[i1] = u;
         }
         if (data[i2] < data[i0]) {
-            v = data[i2];
+            final double v = data[i2];
             data[i2] = data[i0];
             data[i0] = v;
         }
 
         if (data[i3] < data[i2]) {
-            u = data[i3];
+            final double u = data[i3];
             data[i3] = data[i2];
             data[i2] = u;
         }
         if (data[i1] < data[i0]) {
-            v = data[i1];
+            final double v = data[i1];
             data[i1] = data[i0];
             data[i0] = v;
         }
 
         if (data[i2] < data[i1]) {
-            u = data[i2];
+            final double u = data[i2];
             data[i2] = data[i1];
             data[i1] = u;
         }
@@ -212,74 +209,101 @@ final class Sorting {
      * @param i4 Index.
      */
     static void sort5(double[] data, int i0, int i1, int i2, int i3, int i4) {
-//        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
-//        // 9 comparisons.
-//        // Order pairs:
-//        //[(0,3),(1,4)]
-//        //[(0,2),(1,3)]
-//        //[(0,1),(2,4)]
-//        //[(1,2),(3,4)]
-//        //[(2,3)]
-//        double u;
-//        double v;
-//        if (data[i4] < data[i1]) {
-//            u = data[i4];
-//            data[i4] = data[i1];
-//            data[i1] = u;
-//        }
-//        if (data[i3] < data[i0]) {
-//            v = data[i3];
-//            data[i3] = data[i0];
-//            data[i0] = v;
-//        }
-//
-//        if (data[i3] < data[i1]) {
-//            u = data[i3];
-//            data[i3] = data[i1];
-//            data[i1] = u;
-//        }
-//        if (data[i2] < data[i0]) {
-//            v = data[i2];
-//            data[i2] = data[i0];
-//            data[i0] = v;
-//        }
-//
-//        if (data[i4] < data[i2]) {
-//            u = data[i4];
-//            data[i4] = data[i2];
-//            data[i2] = u;
-//        }
-//        if (data[i1] < data[i0]) {
-//            v = data[i1];
-//            data[i1] = data[i0];
-//            data[i0] = v;
-//        }
-//
-//        if (data[i4] < data[i3]) {
-//            u = data[i4];
-//            data[i4] = data[i3];
-//            data[i3] = u;
-//        }
-//        if (data[i2] < data[i1]) {
-//            v = data[i2];
-//            data[i2] = data[i1];
-//            data[i1] = v;
-//        }
-//
-//        if (data[i3] < data[i2]) {
-//            u = data[i3];
-//            data[i3] = data[i2];
-//            data[i2] = u;
-//        }
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 9 comparisons.
+        // Order pairs:
+        // [(0,3),(1,4)]
+        // [(0,2),(1,3)]
+        // [(0,1),(2,4)]
+        // [(1,2),(3,4)]
+        // [(2,3)]
+        if (data[i4] < data[i1]) {
+            final double u = data[i4];
+            data[i4] = data[i1];
+            data[i1] = u;
+        }
+        if (data[i3] < data[i0]) {
+            final double v = data[i3];
+            data[i3] = data[i0];
+            data[i0] = v;
+        }
 
-        // Sorting network for size 5 is 9 comparisons.
-        // Sorting network for size 4 is 5 comparisons + 2 or 3 extra
+        if (data[i3] < data[i1]) {
+            final double u = data[i3];
+            data[i3] = data[i1];
+            data[i1] = u;
+        }
+        if (data[i2] < data[i0]) {
+            final double v = data[i2];
+            data[i2] = data[i0];
+            data[i0] = v;
+        }
+
+        if (data[i4] < data[i2]) {
+            final double u = data[i4];
+            data[i4] = data[i2];
+            data[i2] = u;
+        }
+        if (data[i1] < data[i0]) {
+            final double v = data[i1];
+            data[i1] = data[i0];
+            data[i0] = v;
+        }
+
+        if (data[i4] < data[i3]) {
+            final double u = data[i4];
+            data[i4] = data[i3];
+            data[i3] = u;
+        }
+        if (data[i2] < data[i1]) {
+            final double v = data[i2];
+            data[i2] = data[i1];
+            data[i1] = v;
+        }
+
+        if (data[i3] < data[i2]) {
+            final double u = data[i3];
+            data[i3] = data[i2];
+            data[i2] = u;
+        }
+    }
+
+    /**
+     * Sorts the given indices in an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
+     * a != b != c != d != e
+     * data[a] < data[b] < data[c] < data[d] < data[e]
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     */
+    static void sort5b(double[] data, int i0, int i1, int i2, int i3, int i4) {
+        // Sorting network for size 5 is 9 comparisons (see sort5b).
+        // Sorting network for size 4 is 5 comparisons + 2 or 3 extra.
+        // This method benchmarks marginally faster (~1%) than the sorting network of size 5
+        // on length 5 data. When the data is larger and the indices are uniformly
+        // spread across the range, the difference is below the noise of the timings.
 
         // Order quadruple:
         //[(0,1,3,4)]
         // Move point 2 above points 3,4 or below points 0,1
         sort4(data, i0, i1, i3, i4);
-        double u = data[i2];
+        final double u = data[i2];
         if (u > data[i3]) {
             data[i2] = data[i3];
             data[i3] = u;
@@ -333,91 +357,88 @@ final class Sorting {
         //[(1,2),(4,6)]
         //[(2,3),(4,5)]
         //[(1,2),(3,4),(5,6)]
-        double u;
-        double v;
-        double w;
         if (data[i5] < data[i4]) {
-            u = data[i5];
+            final double u = data[i5];
             data[i5] = data[i4];
             data[i4] = u;
         }
         if (data[i3] < data[i2]) {
-            v = data[i3];
+            final double v = data[i3];
             data[i3] = data[i2];
             data[i2] = v;
         }
         if (data[i6] < data[i0]) {
-            w = data[i6];
+            final double w = data[i6];
             data[i6] = data[i0];
             data[i0] = w;
         }
 
         if (data[i6] < data[i3]) {
-            u = data[i6];
+            final double u = data[i6];
             data[i6] = data[i3];
             data[i3] = u;
         }
         if (data[i4] < data[i1]) {
-            v = data[i4];
+            final double v = data[i4];
             data[i4] = data[i1];
             data[i1] = v;
         }
         if (data[i2] < data[i0]) {
-            w = data[i2];
+            final double w = data[i2];
             data[i2] = data[i0];
             data[i0] = w;
         }
 
         if (data[i4] < data[i3]) {
-            u = data[i4];
+            final double u = data[i4];
             data[i4] = data[i3];
             data[i3] = u;
         }
         if (data[i5] < data[i2]) {
-            v = data[i5];
+            final double v = data[i5];
             data[i5] = data[i2];
             data[i2] = v;
         }
         if (data[i1] < data[i0]) {
-            w = data[i1];
+            final double w = data[i1];
             data[i1] = data[i0];
             data[i0] = w;
         }
 
         if (data[i6] < data[i4]) {
-            u = data[i6];
+            final double u = data[i6];
             data[i6] = data[i4];
             data[i4] = u;
         }
         if (data[i2] < data[i1]) {
-            v = data[i2];
+            final double v = data[i2];
             data[i2] = data[i1];
             data[i1] = v;
         }
 
         if (data[i5] < data[i4]) {
-            u = data[i5];
+            final double u = data[i5];
             data[i5] = data[i4];
             data[i4] = u;
         }
         if (data[i3] < data[i2]) {
-            v = data[i3];
+            final double v = data[i3];
             data[i3] = data[i2];
             data[i2] = v;
         }
 
         if (data[i6] < data[i5]) {
-            u = data[i6];
+            final double u = data[i6];
             data[i6] = data[i5];
             data[i5] = u;
         }
         if (data[i4] < data[i3]) {
-            v = data[i4];
+            final double v = data[i4];
             data[i4] = data[i3];
             data[i3] = v;
         }
         if (data[i2] < data[i1]) {
-            w = data[i2];
+            final double w = data[i2];
             data[i2] = data[i1];
             data[i1] = w;
         }
@@ -460,107 +481,103 @@ final class Sorting {
         //[(2,4),(3,5)]
         //[(1,4),(3,6)]
         //[(1,2),(3,4),(5,6)]
-        double u;
-        double v;
-        double w;
-        double x;
         if (data[i7] < data[i5]) {
-            u = data[i7];
+            final double u = data[i7];
             data[i7] = data[i5];
             data[i5] = u;
         }
         if (data[i6] < data[i4]) {
-            v = data[i6];
+            final double v = data[i6];
             data[i6] = data[i4];
             data[i4] = v;
         }
         if (data[i3] < data[i1]) {
-            w = data[i3];
+            final double w = data[i3];
             data[i3] = data[i1];
             data[i1] = w;
         }
         if (data[i2] < data[i0]) {
-            x = data[i2];
+            final double x = data[i2];
             data[i2] = data[i0];
             data[i0] = x;
         }
 
         if (data[i7] < data[i3]) {
-            u = data[i7];
+            final double u = data[i7];
             data[i7] = data[i3];
             data[i3] = u;
         }
         if (data[i6] < data[i2]) {
-            v = data[i6];
+            final double v = data[i6];
             data[i6] = data[i2];
             data[i2] = v;
         }
         if (data[i5] < data[i1]) {
-            w = data[i5];
+            final double w = data[i5];
             data[i5] = data[i1];
             data[i1] = w;
         }
         if (data[i4] < data[i0]) {
-            x = data[i4];
+            final double x = data[i4];
             data[i4] = data[i0];
             data[i0] = x;
         }
 
         if (data[i7] < data[i6]) {
-            u = data[i7];
+            final double u = data[i7];
             data[i7] = data[i6];
             data[i6] = u;
         }
         if (data[i5] < data[i4]) {
-            v = data[i5];
+            final double v = data[i5];
             data[i5] = data[i4];
             data[i4] = v;
         }
         if (data[i3] < data[i2]) {
-            w = data[i3];
+            final double w = data[i3];
             data[i3] = data[i2];
             data[i2] = w;
         }
         if (data[i1] < data[i0]) {
-            x = data[i1];
+            final double x = data[i1];
             data[i1] = data[i0];
             data[i0] = x;
         }
 
         if (data[i5] < data[i3]) {
-            u = data[i5];
+            final double u = data[i5];
             data[i5] = data[i3];
             data[i3] = u;
         }
         if (data[i4] < data[i2]) {
-            v = data[i4];
+            final double v = data[i4];
             data[i4] = data[i2];
             data[i2] = v;
         }
 
         if (data[i6] < data[i3]) {
-            u = data[i6];
+            final double u = data[i6];
             data[i6] = data[i3];
             data[i3] = u;
         }
         if (data[i4] < data[i1]) {
-            v = data[i4];
+            final double v = data[i4];
             data[i4] = data[i1];
             data[i1] = v;
         }
 
         if (data[i6] < data[i5]) {
-            u = data[i6];
+            final double u = data[i6];
             data[i6] = data[i5];
             data[i5] = u;
         }
         if (data[i4] < data[i3]) {
-            v = data[i4];
+            final double v = data[i4];
             data[i4] = data[i3];
             data[i3] = v;
         }
         if (data[i2] < data[i1]) {
-            w = data[i2];
+            final double w = data[i2];
             data[i2] = data[i1];
             data[i1] = w;
         }
@@ -637,18 +654,17 @@ final class Sorting {
         // Order pair:
         //[(0,2)]
         // Move point 1 above point 2 or below point 0
-        int v;
         if (data[i2] < data[i0]) {
-            v = data[i2];
+            final int v = data[i2];
             data[i2] = data[i0];
             data[i0] = v;
         }
         if (data[i2] < data[i1]) {
-            v = data[i2];
+            final int v = data[i2];
             data[i2] = data[i1];
             data[i1] = v;
         } else if (data[i1] < data[i0]) {
-            v = data[i1];
+            final int v = data[i1];
             data[i1] = data[i0];
             data[i0] = v;
         }
@@ -686,54 +702,52 @@ final class Sorting {
         //[(0,1),(2,4)]
         //[(1,2),(3,4)]
         //[(2,3)]
-        int u;
-        int v;
         if (data[i4] < data[i1]) {
-            u = data[i4];
+            final int u = data[i4];
             data[i4] = data[i1];
             data[i1] = u;
         }
         if (data[i3] < data[i0]) {
-            v = data[i3];
+            final int v = data[i3];
             data[i3] = data[i0];
             data[i0] = v;
         }
 
         if (data[i3] < data[i1]) {
-            u = data[i3];
+            final int u = data[i3];
             data[i3] = data[i1];
             data[i1] = u;
         }
         if (data[i2] < data[i0]) {
-            v = data[i2];
+            final int v = data[i2];
             data[i2] = data[i0];
             data[i0] = v;
         }
 
         if (data[i4] < data[i2]) {
-            u = data[i4];
+            final int u = data[i4];
             data[i4] = data[i2];
             data[i2] = u;
         }
         if (data[i1] < data[i0]) {
-            v = data[i1];
+            final int v = data[i1];
             data[i1] = data[i0];
             data[i0] = v;
         }
 
         if (data[i4] < data[i3]) {
-            u = data[i4];
+            final int u = data[i4];
             data[i4] = data[i3];
             data[i3] = u;
         }
         if (data[i2] < data[i1]) {
-            v = data[i2];
+            final int v = data[i2];
             data[i2] = data[i1];
             data[i1] = v;
         }
 
         if (data[i3] < data[i2]) {
-            u = data[i3];
+            final int u = data[i3];
             data[i3] = data[i2];
             data[i2] = u;
         }
@@ -889,8 +903,8 @@ final class Sorting {
         // Simple cases
         if (n < 3) {
             if (n == 2) {
-                int i0 = data[0];
-                int i1 = data[1];
+                final int i0 = data[0];
+                final int i1 = data[1];
                 if (i0 > i1) {
                     data[0] = i1;
                     data[1] = i0;
@@ -1068,7 +1082,7 @@ final class Sorting {
     static int sortIndicesHeapSort(int[] data, int n) {
         // Build the min heap using Floyd's heap-construction algorithm
         // Start at parent of the last element in the heap (n-1)
-        int offset = n - 1;
+        final int offset = n - 1;
         for (int start = offset >> 1; start >= 0; start--) {
             minHeapSiftDown(data, offset, start, n);
         }
