@@ -351,7 +351,7 @@ public class QuantilePerformance {
             }
             if (all || PLATEAU.equals(distribution)) {
                 // min(i, m)
-                for (int i = -1; ++i < m;) {
+                for (int i = Math.min(n, m); --i >= 0;) {
                     x[i] = i;
                 }
                 for (int i = m - 1; ++i < n;) {
