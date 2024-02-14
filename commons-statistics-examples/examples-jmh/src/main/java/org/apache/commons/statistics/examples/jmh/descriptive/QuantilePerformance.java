@@ -19,7 +19,9 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
@@ -245,22 +247,52 @@ public class QuantilePerformance {
      */
     @State(Scope.Benchmark)
     public abstract static class AbstractDataSource {
-        /** sawtooth distribution. */
-        private static final String SAWTOOTH = "sawtooth";
-        /** random distribution. */
-        private static final String RANDOM = "random";
-        /** stagger distribution. */
-        private static final String STAGGER = "stagger";
-        /** plateau distribution. */
-        private static final String PLATEAU = "plateau";
-        /** shuffle distribution. */
-        private static final String SHUFFLE = "shuffle";
-        /** shuffle distribution. */
+        /**
+         * The type of distribution.
+         */
+        private enum Distribution {
+            /** sawtooth distribution. */
+            SAWTOOTH,
+            /** random distribution. */
+            RANDOM,
+            /** stagger distribution. */
+            STAGGER,
+            /** plateau distribution. */
+            PLATEAU,
+            /** shuffle distribution. */
+            SHUFFLE;
+        }
+
+        /**
+         * The type of data modification.
+         */
+        private enum Modification {
+            /** copy modification. */
+            COPY,
+            /** reverse modification. */
+            REVERSE,
+            /** reverse front-half modification. */
+            REVERSE_FRONT,
+            /** reverse back-half modification. */
+            REVERSE_BACK,
+            /** sort modification. */
+            SORT,
+            /** dither modification. */
+            DITHER;
+        }
+
+        /** all distributions / modifications. */
         private static final String ALL = "all";
 
-        /** Type of data. */
+        /** Type of data.
+         * Multiple types can be specified in the same string using lower/upper case. */
         @Param({ALL})
         private String distribution;
+
+        /** Type of data modification.
+         * Multiple types can be specified in the same string using lower/upper case. */
+        @Param({ALL})
+        private String modification;
 
         /** Extra range to add to the data length.
          * E.g. Use 1 to force use of odd and even length samples for the median. */
@@ -283,6 +315,9 @@ public class QuantilePerformance {
         @Setup
         public void setup() {
             Objects.requireNonNull(distribution);
+            Objects.requireNonNull(modification);
+            final EnumSet<Distribution> dist = getDistributions();
+            final EnumSet<Modification> mod = getModifications();
             // Data using the RNG will be randomized only once.
             // Note that most distributions do not use the source of randomness.
             final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
@@ -300,22 +335,34 @@ public class QuantilePerformance {
                 }
                 // TODO: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples.
-                // This will create a maximum of floor(log2(n)) * 6 samples:
-                // MAX = 30 * 6 * 2^30 * 8 bytes == 1440 GiB
-                // BIG = 20 * 6 * 2^20 * 8 bytes == 960 MiB
-                // MED = 10 * 6 * 2^10 * 8 bytes == 480 KiB
+                // This will create a maximum of floor(log2(n)) * 5 dist * 6 mods * n samples:
+                // MAX = 30 * 5 * 6 * 2^30 * 8 bytes == 7200 GiB
+                // BIG = 20 * 5 * 6 * 2^20 * 8 bytes == 4800 MiB
+                // MED = 10 * 5 * 6 * 2^10 * 8 bytes == 2400 KiB
                 // TODO:
                 // Count the number of samples.
                 // Generate a subset of this.
                 for (int m = 1; m < 2 * n; m *= 2) {
-                    for (final double[] x : createSamples(rng, n, m)) {
-                        // copy: use in place. All other methods generate copies.
-                        samples.add(x);
-                        samples.add(reverse(x, 0, n));
-                        samples.add(reverse(x, 0, n / 2));
-                        samples.add(reverse(x, n / 2, n));
-                        samples.add(sort(x));
-                        samples.add(dither(x));
+                    for (final double[] x : createSamples(dist, rng, n, m)) {
+                        if (mod.contains(Modification.COPY)) {
+                            // copy: use in place. All other methods generate copies.
+                            samples.add(x);
+                        }
+                        if (mod.contains(Modification.REVERSE)) {
+                            samples.add(reverse(x, 0, n));
+                        }
+                        if (mod.contains(Modification.REVERSE_FRONT)) {
+                            samples.add(reverse(x, 0, n / 2));
+                        }
+                        if (mod.contains(Modification.REVERSE_BACK)) {
+                            samples.add(reverse(x, n / 2, n));
+                        }
+                        if (mod.contains(Modification.SORT)) {
+                            samples.add(sort(x));
+                        }
+                        if (mod.contains(Modification.DITHER)) {
+                            samples.add(dither(x));
+                        }
                     }
                 }
             }
@@ -323,38 +370,81 @@ public class QuantilePerformance {
         }
 
         /**
+         * Gets the distributions.
+         *
+         * @return the distributions
+         */
+        private EnumSet<Distribution> getDistributions() {
+            return getEnumFromParam(Distribution.class, distribution);
+        }
+
+        /**
+         * Gets the modifications.
+         *
+         * @return the modifications
+         */
+        private EnumSet<Modification> getModifications() {
+            return getEnumFromParam(Modification.class, modification);
+        }
+
+        /**
+         * Gets all the enum values of the given class from the parameters.
+         *
+         * @param <E> Enum type.
+         * @param cls Class of the enum.
+         * @param parameters Parameters.
+         * @return the enum values
+         */
+        private static <E extends Enum<E>> EnumSet<E> getEnumFromParam(Class<E> cls, String parameters) {
+            if (ALL.equals(parameters)) {
+                return EnumSet.allOf(cls);
+            }
+            final EnumSet<E> set = EnumSet.noneOf(cls);
+            final String s = parameters.toUpperCase(Locale.ROOT);
+            for (E e : cls.getEnumConstants()) {
+                if (s.contains(e.name())) {
+                    set.add(e);
+                }
+            }
+            if (set.isEmpty()) {
+                throw new IllegalStateException("Unknown parameters: " + parameters);
+            }
+            return set;
+        }
+
+        /**
          * Creates the samples.
          *
+         * @param dist Distributions
          * @param rng Source of randomness.
          * @param n Length of the sample.
          * @param m Sample seed.
          * @return the samples
          */
-        private List<double[]> createSamples(UniformRandomProvider rng, int n, int m) {
+        private List<double[]> createSamples(EnumSet<Distribution> dist, UniformRandomProvider rng, int n, int m) {
             final ArrayList<double[]> samples = new ArrayList<>(5);
-            final boolean all = ALL.equals(distribution);
             final double[] x = new double[n];
-            if (all || SAWTOOTH.equals(distribution)) {
+            if (dist.contains(Distribution.SAWTOOTH)) {
                 for (int i = -1; ++i < n;) {
                     x[i] = i % m;
                 }
                 samples.add(x.clone());
             }
-            if (all || RANDOM.equals(distribution)) {
+            if (dist.contains(Distribution.RANDOM)) {
                 // rand() % m
                 for (int i = -1; ++i < n;) {
                     x[i] = rng.nextInt(m);
                 }
                 samples.add(x.clone());
             }
-            if (all || STAGGER.equals(distribution)) {
+            if (dist.contains(Distribution.STAGGER)) {
                 for (int i = -1; ++i < n;) {
                     // Overflow safe: (i * m + i) % n
                     x[i] = Integer.remainderUnsigned(i * m + i, n);
                 }
                 samples.add(x.clone());
             }
-            if (all || PLATEAU.equals(distribution)) {
+            if (dist.contains(Distribution.PLATEAU)) {
                 // min(i, m)
                 for (int i = Math.min(n, m); --i >= 0;) {
                     x[i] = i;
@@ -364,15 +454,12 @@ public class QuantilePerformance {
                 }
                 samples.add(x.clone());
             }
-            if (all || SHUFFLE.equals(distribution)) {
+            if (dist.contains(Distribution.SHUFFLE)) {
                 // rand() % m ? (j += 2) : (k += 2)
                 for (int i = -1, j = 0, k = 1; ++i < n;) {
                     x[i] = rng.nextInt(m) != 0 ? (j += 2) : (k += 2);
                 }
                 samples.add(x.clone());
-            }
-            if (samples.isEmpty()) {
-                throw new IllegalStateException("Unknown sample distribution: " + distribution);
             }
             return samples;
         }
