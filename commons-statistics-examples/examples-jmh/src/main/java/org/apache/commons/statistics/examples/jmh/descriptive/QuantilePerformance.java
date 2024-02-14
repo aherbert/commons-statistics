@@ -17,22 +17,20 @@
 
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
-import java.util.function.IntSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.stat.ranking.NaNStrategy;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.sampling.PermutationSampler;
-import org.apache.commons.rng.sampling.distribution.ContinuousSampler;
-import org.apache.commons.rng.sampling.distribution.DiscreteUniformSampler;
-import org.apache.commons.rng.sampling.distribution.ZigguratSampler;
 import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
@@ -127,25 +125,142 @@ public class QuantilePerformance {
     /** Pattern for the compression level. */
     private static final Pattern CL_PATTERN = Pattern.compile("CL(\\d+)");
 
+//    /**
+//     * Source of {@code double} array data.
+//     */
+//    @State(Scope.Benchmark)
+//    public abstract static class AbstractDataSource {
+//        /** Seed for data length extension.
+//         * This is fixed to generate the same lengths across samples
+//         * for all iterations. JMH may spawn new JVMs so we use a constant value. */
+//        private static final long RANGE_SEED = 2384628642384839L;
+//
+//        /** Type of data. */
+//        @Param({"uniform",
+//            //"normal", "exponential"
+//            })
+//        private String distribution;
+//
+//        /** Number of samples. */
+//        @Param({"100"})
+//        private int samples;
+//
+//        /** Data. */
+//        private double[][] data;
+//
+//        /**
+//         * @return the data
+//         */
+//        public double[][] getData() {
+//            return data;
+//        }
+//
+//        /**
+//         * Create the data.
+//         */
+//        @Setup(Level.Iteration)
+//        public void setup() {
+//            Objects.requireNonNull(distribution);
+//            final int length = getLength();
+//            // Data will be randomized per iteration
+//            final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
+//            data = new double[samples][];
+//            // Create the sampler
+//            ContinuousSampler sampler;
+//
+//            // TODO:
+//            // Add support for other data, e.g. see Bentley-McIlroy paper on quicksort
+//            // which has example of other data types.
+//
+//            if (distribution.startsWith("uni")) {
+//                // Upper bound is at then end of the name
+//                final int upper = getInteger(distribution, -1);
+//                if (upper > 0) {
+//                    // Attempt to get a lower bound, e.g. uniform50_100
+//                    final int index = distribution.indexOf('_');
+//                    int lower = 0;
+//                    if (index > 0) {
+//                        lower = getInteger(distribution.substring(0, index), lower);
+//                    }
+//                    // Note: lower and upper bound are inclusive.
+//                    // This will handle a discrete distribution of a single value
+//                    // (although the stream ... toArray() is inefficient).
+//                    sampler = DiscreteUniformSampler.of(rng, lower, upper)::sample;
+//                } else {
+//                    sampler = rng::nextDouble;
+//                }
+//            } else if (distribution.startsWith("norm")) {
+//                sampler = ZigguratSampler.NormalizedGaussian.of(rng)::sample;
+//            } else if (distribution.startsWith("exp")) {
+//                sampler = ZigguratSampler.Exponential.of(rng)::sample;
+//            } else {
+//                throw new IllegalStateException("Unknown distribution: " + distribution);
+//            }
+//            IntSupplier sampleLength;
+//            final int range = getRange();
+//            if (range <= 0) {
+//                sampleLength = () -> length;
+//            } else {
+//                // Sample in [length, length + range]
+//                sampleLength = DiscreteUniformSampler.of(
+//                    RandomSource.XO_RO_SHI_RO_128_PP.create(RANGE_SEED), length,
+//                    length + range)::sample;
+//            }
+//            for (int i = 0; i < samples; i++) {
+//                data[i] = sampler.samples(sampleLength.getAsInt()).toArray();
+//            }
+//        }
+//
+//        /**
+//         * Gets the minimum length of the data.
+//         * The actual length is randomly sampled from {@code [length, length + range]}.
+//         *
+//         * @return the length
+//         * @see #getRange()
+//         */
+//        protected abstract int getLength();
+//
+//        /**
+//         * Gets the maximum addition to extend the length of each sample of data.
+//         *
+//         * <p>Can be used to create random lengths of data. The same seed is
+//         * used for the random length so that repeat data generation creates
+//         * the same lengths for all iterations.
+//         *
+//         * <p>The default value is zero.
+//         *
+//         * @return the range
+//         * @see #getLength()
+//         */
+//        protected int getRange() {
+//            return 0;
+//        }
+//    }
+
     /**
      * Source of {@code double} array data.
+     *
+     * <p>This uses the adverse input test suite from figure 1 in Bentley and McIlroy (1993)
+     * Engineering a sort function, SOFTWARE—PRACTICE AND EXPERIENCE, VOL.23(11), 1249–1265.
      */
     @State(Scope.Benchmark)
     public abstract static class AbstractDataSource {
-        /** Seed for data length extension.
-         * This is fixed to generate the same lengths across samples
-         * for all iterations. JMH may spawn new JVMs so we used a constant value. */
-        private static final long RANGE_SEED = 2384628642384839L;
+        /** sawtooth distribution. */
+        private static final String SAWTOOTH = "sawtooth";
+        /** random distribution. */
+        private static final String RANDOM = "random";
+        /** stagger distribution. */
+        private static final String STAGGER = "stagger";
+        /** plateau distribution. */
+        private static final String PLATEAU = "plateau";
+        /** shuffle distribution. */
+        private static final String SHUFFLE = "shuffle";
+        /** shuffle distribution. */
+        private static final String ALL = "all";
 
         /** Type of data. */
-        @Param({"uniform",
-            //"normal", "exponential"
-            })
+        @Param({ALL})
         private String distribution;
-
-        /** Number of samples. */
-        @Param({"100"})
-        private int samples;
 
         /** Data. */
         private double[][] data;
@@ -160,62 +275,152 @@ public class QuantilePerformance {
         /**
          * Create the data.
          */
-        @Setup(Level.Iteration)
+        @Setup
         public void setup() {
             Objects.requireNonNull(distribution);
-            final int length = getLength();
-            // Data will be randomized per iteration
+            // Data using the RNG will be randomized only once.
+            // Note that most distributions do not use the source of randomness.
             final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
-            data = new double[samples][];
-            // Create the sampler
-            ContinuousSampler sampler;
-
-            // TODO:
-            // Add support for other data, e.g. see Bentley-McIlroy paper on quicksort
-            // which has example of other data types.
-
-            if (distribution.startsWith("uni")) {
-                // Upper bound is at then end of the name
-                final int upper = getInteger(distribution, -1);
-                if (upper > 0) {
-                    // Attempt to get a lower bound, e.g. uniform50_100
-                    final int index = distribution.indexOf('_');
-                    int lower = 0;
-                    if (index > 0) {
-                        lower = getInteger(distribution.substring(0, index), lower);
-                    }
-                    // Note: lower and upper bound are inclusive.
-                    // This will handle a discrete distribution of a single value
-                    // (although the stream ... toArray() is inefficient).
-                    sampler = DiscreteUniformSampler.of(rng, lower, upper)::sample;
-                } else {
-                    sampler = rng::nextDouble;
+            // Note: Bentley-McIlroy use n in {100, 1023, 1024, 1025}.
+            // Here we only support a continuous range. The range is important
+            // for the median as it will require 1 or two points to partition
+            // if the length is odd or even.
+            final int length = getLength();
+            final int length2 = length + (getRange() > 0 ? getRange() : 0);
+            final ArrayList<double[]> samples = new ArrayList<>();
+            for (int n = length; n <= length2; n++) {
+                // Must be able to double n without overflow
+                if (2 * n < 0) {
+                    throw new IllegalStateException("Unsupported size: " + n);
                 }
-            } else if (distribution.startsWith("norm")) {
-                sampler = ZigguratSampler.NormalizedGaussian.of(rng)::sample;
-            } else if (distribution.startsWith("exp")) {
-                sampler = ZigguratSampler.Exponential.of(rng)::sample;
-            } else {
-                throw new IllegalStateException("Unknown distribution: " + distribution);
+                // TODO: Large lengths may wish to limit the range of m to limit
+                // the memory required to store the samples.
+                // This will create a maximum of floor(log2(n)) * 6 samples:
+                // MAX = 30 * 6 * 2^30 * 8 bytes == 1440 GiB
+                // BIG = 20 * 6 * 2^20 * 8 bytes == 960 MiB
+                // MED = 10 * 6 * 2^10 * 8 bytes == 480 KiB
+                // TODO:
+                // Count the number of samples.
+                // Generate a subset of this.
+                for (int m = 1; m < 2 * n; m *= 2) {
+                    for (final double[] x : createSamples(rng, n, m)) {
+                        // copy: use in place. All other methods generate copies.
+                        samples.add(x);
+                        samples.add(reverse(x, 0, n));
+                        samples.add(reverse(x, 0, n / 2));
+                        samples.add(reverse(x, n / 2, n));
+                        samples.add(sort(x));
+                        samples.add(dither(x));
+                    }
+                }
             }
-            IntSupplier sampleLength;
-            int range = getRange();
-            if (range <= 0) {
-                sampleLength = () -> length;
-            } else {
-                // Sample in [length, length + range]
-                sampleLength = DiscreteUniformSampler.of(
-                    RandomSource.XO_RO_SHI_RO_128_PP.create(RANGE_SEED), length,
-                    length + range)::sample;
+            data = samples.toArray(double[][]::new);
+        }
+
+        /**
+         * Creates the samples.
+         *
+         * @param rng Source of randomness.
+         * @param n Length of the sample.
+         * @param m Sample seed.
+         * @return the samples
+         */
+        private List<double[]> createSamples(UniformRandomProvider rng, int n, int m) {
+            final ArrayList<double[]> samples = new ArrayList<>(5);
+            final boolean all = ALL.equals(distribution);
+            final double[] x = new double[n];
+            if (all || SAWTOOTH.equals(distribution)) {
+                for (int i = -1; ++i < n;) {
+                    x[i] = i % m;
+                }
+                samples.add(x.clone());
             }
-            for (int i = 0; i < samples; i++) {
-                data[i] = sampler.samples(sampleLength.getAsInt()).toArray();
+            if (all || RANDOM.equals(distribution)) {
+                // rand() % m
+                for (int i = -1; ++i < n;) {
+                    x[i] = rng.nextInt(m);
+                }
+                samples.add(x.clone());
             }
+            if (all || STAGGER.equals(distribution)) {
+                for (int i = -1; ++i < n;) {
+                    // Overflow safe: (i * m + i) % n
+                    x[i] = Integer.remainderUnsigned(i * m + i, n);
+                }
+                samples.add(x.clone());
+            }
+            if (all || PLATEAU.equals(distribution)) {
+                // min(i, m)
+                for (int i = -1; ++i < m;) {
+                    x[i] = i;
+                }
+                for (int i = m - 1; ++i < n;) {
+                    x[i] = m;
+                }
+                samples.add(x.clone());
+            }
+            if (all || SHUFFLE.equals(distribution)) {
+                // rand() % m ? (j += 2) : (k += 2)
+                for (int i = -1, j = 0, k = 1; ++i < n;) {
+                    x[i] = rng.nextInt(m) != 0 ? (j += 2) : (k += 2);
+                }
+                samples.add(x.clone());
+            }
+            if (samples.isEmpty()) {
+                throw new IllegalStateException("Unknown sample distribution: " + distribution);
+            }
+            return samples;
+        }
+
+        /**
+         * Return a copy of the data.
+         *
+         * @param x Data.
+         * @param from Start index to reverse (inclusive).
+         * @param to End index to reverse (exclusive).
+         * @return the copy
+         */
+        private static double[] reverse(double[] x, int from, int to) {
+            final double[] a = x.clone();
+            for (int i = from - 1, j = to; ++i < --j;) {
+                final double v = a[i];
+                a[i] = a[j];
+                a[j] = v;
+            }
+            return a;
+        }
+
+        /**
+         * Return a sorted copy of the data.
+         *
+         * @param x Data.
+         * @return the copy
+         */
+        private static double[] sort(double[] x) {
+            final double[] a = x.clone();
+            Arrays.sort(a);
+            return a;
+        }
+
+        /**
+         * Return a dithered copy of the data.
+         *
+         * @param x Data.
+         * @return the copy
+         */
+        private static double[] dither(double[] x) {
+            final double[] a = x.clone();
+            for (int i = a.length; --i >= 0;) {
+                // Bentley-McIlroy use i % 5.
+                // This could be changed to use a power of 2 modulus with a mask.
+                a[i] += i % 5;
+            }
+            return a;
         }
 
         /**
          * Gets the minimum length of the data.
-         * The actual length is randomly sampled from {@code [length, length + range]}.
+         * The actual length is enumerated in {@code [length, length + range]}.
          *
          * @return the length
          * @see #getRange()
@@ -224,10 +429,7 @@ public class QuantilePerformance {
 
         /**
          * Gets the maximum addition to extend the length of each sample of data.
-         *
-         * <p>Can be used to create random lengths of data. The same seed is
-         * used for the random length so that repeat data generation creates
-         * the same lengths for all iterations.
+         * The actual length is enumerated in {@code [length, length + range]}.
          *
          * <p>The default value is zero.
          *
