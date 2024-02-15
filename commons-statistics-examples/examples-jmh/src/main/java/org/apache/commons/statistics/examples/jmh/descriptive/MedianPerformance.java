@@ -60,8 +60,8 @@ public class MedianPerformance {
     private static final String DP5 = "5DP";
     /** Commons Math Median implementation. */
     private static final String CM = "CM";
-    /** Median implementation using a sort. */
-    private static final String SORT = "Sort";
+    /** Median implementation using the JDK sort function. */
+    private static final String JDK = "JDK";
 
     // Second generation partition functions
 
@@ -116,7 +116,7 @@ public class MedianPerformance {
     @State(Scope.Benchmark)
     public static class DoubleFunctionSource {
         /** Name of the source. */
-        @Param({SORT, CM, SP, SP_NAN, SBM, BM, DP, DP5,
+        @Param({JDK, CM, SP, SP_NAN, SBM, BM, DP, DP5,
             SBM2,
             ISBM, IDP,
         })
@@ -141,7 +141,7 @@ public class MedianPerformance {
             // Note: KeyStratgey does not matter for single / paired keys but
             // we set it anyway for completeness.
             Objects.requireNonNull(name);
-            if (SORT.equals(name)) {
+            if (JDK.equals(name)) {
                 function = MedianPerformance::sortMedian;
             } else if (CM.equals(name)) {
                 final org.apache.commons.math3.stat.descriptive.rank.Median m =
