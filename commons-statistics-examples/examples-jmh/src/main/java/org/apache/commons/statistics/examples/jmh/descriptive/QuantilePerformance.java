@@ -194,8 +194,10 @@ public class QuantilePerformance {
         @Param({"0"})
         private int seed;
 
-        /** Data. */
-        private double[][] data;
+        /** Data. This is stored as integer data which saves memory. Note that when ranking
+         * data it is not necessary to have the full range of the double data type; the same
+         * number of unique values can be recorded in an array using an integer type. */
+        private int[][] data;
 
         /**
          * Gets the sample for the given {@code index}.
@@ -204,7 +206,12 @@ public class QuantilePerformance {
          * @return the data sample
          */
         public double[] getData(int index) {
-            return data[index].clone();
+            final int[] a = data[index];
+            final double[] x = new double[a.length];
+            for (int i = -1; ++i < a.length;) {
+                x[i] = a[i];
+            }
+            return x;
         }
 
         /**
@@ -246,17 +253,21 @@ public class QuantilePerformance {
             // Data using the RNG will be randomized only once.
             // Note that most distributions do not use the source of randomness.
             final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
-            final ArrayList<double[]> samples = new ArrayList<>();
+            final ArrayList<int[]> samples = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
                 // m is supported via the seed parameter.
                 // Default seed will create ceil(log2(2*n)) * 5 dist * 6 mods * n samples:
-                // MAX = 31 * 5 * 6 * 2^30 * 8 bytes == 7440 GiB
-                // BIG = 21 * 5 * 6 * 2^20 * 8 bytes == 5040 MiB  <-- within configured JVM -Xmx
-                // MED = 11 * 5 * 6 * 2^10 * 8 bytes == 2640 KiB
+                // MAX  = 32 * 5 * 6 * (2^31-1) * 4 bytes == 7679 GiB
+                // HUGE = 31 * 5 * 6 * 2^30 * 4 bytes == 3720 GiB
+                // BIG  = 21 * 5 * 6 * 2^20 * 4 bytes == 2520 MiB  <-- within configured JVM -Xmx
+                // MED  = 11 * 5 * 6 * 2^10 * 4 bytes == 1320 KiB
+                // It is possible to create lengths above 2^30 using a single distribution,
+                // modification, and seed:
+                // MAX1 = 1 * 1 * 1 * (2^31-1) * 4 bytes == 8191 MiB
                 for (final int m : createSeeds(seed, n)) {
-                    for (final double[] x : createSamples(dist, rng, n, m)) {
+                    for (final int[] x : createSamples(dist, rng, n, m)) {
                         if (mod.contains(Modification.COPY)) {
                             // copy: use in place. All other methods generate copies.
                             samples.add(x);
@@ -279,7 +290,7 @@ public class QuantilePerformance {
                     }
                 }
             }
-            data = samples.toArray(double[][]::new);
+            data = samples.toArray(int[][]::new);
         }
 
         /**
@@ -368,11 +379,11 @@ public class QuantilePerformance {
          * @param m Sample seed (in [1, 2^31])
          * @return the samples
          */
-        private List<double[]> createSamples(EnumSet<Distribution> dist, UniformRandomProvider rng, int n, int m) {
-            final ArrayList<double[]> samples = new ArrayList<>(5);
-            double[] x;
+        private List<int[]> createSamples(EnumSet<Distribution> dist, UniformRandomProvider rng, int n, int m) {
+            final ArrayList<int[]> samples = new ArrayList<>(5);
+            int[] x;
             if (dist.contains(Distribution.SAWTOOTH)) {
-                samples.add(x = new double[n]);
+                samples.add(x = new int[n]);
                 // i % m
                 // Typical case m is a power of 2 so we can use a mask
                 final int mask = m - 1;
@@ -388,7 +399,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.RANDOM)) {
-                samples.add(x = new double[n]);
+                samples.add(x = new int[n]);
                 // rand() % m
                 // A sampler is faster than rng.nextInt(m); the sampler has an inclusive upper.
                 final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
@@ -397,7 +408,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.STAGGER)) {
-                samples.add(x = new double[n]);
+                samples.add(x = new int[n]);
                 // Overflow safe: (i * m + i) % n
                 final long nn = n;
                 for (int i = -1; ++i < n;) {
@@ -405,7 +416,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.PLATEAU)) {
-                samples.add(x = new double[n]);
+                samples.add(x = new int[n]);
                 // min(i, m)
                 for (int i = Math.min(n, m); --i >= 0;) {
                     x[i] = i;
@@ -415,7 +426,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.SHUFFLE)) {
-                samples.add(x = new double[n]);
+                samples.add(x = new int[n]);
                 // rand() % m ? (j += 2) : (k += 2)
                 final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
                 for (int i = -1, j = 0, k = 1; ++i < n;) {
@@ -433,10 +444,10 @@ public class QuantilePerformance {
          * @param to End index to reverse (exclusive).
          * @return the copy
          */
-        private static double[] reverse(double[] x, int from, int to) {
-            final double[] a = x.clone();
+        private static int[] reverse(int[] x, int from, int to) {
+            final int[] a = x.clone();
             for (int i = from - 1, j = to; ++i < --j;) {
-                final double v = a[i];
+                final int v = a[i];
                 a[i] = a[j];
                 a[j] = v;
             }
@@ -449,8 +460,8 @@ public class QuantilePerformance {
          * @param x Data.
          * @return the copy
          */
-        private static double[] sort(double[] x) {
-            final double[] a = x.clone();
+        private static int[] sort(int[] x) {
+            final int[] a = x.clone();
             Arrays.sort(a);
             return a;
         }
@@ -461,8 +472,8 @@ public class QuantilePerformance {
          * @param x Data.
          * @return the copy
          */
-        private static double[] dither(double[] x) {
-            final double[] a = x.clone();
+        private static int[] dither(int[] x) {
+            final int[] a = x.clone();
             for (int i = a.length; --i >= 0;) {
                 // Bentley-McIlroy use i % 5.
                 // This could be changed to use a power of 2 modulus with a mask.
