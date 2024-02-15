@@ -583,6 +583,233 @@ final class Sorting {
         }
     }
 
+
+    /**
+     * Sorts the given indices in an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
+     * data[i] <= data[i + i] <= data[i + 2] ...
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     * @param i5 Index.
+     * @param i6 Index.
+     * @param i7 Index.
+     * @param i8 Index.
+     * @param i9 Index.
+     * @param i10 Index.
+     */
+    static void sort11(double[] data, int i0, int i1, int i2, int i3, int i4, int i5, int i6, int i7,
+        int i8, int i9, int i10) {
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 35 comparisons.
+        // Order pairs:
+        //[(0,9),(1,6),(2,4),(3,7),(5,8)]
+        //[(0,1),(3,5),(4,10),(6,9),(7,8)]
+        //[(1,3),(2,5),(4,7),(8,10)]
+        //[(0,4),(1,2),(3,7),(5,9),(6,8)]
+        //[(0,1),(2,6),(4,5),(7,8),(9,10)]
+        //[(2,4),(3,6),(5,7),(8,9)]
+        //[(1,2),(3,4),(5,6),(7,8)]
+        //[(2,3),(4,5),(6,7)]
+        if (data[i8] < data[i5]) {
+            final double u = data[i8];
+            data[i8] = data[i5];
+            data[i5] = u;
+        }
+        if (data[i7] < data[i3]) {
+            final double v = data[i7];
+            data[i7] = data[i3];
+            data[i3] = v;
+        }
+        if (data[i4] < data[i2]) {
+            final double w = data[i4];
+            data[i4] = data[i2];
+            data[i2] = w;
+        }
+        if (data[i6] < data[i1]) {
+            final double x = data[i6];
+            data[i6] = data[i1];
+            data[i1] = x;
+        }
+        if (data[i9] < data[i0]) {
+            final double y = data[i9];
+            data[i9] = data[i0];
+            data[i0] = y;
+        }
+
+        if (data[i8] < data[i7]) {
+            final double u = data[i8];
+            data[i8] = data[i7];
+            data[i7] = u;
+        }
+        if (data[i9] < data[i6]) {
+            final double v = data[i9];
+            data[i9] = data[i6];
+            data[i6] = v;
+        }
+        if (data[i10] < data[i4]) {
+            final double w = data[i10];
+            data[i10] = data[i4];
+            data[i4] = w;
+        }
+        if (data[i5] < data[i3]) {
+            final double x = data[i5];
+            data[i5] = data[i3];
+            data[i3] = x;
+        }
+        if (data[i1] < data[i0]) {
+            final double y = data[i1];
+            data[i1] = data[i0];
+            data[i0] = y;
+        }
+
+        if (data[i10] < data[i8]) {
+            final double u = data[i10];
+            data[i10] = data[i8];
+            data[i8] = u;
+        }
+        if (data[i7] < data[i4]) {
+            final double v = data[i7];
+            data[i7] = data[i4];
+            data[i4] = v;
+        }
+        if (data[i5] < data[i2]) {
+            final double w = data[i5];
+            data[i5] = data[i2];
+            data[i2] = w;
+        }
+        if (data[i3] < data[i1]) {
+            final double x = data[i3];
+            data[i3] = data[i1];
+            data[i1] = x;
+        }
+
+        if (data[i8] < data[i6]) {
+            final double u = data[i8];
+            data[i8] = data[i6];
+            data[i6] = u;
+        }
+        if (data[i9] < data[i5]) {
+            final double v = data[i9];
+            data[i9] = data[i5];
+            data[i5] = v;
+        }
+        if (data[i7] < data[i3]) {
+            final double w = data[i7];
+            data[i7] = data[i3];
+            data[i3] = w;
+        }
+        if (data[i2] < data[i1]) {
+            final double x = data[i2];
+            data[i2] = data[i1];
+            data[i1] = x;
+        }
+        if (data[i4] < data[i0]) {
+            final double y = data[i4];
+            data[i4] = data[i0];
+            data[i0] = y;
+        }
+
+        if (data[i10] < data[i9]) {
+            final double u = data[i10];
+            data[i10] = data[i9];
+            data[i9] = u;
+        }
+        if (data[i8] < data[i7]) {
+            final double v = data[i8];
+            data[i8] = data[i7];
+            data[i7] = v;
+        }
+        if (data[i5] < data[i4]) {
+            final double w = data[i5];
+            data[i5] = data[i4];
+            data[i4] = w;
+        }
+        if (data[i6] < data[i2]) {
+            final double x = data[i6];
+            data[i6] = data[i2];
+            data[i2] = x;
+        }
+        if (data[i1] < data[i0]) {
+            final double y = data[i1];
+            data[i1] = data[i0];
+            data[i0] = y;
+        }
+
+        if (data[i9] < data[i8]) {
+            final double u = data[i9];
+            data[i9] = data[i8];
+            data[i8] = u;
+        }
+        if (data[i7] < data[i5]) {
+            final double v = data[i7];
+            data[i7] = data[i5];
+            data[i5] = v;
+        }
+        if (data[i6] < data[i3]) {
+            final double w = data[i6];
+            data[i6] = data[i3];
+            data[i3] = w;
+        }
+        if (data[i4] < data[i2]) {
+            final double x = data[i4];
+            data[i4] = data[i2];
+            data[i2] = x;
+        }
+
+        if (data[i8] < data[i7]) {
+            final double u = data[i8];
+            data[i8] = data[i7];
+            data[i7] = u;
+        }
+        if (data[i6] < data[i5]) {
+            final double v = data[i6];
+            data[i6] = data[i5];
+            data[i5] = v;
+        }
+        if (data[i4] < data[i3]) {
+            final double w = data[i4];
+            data[i4] = data[i3];
+            data[i3] = w;
+        }
+        if (data[i2] < data[i1]) {
+            final double x = data[i2];
+            data[i2] = data[i1];
+            data[i1] = x;
+        }
+
+        if (data[i7] < data[i6]) {
+            final double u = data[i7];
+            data[i7] = data[i6];
+            data[i6] = u;
+        }
+        if (data[i5] < data[i4]) {
+            final double v = data[i5];
+            data[i5] = data[i4];
+            data[i4] = v;
+        }
+        if (data[i3] < data[i2]) {
+            final double w = data[i3];
+            data[i3] = data[i2];
+            data[i2] = w;
+        }
+    }
+
     /**
      * Sorts an array using an insertion sort.
      *

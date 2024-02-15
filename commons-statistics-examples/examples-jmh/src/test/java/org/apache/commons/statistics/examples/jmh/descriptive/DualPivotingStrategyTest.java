@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Formatter;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
@@ -62,14 +64,6 @@ class DualPivotingStrategyTest {
     @MethodSource(value = {"testSort5", "testSort5IsSorted"})
     void testSort5C(double[] a) {
         assertPivots(a, DualPivotingStrategy.SORT_5C);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testSort5IsSorted"})
-    void testSort5J(double[] a) {
-        // Does not work well for small length
-        Assumptions.assumeTrue(a.length > 40);
-        assertPivots(a, DualPivotingStrategy.SORT_5J);
     }
 
     @ParameterizedTest
@@ -118,6 +112,14 @@ class DualPivotingStrategyTest {
         // Does not work for small length
         Assumptions.assumeTrue(a.length > 7);
         assertPivots(a, DualPivotingStrategy.SORT_8);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5IsSorted"})
+    void testSort11(double[] a) {
+        // Does not work for small length
+        Assumptions.assumeTrue(a.length > 10);
+        assertPivots(a, DualPivotingStrategy.SORT_11);
     }
 
     private static void assertPivots(double[] a, DualPivotingStrategy s) {
@@ -182,11 +184,6 @@ class DualPivotingStrategyTest {
     }
 
     @Test
-    void testSort5JIndexing() {
-        assertIndexing(DualPivotingStrategy.SORT_5J, 4);
-    }
-
-    @Test
     void testSort5of3Indexing() {
         assertIndexing(DualPivotingStrategy.SORT_5_OF_3, 15);
     }
@@ -214,6 +211,11 @@ class DualPivotingStrategyTest {
     @Test
     void testSort8Indexing() {
         assertIndexing(DualPivotingStrategy.SORT_8, 8);
+    }
+
+    @Test
+    void testSort11Indexing() {
+        assertIndexing(DualPivotingStrategy.SORT_11, 11);
     }
 
     private static void assertIndexing(DualPivotingStrategy s, int safeLength) {
@@ -290,7 +292,8 @@ class DualPivotingStrategyTest {
     /**
      * This is not a test. It creates data and runs the pivoting strategy.
      * The true locations of the pivots are discovered in the data and this
-     * printed to file.
+     * printed to file. Summary statistics are reported to the console; these
+     * can be added to the Javadoc for the strategy.
      */
     @ParameterizedTest
     @MethodSource
@@ -339,7 +342,7 @@ class DualPivotingStrategyTest {
             for (DescriptiveStatistics d : s) {
                 TestUtils.printf("     * %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f%n",
                     d.getMin(), d.getMax(), d.getMean(),
-                    d.getStandardDeviation(), d.getPercentile(0.5), d.getSkewness());
+                    d.getStandardDeviation(), d.getPercentile(50), d.getSkewness());
             }
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
@@ -348,41 +351,40 @@ class DualPivotingStrategyTest {
 
     static Stream<Arguments> testDistribution() {
         final Stream.Builder<Arguments> builder = Stream.builder();
-        //builder.add(Arguments.of(DualPivotingStrategy.MEDIANS, 10000, 10000));
-        builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5B, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5C, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5_OF_3, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_4_OF_3, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_3_OF_3, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5_OF_5, 10000, 10000));
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_7, 10000, 10000));
-        builder.add(Arguments.of(DualPivotingStrategy.SORT_8, 10000, 10000));
+        // Use to build the tertiles statistics
+        for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
+            builder.add(Arguments.of(s, 1000, 1000000));
+        }
 
         // On small data the sort 5 method has skewed density.
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 30, 1000000));
         //builder.add(Arguments.of(DualPivotingStrategy.MEDIANS, 30, 1000000));
+        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 30, 1000000));
 
-        //builder.add(Arguments.of(DualPivotingStrategy.SORT_5, 1000, 100000));
         return builder.build();
     }
 
-    @Test
+    /**
+     * This is not a test. It prints out the indices used by the strategy and
+     * where they are located in an array.
+     */
+    @ParameterizedTest
+    @EnumSource(value = DualPivotingStrategy.class,
+        // Methods with unbiased tertiles on random data
+        names = {"MEDIANS", "SORT_5", "SORT_5B", "SORT_5C", "SORT_8", "SORT_11"})
     @Disabled("Used for testing")
-    void testPrintSort5() {
-        for (int i = 5; i < 100; i++) {
-            // Copy logic for indices: 1/6, 1/3, 1/2, 2/3, 5/6
-            final int len = i - 1;
-            final int sixth = 1 + (len >>> 3) + (len >>> 5);
-            final int p3 = len >>> 1;
-            final int p2 = p3 - sixth;
-            final int p1 = p2 - sixth;
-            final int p4 = p3 + sixth;
-            final int p5 = p4 + sixth;
+    void testSampledIndices(DualPivotingStrategy ps) {
+        // All current strategies work with <=25 values
+        final int n = ps.getSampledIndices(0, 25).length;
+        TestUtils.printf("%s   n=%d%n", ps, n);
+        //for (int i = n; i < n + 100; i++) {
+        for (int i = n; i <= 2048; i *= 2) {
+            int[] indices = ps.getSampledIndices(0, i - 1);
             final double d = i;
-            TestUtils.printf("%2d : %2d %2d %2d %2d %2d : %.3f %.3f %.3f %.3f %.3f%n",
-                i, p1, p2, p3, p4, p5,
-                (p1 + 1) / d, (p2 + 1) / d, (p3 + 1) / d, (p4 + 1) / d, (p5 + 1) / d);
+            TestUtils.printf("%4d : %s : %s%n", i,
+                Arrays.stream(indices).mapToObj(p -> String.format("%4d", p))
+                    .collect(Collectors.joining(", ", "[", "]")),
+                Arrays.stream(indices).mapToObj(p -> String.format("%.3f", (p + 1) / d))
+                    .collect(Collectors.joining(", ", "[", "]")));
         }
     }
 }
