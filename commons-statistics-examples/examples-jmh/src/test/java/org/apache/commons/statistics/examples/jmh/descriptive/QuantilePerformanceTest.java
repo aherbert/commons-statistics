@@ -21,6 +21,9 @@ import java.util.EnumSet;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Distribution;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Modification;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -122,5 +125,35 @@ class QuantilePerformanceTest {
             Assertions.assertEquals(e, fun.apply(s));
             Assertions.assertEquals("beforeafter", s[0]);
         });
+    }
+
+    @Test
+    void testGetDistribution() {
+        assertGetEnumFromParam(Distribution.class);
+    }
+
+    @Test
+    void testGetModification() {
+        assertGetEnumFromParam(Modification.class);
+    }
+
+    static <E extends Enum<E>> void assertGetEnumFromParam(Class<E> cls) {
+        Assertions.assertEquals(EnumSet.allOf(cls),
+            AbstractDataSource.getEnumFromParam(cls, "all"));
+        Assertions.assertThrows(IllegalStateException.class,
+            () -> AbstractDataSource.getEnumFromParam(cls, "nothing"));
+        for (final E e1 : cls.getEnumConstants()) {
+            final String s = e1.name().toLowerCase();
+            Assertions.assertEquals(EnumSet.of(e1),
+                AbstractDataSource.getEnumFromParam(cls, e1.name()));
+            Assertions.assertEquals(EnumSet.of(e1),
+                AbstractDataSource.getEnumFromParam(cls, s));
+            for (final E e2 : cls.getEnumConstants()) {
+                Assertions.assertEquals(EnumSet.of(e1, e2),
+                    AbstractDataSource.getEnumFromParam(cls, s + ":" + e2.name()));
+                Assertions.assertEquals(EnumSet.of(e1, e2),
+                    AbstractDataSource.getEnumFromParam(cls, e2.name() + ":" + e1.name()));
+            }
+        }
     }
 }
