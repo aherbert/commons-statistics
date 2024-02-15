@@ -299,6 +299,11 @@ public class QuantilePerformance {
         @Param({"1"})
         private int range;
 
+        /** Sample 'seed'. This is {@code m}. If set to zero the default is to use
+         * powers of 2 based on sample size. */
+        @Param({"0"})
+        private int seed;
+
         /** Data. */
         private double[][] data;
 
@@ -326,6 +331,9 @@ public class QuantilePerformance {
             // for the median as it will require 1 or two points to partition
             // if the length is odd or even.
             final int length = getLength();
+            if (length < 1) {
+                throw new IllegalStateException("Unsupported length: " + length);
+            }
             final int length2 = length + (getRange() > 0 ? getRange() : 0);
             final ArrayList<double[]> samples = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
@@ -333,16 +341,14 @@ public class QuantilePerformance {
                 if (2 * n < 0) {
                     throw new IllegalStateException("Unsupported size: " + n);
                 }
-                // TODO: Large lengths may wish to limit the range of m to limit
-                // the memory required to store the samples.
-                // This will create a maximum of floor(log2(n)) * 5 dist * 6 mods * n samples:
-                // MAX = 30 * 5 * 6 * 2^30 * 8 bytes == 7200 GiB
-                // BIG = 20 * 5 * 6 * 2^20 * 8 bytes == 4800 MiB
-                // MED = 10 * 5 * 6 * 2^10 * 8 bytes == 2400 KiB
-                // TODO:
-                // Count the number of samples.
-                // Generate a subset of this.
-                for (int m = 1; m < 2 * n; m *= 2) {
+                // Note: Large lengths may wish to limit the range of m to limit
+                // the memory required to store the samples. Currently a single
+                // m is supported via the seed parameter.
+                // Default seed will create (ceil(log2(n))+1) * 5 dist * 6 mods * n samples:
+                // MAX = 31 * 5 * 6 * 2^30 * 8 bytes == 7440 GiB
+                // BIG = 21 * 5 * 6 * 2^20 * 8 bytes == 5040 MiB  <-- within configured JVM -Xmx
+                // MED = 11 * 5 * 6 * 2^10 * 8 bytes == 2640 KiB
+                for (final int m : createSeeds(n)) {
                     for (final double[] x : createSamples(dist, rng, n, m)) {
                         if (mod.contains(Modification.COPY)) {
                             // copy: use in place. All other methods generate copies.
@@ -410,6 +416,41 @@ public class QuantilePerformance {
                 throw new IllegalStateException("Unknown parameters: " + parameters);
             }
             return set;
+        }
+
+        /**
+         * Creates the seeds.
+         *
+         * @param n Sample size
+         * @return the seeds
+         */
+        private int[] createSeeds(int n) {
+            if (seed > 0) {
+                return new int[] {seed};
+            }
+            int c = ceilLog2(n) + 1;
+            final int[] seeds = new int[c];
+            c = 0;
+            for (int m = 1; m < 2 * n; m *= 2) {
+                seeds[c++] = m;
+            }
+            // Check this was done correctly
+            if (c < seeds.length) {
+                throw new IllegalStateException("Failed to configured seeds: " + n);
+            }
+            return seeds;
+        }
+
+        /**
+         * Compute {@code ceil(log 2 (x))}. This is valid for all strictly positive {@code x}.
+         *
+         * <p>Note: Returns 32 for {@code x = 0} in place of -infinity.
+         *
+         * @param x Value.
+         * @return {@code ceil(log 2 (x))}
+         */
+        private static int ceilLog2(int x) {
+            return 32 - Integer.numberOfLeadingZeros(x - 1);
         }
 
         /**
@@ -761,6 +802,59 @@ public class QuantilePerformance {
     }
 
     /**
+     * Source of a range of positions to partition. These are positioned away from the edge
+     * using a power of 2 shift.
+     *
+     * <p>This is a specialised class to allow benchmarking the switch from using
+     * quickselect partitioning to using heapselect.
+     */
+    @State(Scope.Benchmark)
+    public static class EdgeSource extends AbstractDataSource {
+        /** Data length. */
+        @Param({"1023"})
+        private int length;
+        /** Shift applied to the length to find k. */
+        @Param({"1", "2", "3", "4", "5", "6", "7", "8", "9"})
+        private int shift;
+        /** Target indices. */
+        private IndexInterval[] indices;
+
+        /**
+         * @return the target indices
+         */
+        public IndexInterval[] getIndices() {
+            return indices;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        protected int getLength() {
+            return length;
+        }
+
+        /**
+         * Create the data and check the indices are not at the end.
+         */
+        @Override
+        @Setup
+        public void setup() {
+            super.setup();
+            // Error for a bad configuration
+            final int k = length >>> shift;
+            if (k == 0) {
+                throw new IllegalStateException(length + " >>> " + shift + " == 0");
+            }
+            // Create a single index at both ends
+            // TODO - support specifying a range: [ka, kb]
+            final int k1 = length - 1 - k;
+            indices = new IndexInterval[] {
+                ScanningKeyIndexInterval.of(new int[] {k}, 1),
+                ScanningKeyIndexInterval.of(new int[] {k1}, 1),
+            };
+        }
+    }
+
+    /**
      * Source of a sort function.
      */
     @State(Scope.Benchmark)
@@ -1025,6 +1119,80 @@ public class QuantilePerformance {
             final double[] x = new double[indices.length];
             for (int i = 0; i < indices.length; i++) {
                 x[i] = data[indices[i]];
+            }
+            return x;
+        }
+    }
+
+    /**
+     * Source of a edge selector function. This is a function that selects indices
+     * that are clustered close to the edge of the data.
+     *
+     * <p>This is a specialised class to allow benchmarking the switch from using
+     * quickselect partitioning to using heapselect.
+     */
+    @State(Scope.Benchmark)
+    public static class EdgeFunctionSource {
+        /** Name of the source.
+         * For introselect methods this should effectively turn-off heapselect. */
+        @Param({"HeapSelect", ISBM + "_HS20", IDP + "_HS20"})
+        private String name;
+
+        /** The action. */
+        private BiFunction<double[], IndexInterval, double[]> function;
+
+        /**
+         * @return the function
+         */
+        public BiFunction<double[], IndexInterval, double[]> getFunction() {
+            return function;
+        }
+
+        /**
+         * Create the function.
+         */
+        @Setup
+        public void setup() {
+            Objects.requireNonNull(name);
+            // Direct use of heapselect
+            if ("HeapSelect".equals(name)) {
+                function = (data, indices) -> {
+                    Partition.heapSelectRange(data, 0, data.length - 1, indices.left(), indices.right());
+                    return extractIndices(data, indices);
+                };
+            // introselect methods - these should be configured to not use heapselect
+            } else if (name.startsWith(ISBM)) {
+                final Partition part = createPartition(name, ISBM);
+                function = (data, indices) -> {
+                    part.introselect(Partition::partitionSBM, data,
+                        0, data.length - 1, indices, indices.left(), indices.right(), 10000);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(IDP)) {
+                final Partition part = createPartition(name, IDP);
+                function = (data, indices) -> {
+                    part.introselect(Partition::partitionDP, data,
+                        0, data.length - 1, indices, indices.left(), indices.right(), 10000);
+                    return extractIndices(data, indices);
+                };
+            } else {
+                throw new IllegalStateException("Unknown edge selector function: " + name);
+            }
+        }
+
+        /**
+         * Extract the data at the specified indices.
+         *
+         * @param data Data.
+         * @param indices Indices.
+         * @return the data
+         */
+        private static double[] extractIndices(double[] data, IndexInterval indices) {
+            final int l = indices.left();
+            final int r = indices.right();
+            final double[] x = new double[r - l + 1];
+            for (int i = l; i <= r; i++) {
+                x[i - l] = data[i];
             }
             return x;
         }
@@ -1455,6 +1623,26 @@ public class QuantilePerformance {
         final BiFunction<double[], int[], double[]> fun = function.getFunction();
         for (final double[] x : data) {
             for (final int[] i : indices) {
+                bh.consume(fun.apply(x.clone(), i));
+            }
+        }
+    }
+
+    /**
+     * Benchmark partitioning of an interval of indices a set distance from the edge.
+     * This is used to benchmark the switch from quickselect partitioning to heapselect.
+     *
+     * @param function Source of the function.
+     * @param source Source of the data.
+     * @param bh Data sink.
+     */
+    @Benchmark
+    public void edgeSelect(EdgeFunctionSource function, EdgeSource source, Blackhole bh) {
+        final double[][] data = source.getData();
+        final IndexInterval[] indices = source.getIndices();
+        final BiFunction<double[], IndexInterval, double[]> fun = function.getFunction();
+        for (final double[] x : data) {
+            for (final IndexInterval i : indices) {
                 bh.consume(fun.apply(x.clone(), i));
             }
         }
