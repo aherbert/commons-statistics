@@ -109,6 +109,13 @@ class SortingTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
+    void testDoubleSort11(double[] values) {
+        final double[] data = Arrays.copyOf(values, 11);
+        assertDoubleSort(data, x -> Sorting.sort11(x, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testDoubleSort3Internal"})
     void testDoubleSort3Internal(double[] values, int[] indices) {
         final int a = indices[0];
@@ -174,6 +181,23 @@ class SortingTest {
         final int g = indices[6];
         final int h = indices[7];
         assertDoubleSortInternal(values, x -> Sorting.sort8(x, a, b, c, d, e, f, g, h), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort11Internal"})
+    void testDoubleSort11Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        final int f = indices[5];
+        final int g = indices[6];
+        final int h = indices[7];
+        final int i = indices[8];
+        final int j = indices[9];
+        final int k = indices[10];
+        assertDoubleSortInternal(values, x -> Sorting.sort11(x, a, b, c, d, e, f, g, h, i, j, k), indices);
     }
 
     /**
@@ -301,6 +325,10 @@ class SortingTest {
 
     static Stream<Arguments> testDoubleSort8Internal() {
         return testDoubleSortInternal(8);
+    }
+
+    static Stream<Arguments> testDoubleSort11Internal() {
+        return testDoubleSortInternal(11);
     }
 
     static Stream<Arguments> testDoubleSortInternal(int k) {

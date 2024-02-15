@@ -34,9 +34,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0000   0.9922   0.3275   0.2328   0.0023   0.5887
-     *   0.0003   0.9835   0.3358   0.2359   0.0028   0.5562
-     *   0.0000   0.9924   0.3367   0.2371   0.0025   0.5445
+     *   0.0000   0.9970   0.3327   0.2357   0.2920   0.5654
+     *   0.0020   1.0000   0.3346   0.2356   0.2940   0.5675
+     *   0.0000   0.9970   0.3328   0.2356   0.2920   0.5656
      * </pre>
      */
     MEDIANS {
@@ -83,9 +83,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0020   0.9788   0.3313   0.1770   0.0231   0.5037
-     *   0.0029   0.9590   0.3341   0.1779   0.0232   0.4483
-     *   0.0019   0.9405   0.3347   0.1796   0.0258   0.4829
+     *   0.0010   0.9820   0.3327   0.1778   0.3130   0.4650
+     *   0.0030   0.9760   0.3348   0.1778   0.3150   0.4665
+     *   0.0010   0.9870   0.3325   0.1779   0.3130   0.4698
      * </pre>
      */
     SORT_5 {
@@ -134,9 +134,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0025   0.9016   0.3329   0.1793   0.0203   0.4775
-     *   0.0021   0.9232   0.3341   0.1780   0.0238   0.4626
-     *   0.0030   0.9034   0.3330   0.1789   0.0243   0.4860
+     *   0.0010   0.9790   0.3330   0.1780   0.3140   0.4665
+     *   0.0030   0.9800   0.3348   0.1778   0.3150   0.4681
+     *   0.0010   0.9770   0.3322   0.1777   0.3130   0.4677
      * </pre>
      */
     SORT_5B {
@@ -185,9 +185,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0023   0.9128   0.3314   0.1779   0.0220   0.4445
-     *   0.0013   0.9287   0.3301   0.1773   0.0197   0.4777
-     *   0.0026   0.9631   0.3386   0.1796   0.0220   0.4662
+     *   0.0010   0.9790   0.3324   0.1779   0.3130   0.4666
+     *   0.0030   0.9850   0.3348   0.1778   0.3150   0.4686
+     *   0.0010   0.9720   0.3327   0.1779   0.3130   0.4666
      * </pre>
      */
     SORT_5C {
@@ -226,49 +226,6 @@ enum DualPivotingStrategy {
         }
     },
     /**
-     * Pivot around the 1st and 5th values from 5 approximately uniformly spaced within the range.
-     *
-     * <p>Requires {@code right - left >= 3}.
-     *
-     * <p>Warning: This has the side effect that the 5 values are also sorted.
-     */
-    // TODO - remove this. It is for testing
-    SORT_5J {
-        @Override
-        int pivotIndex(double[] data, int left, int right, int[] pivot2) {
-            // JDK 11 method
-
-            // Does not work well for small range
-            // step = size * 3 / 8 + 3
-            int step = ((right - left + 1) >> 3) * 3 + 3;
-            int p1 = left + step;
-            int p5 = right - step;
-            int p3 = (p1 + p5) >>> 1;
-            int p2 = (p1 + p3) >>> 1;
-            int p4 = (p3 + p5) >>> 1;
-
-            Sorting.sort5(data, p1, p2, p3, p4, p5);
-            pivot2[0] = p5;
-            return p1;
-        }
-
-        @Override
-        int[] getSampledIndices(int left, int right) {
-            int step = ((right - left + 1) >> 3) * 3 + 3;
-            int p1 = left + step;
-            int p5 = right - step;
-            int p3 = (p1 + p5) >>> 1;
-            int p2 = (p1 + p3) >>> 1;
-            int p4 = (p3 + p5) >>> 1;
-            return new int[] {p1, p2, p3, p4, p5};
-        }
-
-        @Override
-        int samplingEffect() {
-            return SORT;
-        }
-    },
-    /**
      * Pivot around the 2nd and 4th values from 5 medians approximately uniformly spaced within
      * the range. The medians are from 3 samples. The 5 samples of 3 do not overlap thus this
      * method requires {@code right - left >= 14}. The samples can be visualised as 5 sorted
@@ -294,9 +251,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0420   0.8264   0.3784   0.1328   0.0871   0.2028
-     *   0.0040   0.7892   0.2429   0.1342   0.0185   0.6171
-     *   0.0362   0.8325   0.3787   0.1336   0.0878   0.2273
+     *   0.0090   0.9170   0.3783   0.1320   0.3730   0.2107
+     *   0.0030   0.8950   0.2438   0.1328   0.2270   0.6150
+     *   0.0110   0.9140   0.3779   0.1319   0.3730   0.2114
      * </pre>
      * <p>Note the bias towards the outer regions.
      */
@@ -374,9 +331,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0250   0.9151   0.4282   0.1451   0.1050   0.1390
-     *   0.0002   0.7777   0.1443   0.1192   0.0011   1.1811
-     *   0.0288   0.9375   0.4275   0.1457   0.0997   0.1206
+     *   0.0160   0.9580   0.4269   0.1454   0.4230   0.1366
+     *   0.0020   0.8270   0.1467   0.1193   0.1170   1.1417
+     *   0.0140   0.9560   0.4264   0.1453   0.4230   0.1352
      * </pre>
      * <p>Note the large bias towards the outer regions.
      */
@@ -450,9 +407,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0024   0.8599   0.3039   0.1554   0.0234   0.4564
-     *   0.0137   0.9396   0.3891   0.1805   0.0333   0.2575
-     *   0.0023   0.8910   0.3070   0.1567   0.0204   0.4138
+     *   0.0010   0.9460   0.3062   0.1560   0.2910   0.4455
+     *   0.0030   0.9820   0.3875   0.1813   0.3780   0.2512
+     *   0.0010   0.9400   0.3063   0.1558   0.2910   0.4453
      * </pre>
      * <p>Note the bias towards the central region.
      */
@@ -523,9 +480,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0316   0.7934   0.3993   0.1099   0.1334   0.0924
-     *   0.0029   0.7115   0.1993   0.1116   0.0139   0.7039
-     *   0.0850   0.8002   0.4013   0.1096   0.1429   0.1068
+     *   0.0270   0.8620   0.3996   0.1093   0.3970   0.1130
+     *   0.0030   0.8100   0.2010   0.1106   0.1860   0.6691
+     *   0.0270   0.8970   0.3994   0.1093   0.3970   0.1147
      * </pre>
      * <p>Note the bias towards the outer regions.
      */
@@ -591,9 +548,9 @@ enum DualPivotingStrategy {
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0129   0.9330   0.3768   0.1611   0.0562   0.3257
-     *   0.0017   0.8341   0.2499   0.1451   0.0154   0.6778
-     *   0.0149   0.9032   0.3733   0.1616   0.0502   0.3109
+     *   0.0020   0.9600   0.3745   0.1609   0.3640   0.3092
+     *   0.0030   0.9490   0.2512   0.1440   0.2300   0.6920
+     *   0.0030   0.9620   0.3743   0.1609   0.3640   0.3100
      * </pre>
      * <p>Note the bias towards the outer regions.
      */
@@ -640,17 +597,16 @@ enum DualPivotingStrategy {
      * Uses points +/- ninths from the median: m - 4/9, m - 3/9, m - 2/9, m - 1/9; m + 1 + 1/9,
      * m + 1 + 2/9, m + 1 + 3/9, m + 1 + 4/9.
      *
-     * <p>Requires {@code right - left >= 7}. Smaller ranges will result in overlap of the sampled
-     * points.
+     * <p>Requires {@code right - left >= 7}.
      *
      * <p>Warning: This has the side effect that the 8 values are also sorted.
      *
      * <p>On random data the tertiles are:
      * <pre>
      *      min      max     mean       sd   median     skew
-     *   0.0122   0.9434   0.3335   0.1491   0.0491   0.4182
-     *   0.0069   0.8798   0.3357   0.1491   0.0489   0.4026
-     *   0.0078   0.8918   0.3307   0.1488   0.0439   0.4085
+     *   0.0030   0.9480   0.3327   0.1485   0.3200   0.4044
+     *   0.0050   0.9350   0.3345   0.1485   0.3220   0.4056
+     *   0.0020   0.9320   0.3328   0.1485   0.3200   0.4063
      * </pre>
      */
     SORT_8 {
@@ -658,7 +614,7 @@ enum DualPivotingStrategy {
         int pivotIndex(double[] data, int left, int right, int[] pivot2) {
             // 1/9 = 4/36 = 8/72 ~ 7/64 ~ 1/16 + 1/32 + 1/64 : 0.11111 ~ 0.1094
             // Ensure the value is above zero to choose different points!
-            // This is safe if len >= 8.
+            // This is safe if len >= 7.
             final int len = right - left;
             final int ninth = Math.max(1, (len >>> 4) + (len >>> 5) + (len >>> 6));
             // Work from middle outward. This is deliberate to ensure data.length==7
@@ -691,6 +647,69 @@ enum DualPivotingStrategy {
             final int p7 = p6 + ninth;
             final int p8 = p7 + ninth;
             return new int[] {p1, p2, p3, p4, p5, p6, p7, p8};
+        }
+
+        @Override
+        int samplingEffect() {
+            return SORT;
+        }
+    },
+    /**
+     * Pivot around the 4th and 8th values from 11 approximately uniformly spaced within the range.
+     * Uses points +/- twelfths from the median: ..., m - 1/12, m, m + 1/12, ... .
+     *
+     * <p>Requires {@code right - left >= 10}.
+     *
+     * <p>Warning: This has the side effect that the 11 values are also sorted.
+     *
+     * <p>On random data the tertiles are:
+     * <pre>
+     *      min      max     mean       sd   median     skew
+     *   0.0060   0.9000   0.3328   0.1301   0.3230   0.3624
+     *   0.0100   0.9190   0.3345   0.1299   0.3250   0.3643
+     *   0.0060   0.8970   0.3327   0.1302   0.3230   0.3653
+     * </pre>
+     */
+    SORT_11 {
+        @Override
+        int pivotIndex(double[] data, int left, int right, int[] pivot2) {
+            // 1/12 = 8/96 ~ 1/16 + 1/32 ~ 9/96 : 0.8333 ~ 0.09375
+            // Ensure the value is above zero to choose different points!
+            // This is safe if len >= 10.
+            final int len = right - left;
+            final int twelfth = Math.max(1, (len >>> 4) + (len >>> 6));
+            final int p6 = left + (len >>> 1);
+            final int p5 = p6 - twelfth;
+            final int p4 = p5 - twelfth;
+            final int p3 = p4 - twelfth;
+            final int p2 = p3 - twelfth;
+            final int p1 = p2 - twelfth;
+            final int p7 = p6 + twelfth;
+            final int p8 = p7 + twelfth;
+            final int p9 = p8 + twelfth;
+            final int p10 = p9 + twelfth;
+            final int p11 = p10 + twelfth;
+            Sorting.sort11(data, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11);
+            pivot2[0] = p8;
+            return p4;
+        }
+
+        @Override
+        int[] getSampledIndices(int left, int right) {
+            final int len = right - left;
+            final int twelfth = Math.max(1, (len >>> 4) + (len >>> 6));
+            final int p6 = left + (len >>> 1);
+            final int p5 = p6 - twelfth;
+            final int p4 = p5 - twelfth;
+            final int p3 = p4 - twelfth;
+            final int p2 = p3 - twelfth;
+            final int p1 = p2 - twelfth;
+            final int p7 = p6 + twelfth;
+            final int p8 = p7 + twelfth;
+            final int p9 = p8 + twelfth;
+            final int p10 = p9 + twelfth;
+            final int p11 = p10 + twelfth;
+            return new int[] {p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11};
         }
 
         @Override
