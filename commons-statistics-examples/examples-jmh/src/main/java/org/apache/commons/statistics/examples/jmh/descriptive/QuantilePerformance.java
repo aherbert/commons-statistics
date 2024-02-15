@@ -82,8 +82,6 @@ public class QuantilePerformance {
     private static final String DP5 = "5DP";
     /** Commons Math Percentile implementation. */
     private static final String CM = "CM";
-    /** Quantile implementation using a sort. */
-    private static final String SORT = "Sort";
     /** Partition implementation using a single-pivot strategy with Dutch National Flag partitioning. */
     private static final String DNF = "DNF";
     /** Use the JDK sort function. */
@@ -632,7 +630,7 @@ public class QuantilePerformance {
         public void setup() {
             // Note: Functions should not defensively copy the data
             // as a clone is passed in from the data source.
-            if (SORT.equals(name)) {
+            if (JDK.equals(name)) {
                 function = QuantilePerformance::sortQuantile;
             } else if (CM.equals(name)) {
                 // No way to avoid a data copy here. CM does
