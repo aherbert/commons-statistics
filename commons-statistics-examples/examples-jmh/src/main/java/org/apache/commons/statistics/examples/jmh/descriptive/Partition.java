@@ -866,7 +866,7 @@ final class Partition {
      * Single-pivot partition method handling equal values.
      */
     @FunctionalInterface
-    private interface SPEPartition {
+    interface SPEPartition {
         /**
          * Partition an array slice around a single pivot. Partitioning exchanges array
          * elements such that all elements smaller than pivot are before it and all
@@ -898,7 +898,7 @@ final class Partition {
      * Dual-pivot partition method handling equal values.
      */
     @FunctionalInterface
-    private interface DPPartition {
+    interface DPPartition {
         /**
          * Partition an array slice around two pivots. Partitioning exchanges array
          * elements such that all elements smaller than pivot are before it and all
@@ -3612,7 +3612,8 @@ final class Partition {
      * @param kb Last key.
      * @param maxDepth Maximum depth for recursion.
      */
-    private void introselect(SPEPartition part, double[] a, int left, int right,
+    // package-private for benchmarking
+    void introselect(SPEPartition part, double[] a, int left, int right,
         IndexInterval k, int ka, int kb, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
@@ -3839,7 +3840,8 @@ final class Partition {
      * @param kb Last key.
      * @param maxDepth Maximum depth for recursion.
      */
-    private void introselect(DPPartition part, double[] a, int left, int right,
+    // package-private for benchmarking
+    void introselect(DPPartition part, double[] a, int left, int right,
         IndexInterval k, int ka, int kb, int maxDepth) {
         // If partitioning splits the interval then recursion is used for left and/or
         // right sides and the middle remains within this function. If partitioning does
@@ -4821,7 +4823,7 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private static int partitionSBM(double[] data, int l, int r, int pivot, int[] upper) {
+    static int partitionSBM(double[] data, int l, int r, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
         //
         // Partition data using pivot P into less-than, greater-than or equal.
