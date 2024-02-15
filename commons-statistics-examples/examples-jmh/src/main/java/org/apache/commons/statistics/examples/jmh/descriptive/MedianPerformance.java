@@ -248,10 +248,10 @@ public class MedianPerformance {
      */
     @Benchmark
     public void arrayDoubleStatistic(DoubleFunctionSource function, DataSource source, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final ToDoubleFunction<double[]> fun = function.getFunction();
-        for (final double[] x : data) {
-            bh.consume(fun.applyAsDouble(x));
+        for (int j = -1; ++j < size;) {
+            bh.consume(fun.applyAsDouble(source.getData(j)));
         }
     }
 }

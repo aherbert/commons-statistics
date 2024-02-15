@@ -33,6 +33,8 @@ import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.stat.ranking.NaNStrategy;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.sampling.PermutationSampler;
+import org.apache.commons.rng.sampling.distribution.DiscreteUniformSampler;
+import org.apache.commons.rng.sampling.distribution.SharedStateDiscreteSampler;
 import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
@@ -127,118 +129,6 @@ public class QuantilePerformance {
     /** Pattern for the compression level. */
     private static final Pattern CL_PATTERN = Pattern.compile("CL(\\d+)");
 
-//    /**
-//     * Source of {@code double} array data.
-//     */
-//    @State(Scope.Benchmark)
-//    public abstract static class AbstractDataSource {
-//        /** Seed for data length extension.
-//         * This is fixed to generate the same lengths across samples
-//         * for all iterations. JMH may spawn new JVMs so we use a constant value. */
-//        private static final long RANGE_SEED = 2384628642384839L;
-//
-//        /** Type of data. */
-//        @Param({"uniform",
-//            //"normal", "exponential"
-//            })
-//        private String distribution;
-//
-//        /** Number of samples. */
-//        @Param({"100"})
-//        private int samples;
-//
-//        /** Data. */
-//        private double[][] data;
-//
-//        /**
-//         * @return the data
-//         */
-//        public double[][] getData() {
-//            return data;
-//        }
-//
-//        /**
-//         * Create the data.
-//         */
-//        @Setup(Level.Iteration)
-//        public void setup() {
-//            Objects.requireNonNull(distribution);
-//            final int length = getLength();
-//            // Data will be randomized per iteration
-//            final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
-//            data = new double[samples][];
-//            // Create the sampler
-//            ContinuousSampler sampler;
-//
-//            // TODO:
-//            // Add support for other data, e.g. see Bentley-McIlroy paper on quicksort
-//            // which has example of other data types.
-//
-//            if (distribution.startsWith("uni")) {
-//                // Upper bound is at then end of the name
-//                final int upper = getInteger(distribution, -1);
-//                if (upper > 0) {
-//                    // Attempt to get a lower bound, e.g. uniform50_100
-//                    final int index = distribution.indexOf('_');
-//                    int lower = 0;
-//                    if (index > 0) {
-//                        lower = getInteger(distribution.substring(0, index), lower);
-//                    }
-//                    // Note: lower and upper bound are inclusive.
-//                    // This will handle a discrete distribution of a single value
-//                    // (although the stream ... toArray() is inefficient).
-//                    sampler = DiscreteUniformSampler.of(rng, lower, upper)::sample;
-//                } else {
-//                    sampler = rng::nextDouble;
-//                }
-//            } else if (distribution.startsWith("norm")) {
-//                sampler = ZigguratSampler.NormalizedGaussian.of(rng)::sample;
-//            } else if (distribution.startsWith("exp")) {
-//                sampler = ZigguratSampler.Exponential.of(rng)::sample;
-//            } else {
-//                throw new IllegalStateException("Unknown distribution: " + distribution);
-//            }
-//            IntSupplier sampleLength;
-//            final int range = getRange();
-//            if (range <= 0) {
-//                sampleLength = () -> length;
-//            } else {
-//                // Sample in [length, length + range]
-//                sampleLength = DiscreteUniformSampler.of(
-//                    RandomSource.XO_RO_SHI_RO_128_PP.create(RANGE_SEED), length,
-//                    length + range)::sample;
-//            }
-//            for (int i = 0; i < samples; i++) {
-//                data[i] = sampler.samples(sampleLength.getAsInt()).toArray();
-//            }
-//        }
-//
-//        /**
-//         * Gets the minimum length of the data.
-//         * The actual length is randomly sampled from {@code [length, length + range]}.
-//         *
-//         * @return the length
-//         * @see #getRange()
-//         */
-//        protected abstract int getLength();
-//
-//        /**
-//         * Gets the maximum addition to extend the length of each sample of data.
-//         *
-//         * <p>Can be used to create random lengths of data. The same seed is
-//         * used for the random length so that repeat data generation creates
-//         * the same lengths for all iterations.
-//         *
-//         * <p>The default value is zero.
-//         *
-//         * @return the range
-//         * @see #getLength()
-//         */
-//        protected int getRange() {
-//            return 0;
-//        }
-//    }
-
     /**
      * Source of {@code double} array data.
      *
@@ -250,7 +140,7 @@ public class QuantilePerformance {
         /**
          * The type of distribution.
          */
-        private enum Distribution {
+        enum Distribution {
             /** sawtooth distribution. */
             SAWTOOTH,
             /** random distribution. */
@@ -266,7 +156,7 @@ public class QuantilePerformance {
         /**
          * The type of data modification.
          */
-        private enum Modification {
+        enum Modification {
             /** copy modification. */
             COPY,
             /** reverse modification. */
@@ -308,10 +198,22 @@ public class QuantilePerformance {
         private double[][] data;
 
         /**
-         * @return the data
+         * Gets the sample for the given {@code index}.
+         *
+         * @param index Index.
+         * @return the data sample
          */
-        public double[][] getData() {
-            return data;
+        public double[] getData(int index) {
+            return data[index].clone();
+        }
+
+        /**
+         * Get the number of data samples.
+         *
+         * @return the number of samples
+         */
+        public int size() {
+            return data.length;
         }
 
         /**
@@ -321,11 +223,12 @@ public class QuantilePerformance {
         public void setup() {
             Objects.requireNonNull(distribution);
             Objects.requireNonNull(modification);
+            // Reclaim memory
+            data = null;
+
+            // Set-up using parameters (may throw)
             final EnumSet<Distribution> dist = getDistributions();
             final EnumSet<Modification> mod = getModifications();
-            // Data using the RNG will be randomized only once.
-            // Note that most distributions do not use the source of randomness.
-            final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
             // Note: Bentley-McIlroy use n in {100, 1023, 1024, 1025}.
             // Here we only support a continuous range. The range is important
             // for the median as it will require 1 or two points to partition
@@ -334,12 +237,17 @@ public class QuantilePerformance {
             if (length < 1) {
                 throw new IllegalStateException("Unsupported length: " + length);
             }
-            final int length2 = length + (getRange() > 0 ? getRange() : 0);
+            final int r = getRange() > 0 ? getRange() : 0;
+            if (length + (long) r > Integer.MAX_VALUE) {
+                throw new IllegalStateException("Unsupported upper length: " + length);
+            }
+            final int length2 = length + r;
+
+            // Data using the RNG will be randomized only once.
+            // Note that most distributions do not use the source of randomness.
+            final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
             final ArrayList<double[]> samples = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
-                if (2 * n - 1 < 0) {
-                    throw new IllegalStateException("Unsupported size: " + n);
-                }
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
                 // m is supported via the seed parameter.
@@ -397,18 +305,25 @@ public class QuantilePerformance {
          *
          * @param <E> Enum type.
          * @param cls Class of the enum.
-         * @param parameters Parameters.
+         * @param parameters Parameters (multiple values delimited by ':')
          * @return the enum values
          */
-        private static <E extends Enum<E>> EnumSet<E> getEnumFromParam(Class<E> cls, String parameters) {
+        static <E extends Enum<E>> EnumSet<E> getEnumFromParam(Class<E> cls, String parameters) {
             if (ALL.equals(parameters)) {
                 return EnumSet.allOf(cls);
             }
             final EnumSet<E> set = EnumSet.noneOf(cls);
             final String s = parameters.toUpperCase(Locale.ROOT);
-            for (E e : cls.getEnumConstants()) {
-                if (s.contains(e.name())) {
-                    set.add(e);
+            for (final E e : cls.getEnumConstants()) {
+                // Scan for the name
+                for (int i = s.indexOf(e.name(), 0); i >= 0; i = s.indexOf(e.name(), i)) {
+                    // ensure a full match to the name:
+                    // either at the end of the string, or followed by the delimiter
+                    i += e.name().length();
+                    if (i == s.length() || s.charAt(i) == ':') {
+                        set.add(e);
+                        break;
+                    }
                 }
             }
             if (set.isEmpty()) {
@@ -421,19 +336,20 @@ public class QuantilePerformance {
          * Creates the seeds.
          *
          * <p>This can be pasted into a JShell terminal to verify it works for any size
-         * {@code 1 <= n <= 2^30}. With the default behaviour all seeds {@code m} are
+         * {@code 1 <= n < 2^31}. With the default behaviour all seeds {@code m} are
          * strictly positive powers of 2 and the highest seed should be below {@code 2*n}.
          *
-         * @param seed Seed (use 0 for default; or provide a strictly positive {@code 1 <= m < 2n}).
-         * @param n Sample size
+         * @param seed Seed (use 0 for default; or provide a strictly positive {@code 1 <= m <= 2^31}).
+         * @param n Sample size.
          * @return the seeds
          */
         private static int[] createSeeds(int seed, int n) {
-            if (seed > 0 && seed < 2L * n) {
+            // Allow [1, 2^31] (note 2^31 is negative but handled as a power of 2)
+            if (seed - 1 >= 0) {
                 return new int[] {seed};
             }
-            // ceil(log2(2*n))
-            int c = 32 - Integer.numberOfLeadingZeros(2 * n - 1);
+            // ceil(log2(n)) + 1 == ceil(log2(2*n)) but handles MAX_VALUE
+            int c = 33 - Integer.numberOfLeadingZeros(n - 1);
             final int[] seeds = new int[c];
             c = 0;
             // m = 1; m < 2 * n; m *= 2
@@ -444,38 +360,52 @@ public class QuantilePerformance {
         }
 
         /**
-         * Creates the samples.
+         * Creates the samples. Handles {@code m = 2^31} using {@link Integer#MIN_VALUE}.
          *
-         * @param dist Distributions
+         * @param dist Distributions.
          * @param rng Source of randomness.
          * @param n Length of the sample.
-         * @param m Sample seed.
+         * @param m Sample seed (in [1, 2^31])
          * @return the samples
          */
         private List<double[]> createSamples(EnumSet<Distribution> dist, UniformRandomProvider rng, int n, int m) {
             final ArrayList<double[]> samples = new ArrayList<>(5);
-            final double[] x = new double[n];
+            double[] x;
             if (dist.contains(Distribution.SAWTOOTH)) {
-                for (int i = -1; ++i < n;) {
-                    x[i] = i % m;
+                samples.add(x = new double[n]);
+                // i % m
+                // Typical case m is a power of 2 so we can use a mask
+                final int mask = m - 1;
+                if ((m & mask) == 0) {
+                    for (int i = -1; ++i < n;) {
+                        x[i] = i & mask;
+                    }
+                } else {
+                    // User input seed
+                    for (int i = -1; ++i < n;) {
+                        x[i] = i % m;
+                    }
                 }
-                samples.add(x.clone());
             }
             if (dist.contains(Distribution.RANDOM)) {
+                samples.add(x = new double[n]);
                 // rand() % m
+                // A sampler is faster than rng.nextInt(m); the sampler has an inclusive upper.
+                final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
                 for (int i = -1; ++i < n;) {
-                    x[i] = rng.nextInt(m);
+                    x[i] = s.sample();
                 }
-                samples.add(x.clone());
             }
             if (dist.contains(Distribution.STAGGER)) {
+                samples.add(x = new double[n]);
+                // Overflow safe: (i * m + i) % n
+                final long nn = n;
                 for (int i = -1; ++i < n;) {
-                    // Overflow safe: (i * m + i) % n
-                    x[i] = Integer.remainderUnsigned(i * m + i, n);
+                    x[i] = (int) (Integer.toUnsignedLong(i * m + i) % nn);
                 }
-                samples.add(x.clone());
             }
             if (dist.contains(Distribution.PLATEAU)) {
+                samples.add(x = new double[n]);
                 // min(i, m)
                 for (int i = Math.min(n, m); --i >= 0;) {
                     x[i] = i;
@@ -483,14 +413,14 @@ public class QuantilePerformance {
                 for (int i = m - 1; ++i < n;) {
                     x[i] = m;
                 }
-                samples.add(x.clone());
             }
             if (dist.contains(Distribution.SHUFFLE)) {
+                samples.add(x = new double[n]);
                 // rand() % m ? (j += 2) : (k += 2)
+                final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
                 for (int i = -1, j = 0, k = 1; ++i < n;) {
-                    x[i] = rng.nextInt(m) != 0 ? (j += 2) : (k += 2);
+                    x[i] = s.sample() != 0 ? (j += 2) : (k += 2);
                 }
-                samples.add(x.clone());
             }
             return samples;
         }
@@ -689,10 +619,14 @@ public class QuantilePerformance {
          */
         @Setup
         public void setup() {
-            // Note: Functions defensively copy the data by default
+            // Note: Functions should not defensively copy the data
+            // as a clone is passed in from the data source.
             if (SORT.equals(name)) {
                 function = QuantilePerformance::sortQuantile;
             } else if (CM.equals(name)) {
+                // No way to avoid a data copy here. CM does
+                // defensive copying for most array input. This
+                // method is copied in SPH which overwrites the data.
                 final Percentile s = new Percentile().withNaNStrategy(NaNStrategy.FIXED);
                 function = (x, p) -> {
                     final double[] q = new double[p.length];
@@ -909,7 +843,7 @@ public class QuantilePerformance {
             } else if (name.startsWith(IDP)) {
                 function = createPartition(name, IDP)::sortIDP;
             } else if ("InsertionSort".equals(name)) {
-                function = x -> KthSelector.insertionSort(x, 0, x.length, false);
+                function = x -> Sorting.sort(x, 0, x.length, false);
             }
             if (function == null) {
                 throw new IllegalStateException("Unknown sort function: " + name);
@@ -1017,6 +951,7 @@ public class QuantilePerformance {
                     }
                     return x;
                 };
+            // The following methods clone the indices to avoid destructive modification
             } else if (name.startsWith(SP)) {
                 final KthSelector selector = createKthSelector(name, SP);
                 function = (data, indices) -> {
@@ -1191,6 +1126,7 @@ public class QuantilePerformance {
     /**
      * Creates the {@link Quantile}.
      * Parameters for the {@link KthSelector} are derived from the {@code name}.
+     * The instance is configured to overwrite (process in-place) the input partition data.
      *
      * @param name Name.
      * @param prefix Method prefix.
@@ -1198,13 +1134,16 @@ public class QuantilePerformance {
      */
     private static Quantile withKthSelector(String name, String prefix) {
         // For parity with the CM implementation use HF6
-        return Quantile.withDefaults().with(EstimationMethod.HF6)
+        return Quantile.withDefaults()
+            .with(EstimationMethod.HF6)
+            .withOverwrite(true)
             .withKthSelector(createKthSelector(name, prefix));
     }
 
     /**
      * Creates the {@link Quantile}.
      * Parameters for the {@link Partition} are derived from the {@code name}.
+     * The instance is configured to overwrite (process in-place) the input partition data.
      *
      * @param name Name.
      * @param prefix Method prefix.
@@ -1212,7 +1151,9 @@ public class QuantilePerformance {
      */
     private static Quantile withPartition(String name, String prefix) {
         // For parity with the CM implementation use HF6
-        return Quantile.withDefaults().with(EstimationMethod.HF6)
+        return Quantile.withDefaults()
+            .with(EstimationMethod.HF6)
+            .withOverwrite(true)
             .withPartition(createPartition(name, prefix));
     }
 
@@ -1493,8 +1434,7 @@ public class QuantilePerformance {
             return q;
         }
         // A sort is required
-        final double[] x = values.clone();
-        Arrays.sort(x);
+        Arrays.sort(values);
         for (int i = 0; i < p.length; i++) {
             // EstimationMethod.HF6 (as per the Apache Commons Math Percentile
             // legacy implementation)
@@ -1503,11 +1443,11 @@ public class QuantilePerformance {
             final int j = (int) fpos;
             final double g = pos - fpos;
             if (j < 1) {
-                q[i] = x[0];
+                q[i] = values[0];
             } else if (j >= n) {
-                q[i] = x[n - 1];
+                q[i] = values[n - 1];
             } else {
-                q[i] = DoubleMath.interpolate(x[j - 1], x[j], g);
+                q[i] = DoubleMath.interpolate(values[j - 1], values[j], g);
             }
         }
         return q;
@@ -1536,11 +1476,11 @@ public class QuantilePerformance {
     @Benchmark
     public void quantiles(DoubleFunctionSource function, DataSource source,
             QuantileSource quantiles, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final double[] p = quantiles.getData();
         final BinaryOperator<double[]> fun = function.getFunction();
-        for (final double[] x : data) {
-            bh.consume(fun.apply(x, p));
+        for (int j = -1; ++j < size;) {
+            bh.consume(fun.apply(source.getData(j), p));
         }
     }
 
@@ -1555,11 +1495,11 @@ public class QuantilePerformance {
     @Benchmark
     public void quantileRange(DoubleFunctionSource function, DataSource source,
             QuantileRangeSource quantiles, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final double[] p = quantiles.getData();
         final BinaryOperator<double[]> fun = function.getFunction();
-        for (final double[] x : data) {
-            bh.consume(fun.apply(x, p));
+        for (int j = -1; ++j < size;) {
+            bh.consume(fun.apply(source.getData(j), p));
         }
     }
 
@@ -1572,10 +1512,10 @@ public class QuantilePerformance {
      */
     @Benchmark
     public void sort(SortFunctionSource function, SortSource source, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final Consumer<double[]> fun = function.getFunction();
-        for (final double[] x : data) {
-            final double[] y = x.clone();
+        for (int j = -1; ++j < size;) {
+            final double[] y = source.getData(j);
             fun.accept(y);
             bh.consume(y);
         }
@@ -1590,10 +1530,10 @@ public class QuantilePerformance {
      */
     @Benchmark
     public void fiveSort(Sort5FunctionSource function, SortSource source, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final Consumer<double[]> fun = function.getFunction();
-        for (final double[] x : data) {
-            final double[] y = x.clone();
+        for (int j = -1; ++j < size;) {
+            final double[] y = source.getData(j);
             fun.accept(y);
             bh.consume(y);
         }
@@ -1608,12 +1548,14 @@ public class QuantilePerformance {
      */
     @Benchmark
     public void partition(KFunctionSource function, KSource source, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final int[][] indices = source.getIndices();
         final BiFunction<double[], int[], double[]> fun = function.getFunction();
-        for (final double[] x : data) {
+        for (int j = -1; ++j < size;) {
             for (final int[] i : indices) {
-                bh.consume(fun.apply(x.clone(), i));
+                // Note: This uses the indices without cloning. This is because some
+                // functions do not destructively modify the data.
+                bh.consume(fun.apply(source.getData(j), i));
             }
         }
     }
@@ -1628,12 +1570,12 @@ public class QuantilePerformance {
      */
     @Benchmark
     public void edgeSelect(EdgeFunctionSource function, EdgeSource source, Blackhole bh) {
-        final double[][] data = source.getData();
+        final int size = source.size();
         final IndexInterval[] indices = source.getIndices();
         final BiFunction<double[], IndexInterval, double[]> fun = function.getFunction();
-        for (final double[] x : data) {
+        for (int j = -1; ++j < size;) {
             for (final IndexInterval i : indices) {
-                bh.consume(fun.apply(x.clone(), i));
+                bh.consume(fun.apply(source.getData(j), i));
             }
         }
     }
