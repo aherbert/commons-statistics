@@ -31,12 +31,13 @@ enum DualPivotingStrategy {
      *
      * <p>Requires {@code right - left >= 2}.
      *
+     * <p>On sorted data the tertiles are: 0.3340 0.6670
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0000   0.9970   0.3327   0.2357   0.2920   0.5654
-     *   0.0020   1.0000   0.3346   0.2356   0.2940   0.5675
-     *   0.0000   0.9970   0.3328   0.2356   0.2920   0.5656
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0000   0.9970   0.3327   0.2357   0.2920   0.5654
+     * [2]  0.0020   1.0000   0.3346   0.2356   0.2940   0.5675
+     * [3]  0.0000   0.9970   0.3328   0.2356   0.2920   0.5656
      * </pre>
      */
     MEDIANS {
@@ -80,12 +81,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 5 values are also sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3290 0.6710
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0010   0.9820   0.3327   0.1778   0.3130   0.4650
-     *   0.0030   0.9760   0.3348   0.1778   0.3150   0.4665
-     *   0.0010   0.9870   0.3325   0.1779   0.3130   0.4698
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0010   0.9820   0.3327   0.1778   0.3130   0.4650
+     * [2]  0.0030   0.9760   0.3348   0.1778   0.3150   0.4665
+     * [3]  0.0010   0.9870   0.3325   0.1779   0.3130   0.4698
      * </pre>
      */
     SORT_5 {
@@ -131,12 +133,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 5 values are also sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3600 0.6400
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0010   0.9790   0.3330   0.1780   0.3140   0.4665
-     *   0.0030   0.9800   0.3348   0.1778   0.3150   0.4681
-     *   0.0010   0.9770   0.3322   0.1777   0.3130   0.4677
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0010   0.9790   0.3330   0.1780   0.3140   0.4665
+     * [2]  0.0030   0.9800   0.3348   0.1778   0.3150   0.4681
+     * [3]  0.0010   0.9770   0.3322   0.1777   0.3130   0.4677
      * </pre>
      */
     SORT_5B {
@@ -182,12 +185,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 5 values are also sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3750 0.6250
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0010   0.9790   0.3324   0.1779   0.3130   0.4666
-     *   0.0030   0.9850   0.3348   0.1778   0.3150   0.4686
-     *   0.0010   0.9720   0.3327   0.1779   0.3130   0.4666
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0010   0.9790   0.3324   0.1779   0.3130   0.4666
+     * [2]  0.0030   0.9850   0.3348   0.1778   0.3150   0.4686
+     * [3]  0.0010   0.9720   0.3327   0.1779   0.3130   0.4666
      * </pre>
      */
     SORT_5C {
@@ -248,12 +252,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 15 samples values are partially sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3140 0.6860
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0090   0.9170   0.3783   0.1320   0.3730   0.2107
-     *   0.0030   0.8950   0.2438   0.1328   0.2270   0.6150
-     *   0.0110   0.9140   0.3779   0.1319   0.3730   0.2114
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0090   0.9170   0.3783   0.1320   0.3730   0.2107
+     * [2]  0.0030   0.8950   0.2438   0.1328   0.2270   0.6150
+     * [3]  0.0110   0.9140   0.3779   0.1319   0.3730   0.2114
      * </pre>
      * <p>Note the bias towards the outer regions.
      */
@@ -328,12 +333,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 12 samples values are partially sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3850 0.6160
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0160   0.9580   0.4269   0.1454   0.4230   0.1366
-     *   0.0020   0.8270   0.1467   0.1193   0.1170   1.1417
-     *   0.0140   0.9560   0.4264   0.1453   0.4230   0.1352
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0160   0.9580   0.4269   0.1454   0.4230   0.1366
+     * [2]  0.0020   0.8270   0.1467   0.1193   0.1170   1.1417
+     * [3]  0.0140   0.9560   0.4264   0.1453   0.4230   0.1352
      * </pre>
      * <p>Note the large bias towards the outer regions.
      */
@@ -404,12 +410,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 9 samples values are partially sorted.
      *
+     * <p>On sorted data the tertiles are: 0.1280 0.8720
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0010   0.9460   0.3062   0.1560   0.2910   0.4455
-     *   0.0030   0.9820   0.3875   0.1813   0.3780   0.2512
-     *   0.0010   0.9400   0.3063   0.1558   0.2910   0.4453
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0010   0.9460   0.3062   0.1560   0.2910   0.4455
+     * [2]  0.0030   0.9820   0.3875   0.1813   0.3780   0.2512
+     * [3]  0.0010   0.9400   0.3063   0.1558   0.2910   0.4453
      * </pre>
      * <p>Note the bias towards the central region.
      */
@@ -477,14 +484,16 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 25 samples values are partially sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3050 0.6950
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0270   0.8620   0.3996   0.1093   0.3970   0.1130
-     *   0.0030   0.8100   0.2010   0.1106   0.1860   0.6691
-     *   0.0270   0.8970   0.3994   0.1093   0.3970   0.1147
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0270   0.8620   0.3996   0.1093   0.3970   0.1130
+     * [2]  0.0030   0.8100   0.2010   0.1106   0.1860   0.6691
+     * [3]  0.0270   0.8970   0.3994   0.1093   0.3970   0.1147
      * </pre>
-     * <p>Note the bias towards the outer regions.
+     * <p>Note the bias towards the outer regions on random data but the inner region on
+     * sorted data.
      */
     SORT_5_OF_5 {
         @Override
@@ -545,12 +554,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 7 values are also sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3760 0.6240
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0020   0.9600   0.3745   0.1609   0.3640   0.3092
-     *   0.0030   0.9490   0.2512   0.1440   0.2300   0.6920
-     *   0.0030   0.9620   0.3743   0.1609   0.3640   0.3100
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0020   0.9600   0.3745   0.1609   0.3640   0.3092
+     * [2]  0.0030   0.9490   0.2512   0.1440   0.2300   0.6920
+     * [3]  0.0030   0.9620   0.3743   0.1609   0.3640   0.3100
      * </pre>
      * <p>Note the bias towards the outer regions.
      */
@@ -601,12 +611,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 8 values are also sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3380 0.6630
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0030   0.9480   0.3327   0.1485   0.3200   0.4044
-     *   0.0050   0.9350   0.3345   0.1485   0.3220   0.4056
-     *   0.0020   0.9320   0.3328   0.1485   0.3200   0.4063
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0030   0.9480   0.3327   0.1485   0.3200   0.4044
+     * [2]  0.0050   0.9350   0.3345   0.1485   0.3220   0.4056
+     * [3]  0.0020   0.9320   0.3328   0.1485   0.3200   0.4063
      * </pre>
      */
     SORT_8 {
@@ -662,12 +673,13 @@ enum DualPivotingStrategy {
      *
      * <p>Warning: This has the side effect that the 11 values are also sorted.
      *
+     * <p>On sorted data the tertiles are: 0.3460 0.6540
      * <p>On random data the tertiles are:
      * <pre>
-     *      min      max     mean       sd   median     skew
-     *   0.0060   0.9000   0.3328   0.1301   0.3230   0.3624
-     *   0.0100   0.9190   0.3345   0.1299   0.3250   0.3643
-     *   0.0060   0.8970   0.3327   0.1302   0.3230   0.3653
+     *         min      max     mean       sd   median     skew
+     * [1]  0.0060   0.9000   0.3328   0.1301   0.3230   0.3624
+     * [2]  0.0100   0.9190   0.3345   0.1299   0.3250   0.3643
+     * [3]  0.0060   0.8970   0.3327   0.1302   0.3230   0.3653
      * </pre>
      */
     SORT_11 {

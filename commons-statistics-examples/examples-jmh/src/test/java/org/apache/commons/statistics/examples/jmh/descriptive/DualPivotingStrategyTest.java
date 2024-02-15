@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Formatter;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -337,11 +338,16 @@ class DualPivotingStrategyTest {
                 s[1].addValue(third2);
                 s[2].addValue(third3);
             }
-            TestUtils.printf("%s   n=%d   len=%d%n", ps, samples, n);
-            TestUtils.printf("     * %8s %8s %8s %8s %8s %8s%n", "min", "max", "mean", "sd", "median", "skew");
-            for (DescriptiveStatistics d : s) {
-                TestUtils.printf("     * %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f%n",
-                    d.getMin(), d.getMax(), d.getMean(),
+            // Get the pivot locations on sorted data
+            final int[] p2 = {0};
+            final int p1 = ps.pivotIndex(
+                IntStream.range(0, n).asDoubleStream().toArray(), 0, n - 1, p2);
+            TestUtils.printf("%s   n=%d   len=%d : %6.4f %6.4f%n", ps, samples, n, (p1 + 1.0) / n, (p2[0] + 1.0) / n);
+            TestUtils.printf("     *     %8s %8s %8s %8s %8s %8s%n", "min", "max", "mean", "sd", "median", "skew");
+            for (int i = 0; i < s.length; i++) {
+                final DescriptiveStatistics d = s[i];
+                TestUtils.printf("     * [%d] %8.4f %8.4f %8.4f %8.4f %8.4f %8.4f%n",
+                    i + 1, d.getMin(), d.getMax(), d.getMean(),
                     d.getStandardDeviation(), d.getPercentile(50), d.getSkewness());
             }
         } catch (final IOException e) {
@@ -353,7 +359,7 @@ class DualPivotingStrategyTest {
         final Stream.Builder<Arguments> builder = Stream.builder();
         // Use to build the tertiles statistics
         for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
-            builder.add(Arguments.of(s, 1000, 1000000));
+            builder.add(Arguments.of(s, 1000, 100000));
         }
 
         // On small data the sort 5 method has skewed density.
@@ -378,7 +384,7 @@ class DualPivotingStrategyTest {
         TestUtils.printf("%s   n=%d%n", ps, n);
         //for (int i = n; i < n + 100; i++) {
         for (int i = n; i <= 2048; i *= 2) {
-            int[] indices = ps.getSampledIndices(0, i - 1);
+            final int[] indices = ps.getSampledIndices(0, i - 1);
             final double d = i;
             TestUtils.printf("%4d : %s : %s%n", i,
                 Arrays.stream(indices).mapToObj(p -> String.format("%4d", p))

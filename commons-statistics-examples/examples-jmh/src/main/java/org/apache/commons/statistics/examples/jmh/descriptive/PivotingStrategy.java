@@ -130,26 +130,6 @@ enum PivotingStrategy {
         int pivotIndex(int[] data, int left, int right) {
             throw new IllegalStateException("Unsupported");
         }
-    },
-    /**
-     * Pivot around the median of 3 values within the range: the first; the centre; and the last.
-     *
-     * <p>Warning: This has the side effect that the 3 values are also sorted.
-     */
-    SORT_3 {
-        @Override
-        int pivotIndex(double[] data, int left, int right) {
-            final int m = (left + right) >>> 1;
-            Sorting.sort3(data, left, m, right);
-            return m;
-        }
-
-        @Override
-        int pivotIndex(int[] data, int left, int right) {
-            final int m = (left + right) >>> 1;
-            Sorting.sort3(data, left, m, right);
-            return m;
-        }
     };
 
     /** Size to pivot around the median of 9. */
