@@ -169,16 +169,16 @@ public class QuantilePerformance {
             DITHER;
         }
 
-        /** all distributions / modifications. */
+        /** All distributions / modifications. */
         private static final String ALL = "all";
 
-        /** Type of data.
-         * Multiple types can be specified in the same string using lower/upper case. */
+        /** Type of data. Multiple types can be specified in the same string using
+         * lower/upper case, delimited using ':'. */
         @Param({ALL})
         private String distribution;
 
-        /** Type of data modification.
-         * Multiple types can be specified in the same string using lower/upper case. */
+        /** Type of data modification. Multiple types can be specified in the same string using
+         * lower/upper case, delimited using ':'. */
         @Param({ALL})
         private String modification;
 
@@ -187,14 +187,16 @@ public class QuantilePerformance {
         @Param({"1"})
         private int range;
 
-        /** Sample 'seed'. This is {@code m}. If set to zero the default is to use
-         * powers of 2 based on sample size. */
+        /** Sample 'seed'. This is {@code m} in Bentley and McIlroy's test suite.
+         * If set to zero the default is to use powers of 2 based on sample size. */
         @Param({"0"})
         private int seed;
 
         /** Data. This is stored as integer data which saves memory. Note that when ranking
          * data it is not necessary to have the full range of the double data type; the same
-         * number of unique values can be recorded in an array using an integer type. */
+         * number of unique values can be recorded in an array using an integer type.
+         * Returning a double[] forces a copy to be generated for destructive sorting /
+         * partitioning methods. */
         private int[][] data;
 
         /**
@@ -236,7 +238,7 @@ public class QuantilePerformance {
             final EnumSet<Modification> mod = getModifications();
             // Note: Bentley-McIlroy use n in {100, 1023, 1024, 1025}.
             // Here we only support a continuous range. The range is important
-            // for the median as it will require 1 or two points to partition
+            // for the median as it will require one or two points to partition
             // if the length is odd or even.
             final int length = getLength();
             if (length < 1) {
@@ -256,7 +258,7 @@ public class QuantilePerformance {
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
                 // m is supported via the seed parameter.
-                // Default seed will create ceil(log2(2*n)) * 5 dist * 6 mods * n samples:
+                // Default seed will create ceil(log2(2*n)) * 5 dist * 6 mods samples:
                 // MAX  = 32 * 5 * 6 * (2^31-1) * 4 bytes == 7679 GiB
                 // HUGE = 31 * 5 * 6 * 2^30 * 4 bytes == 3720 GiB
                 // BIG  = 21 * 5 * 6 * 2^20 * 4 bytes == 2520 MiB  <-- within configured JVM -Xmx
@@ -264,10 +266,13 @@ public class QuantilePerformance {
                 // It is possible to create lengths above 2^30 using a single distribution,
                 // modification, and seed:
                 // MAX1 = 1 * 1 * 1 * (2^31-1) * 4 bytes == 8191 MiB
+                // However this is then used to create double[] data thus requiring an extra
+                // ~16GiB memory for the sample to partition.
                 for (final int m : createSeeds(seed, n)) {
                     for (final int[] x : createSamples(dist, rng, n, m)) {
                         if (mod.contains(Modification.COPY)) {
-                            // copy: use in place. All other methods generate copies.
+                            // Don't copy! All other methods generate copies
+                            // so we can use this in-place.
                             samples.add(x);
                         }
                         if (mod.contains(Modification.REVERSE)) {
@@ -292,8 +297,6 @@ public class QuantilePerformance {
         }
 
         /**
-         * Gets the distributions.
-         *
          * @return the distributions
          */
         private EnumSet<Distribution> getDistributions() {
@@ -301,8 +304,6 @@ public class QuantilePerformance {
         }
 
         /**
-         * Gets the modifications.
-         *
          * @return the modifications
          */
         private EnumSet<Modification> getModifications() {
@@ -326,7 +327,7 @@ public class QuantilePerformance {
             for (final E e : cls.getEnumConstants()) {
                 // Scan for the name
                 for (int i = s.indexOf(e.name(), 0); i >= 0; i = s.indexOf(e.name(), i)) {
-                    // ensure a full match to the name:
+                    // Ensure a full match to the name:
                     // either at the end of the string, or followed by the delimiter
                     i += e.name().length();
                     if (i == s.length() || s.charAt(i) == ':') {
@@ -357,11 +358,15 @@ public class QuantilePerformance {
             if (seed - 1 >= 0) {
                 return new int[] {seed};
             }
+            // Bentley-McIlroy use:
+            // for: m = 1; m < 2 * n; m *= 2
+            // This has been modified here to handle n up to MAX_VALUE
+            // by knowing the count of m to generate.
+
             // ceil(log2(n)) + 1 == ceil(log2(2*n)) but handles MAX_VALUE
             int c = 33 - Integer.numberOfLeadingZeros(n - 1);
             final int[] seeds = new int[c];
             c = 0;
-            // m = 1; m < 2 * n; m *= 2
             for (int m = 1; c != seeds.length; m *= 2) {
                 seeds[c++] = m;
             }
@@ -435,7 +440,7 @@ public class QuantilePerformance {
         }
 
         /**
-         * Return a copy of the data.
+         * Return a (part) reversed copy of the data.
          *
          * @param x Data.
          * @param from Start index to reverse (inclusive).
@@ -474,7 +479,8 @@ public class QuantilePerformance {
             final int[] a = x.clone();
             for (int i = a.length; --i >= 0;) {
                 // Bentley-McIlroy use i % 5.
-                // This could be changed to use a power of 2 modulus with a mask.
+                // It is important this is not a power of 2 so it will not coincide
+                // with patterns created in the data using the default m powers-of-2.
                 a[i] += i % 5;
             }
             return a;
