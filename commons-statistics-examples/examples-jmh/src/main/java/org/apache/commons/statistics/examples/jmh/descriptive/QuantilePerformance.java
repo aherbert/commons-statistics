@@ -337,18 +337,17 @@ public class QuantilePerformance {
             final int length2 = length + (getRange() > 0 ? getRange() : 0);
             final ArrayList<double[]> samples = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
-                // Must be able to double n without overflow
-                if (2 * n < 0) {
+                if (2 * n - 1 < 0) {
                     throw new IllegalStateException("Unsupported size: " + n);
                 }
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
                 // m is supported via the seed parameter.
-                // Default seed will create (ceil(log2(n))+1) * 5 dist * 6 mods * n samples:
+                // Default seed will create ceil(log2(2*n)) * 5 dist * 6 mods * n samples:
                 // MAX = 31 * 5 * 6 * 2^30 * 8 bytes == 7440 GiB
                 // BIG = 21 * 5 * 6 * 2^20 * 8 bytes == 5040 MiB  <-- within configured JVM -Xmx
                 // MED = 11 * 5 * 6 * 2^10 * 8 bytes == 2640 KiB
-                for (final int m : createSeeds(n)) {
+                for (final int m : createSeeds(seed, n)) {
                     for (final double[] x : createSamples(dist, rng, n, m)) {
                         if (mod.contains(Modification.COPY)) {
                             // copy: use in place. All other methods generate copies.
@@ -421,36 +420,27 @@ public class QuantilePerformance {
         /**
          * Creates the seeds.
          *
+         * <p>This can be pasted into a JShell terminal to verify it works for any size
+         * {@code 1 <= n <= 2^30}. With the default behaviour all seeds {@code m} are
+         * strictly positive powers of 2 and the highest seed should be below {@code 2*n}.
+         *
+         * @param seed Seed (use 0 for default; or provide a strictly positive {@code 1 <= m < 2n}).
          * @param n Sample size
          * @return the seeds
          */
-        private int[] createSeeds(int n) {
-            if (seed > 0) {
+        private static int[] createSeeds(int seed, int n) {
+            if (seed > 0 && seed < 2L * n) {
                 return new int[] {seed};
             }
-            int c = ceilLog2(n) + 1;
+            // ceil(log2(2*n))
+            int c = 32 - Integer.numberOfLeadingZeros(2 * n - 1);
             final int[] seeds = new int[c];
             c = 0;
-            for (int m = 1; m < 2 * n; m *= 2) {
+            // m = 1; m < 2 * n; m *= 2
+            for (int m = 1; c != seeds.length; m *= 2) {
                 seeds[c++] = m;
             }
-            // Check this was done correctly
-            if (c < seeds.length) {
-                throw new IllegalStateException("Failed to configured seeds: " + n);
-            }
             return seeds;
-        }
-
-        /**
-         * Compute {@code ceil(log 2 (x))}. This is valid for all strictly positive {@code x}.
-         *
-         * <p>Note: Returns 32 for {@code x = 0} in place of -infinity.
-         *
-         * @param x Value.
-         * @return {@code ceil(log 2 (x))}
-         */
-        private static int ceilLog2(int x) {
-            return 32 - Integer.numberOfLeadingZeros(x - 1);
         }
 
         /**
