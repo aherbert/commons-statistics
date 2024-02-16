@@ -4312,12 +4312,23 @@ final class Partition {
                 return;
             }
 
+            // Pick 2 pivots from 5 approximately uniform through the range.
+            // Spacing is ~ 1/7 made using shifts. Other strategies are
+            // more expensive to compute with no change on partitioning.
+            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+            // Ensure the value is above zero to choose different points!
+            final int step = 1 + (n >>> 3) + (n >>> 6);
+            final int i3 = l + (n >>> 1);
+            final int i2 = i3 - step;
+            final int i1 = i2 - step;
+            final int i4 = i3 + step;
+            final int i5 = i4 + step;
+            Sorting.sort5(a, i1, i2, i3, i4, i5);
+
             // TODO:
             // Extract select method into this loop
 
-            // Pick 2 pivots and partition
-            int p0 = DUAL_PIVOTING_STRATEGY.pivotIndex(a, l, r, upper);
-            p0 = partitionDP(a, l, r, p0, upper[0], upper);
+            final int p0 = partitionDP(a, l, r, i2, i4, upper);
             final int p1 = upper[0];
             final int p2 = upper[1];
             final int p3 = upper[2];
@@ -5556,28 +5567,26 @@ final class Partition {
         for (int k = less - 1; ++k <= great;) {
             final double v = a[k];
             if (v < v1) {
-                //swap(a, k, less++)
+                // swap(a, k, less++)
                 a[k] = a[less];
                 a[less] = v;
                 less++;
             } else if (v > v2) {
-                // Original:
                 // while k < great and a[great] > v2:
-                //     great--
+                //   great--
                 while (a[great] > v2) {
                     if (great-- == k) {
                         // Done
                         break SORTING;
                     }
                 }
-                // Original:
                 // swap(a, k, great--)
-                // if a[k] < v2:
-                //    swap(a, k, less++)
+                // if a[k] < v1:
+                //   swap(a, k, less++)
                 final double w = a[great];
                 a[great] = v;
                 great--;
-                // a[k] = w
+                // delay a[k] = w
                 if (w < v1) {
                     a[k] = a[less];
                     a[less] = w;
