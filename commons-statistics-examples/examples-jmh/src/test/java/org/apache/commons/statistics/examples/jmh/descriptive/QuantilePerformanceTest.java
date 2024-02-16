@@ -47,6 +47,11 @@ class QuantilePerformanceTest {
     }
 
     @Test
+    void testGetHeapSelectMaskShift() {
+        assertIntParameter(Partition.HEAPSELECT_MASK_SHIFT, "MS", QuantilePerformance::getHeapSelectMaskShift);
+    }
+
+    @Test
     void testGetCompressionLevel() {
         assertDoubleParameter(Partition.RECURSION_MULTIPLE, "RM", QuantilePerformance::getRecursionMultiple);
     }

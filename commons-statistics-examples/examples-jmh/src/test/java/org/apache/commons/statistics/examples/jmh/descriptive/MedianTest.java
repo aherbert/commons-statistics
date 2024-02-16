@@ -128,6 +128,13 @@ class MedianTest {
         Assertions.assertEquals(expected, m.evaluateSP(values));
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testMedian"})
+    void testMedian(double[] values, double expected) {
+        final Median m = Median.withDefaults();
+        Assertions.assertEquals(expected, m.evaluate(values));
+    }
+
     static Stream<Arguments> testMedian() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final Percentile p = new Percentile(50).withNaNStrategy(NaNStrategy.FIXED);

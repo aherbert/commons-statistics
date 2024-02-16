@@ -58,6 +58,8 @@ final class Partition {
     static final int HEAPSELECT_SHIFT = 6;
     /** Default selection constant for heapselect. */
     static final int HEAPSELECT_CONSTANT = 2;
+    /** Default shift for the heapselect dynamic threshold mask. */
+    static final int HEAPSELECT_MASK_SHIFT = 31;
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
     /** Default recursion multiple. */
@@ -113,6 +115,11 @@ final class Partition {
      * length n using {@code d = (n >>> shift) + c}.
      * Not supported by all partition methods. */
     private final int heapSelectConstant;
+    /** Mask used on the dynamic threshold for heapselect. The number of lower bits set in
+     * this mask controls the maximum value for the dynamic heapselect threshold. If zero
+     * then the dynamic threshold is ignored. If -1 then the dynamic threshold is always
+     * used. */
+    private final int heapSelectDynamicMask;
 
     // Use final for settings used to configure partitioning functions
 
@@ -941,8 +948,8 @@ final class Partition {
      * Constructor with defaults.
      */
     Partition() {
-        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY,
-            MIN_QUICKSELECT_SIZE, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, MIN_QUICKSELECT_SIZE,
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
     }
 
     /**
@@ -953,7 +960,8 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(int minQuickSelectSize) {
-        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
     }
 
     /**
@@ -965,7 +973,8 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize) {
-        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
     }
 
     /**
@@ -977,7 +986,8 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      */
     Partition(DualPivotingStrategy dualPivotingStrategy, int minQuickSelectSize) {
-        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT);
+        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize,
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
     }
 
     /**
@@ -994,7 +1004,8 @@ final class Partition {
     Partition(PivotingStrategy pivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
         int heapSelectConstant) {
-        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, heapSelectShift, heapSelectConstant);
+        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, heapSelectShift, heapSelectConstant,
+            HEAPSELECT_MASK_SHIFT);
     }
 
     /**
@@ -1006,12 +1017,14 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
      * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @param heapSelectMaskShift Shift applied to -1 to mask the heap select dynamic distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(DualPivotingStrategy dualPivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant) {
-        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, heapSelectShift, heapSelectConstant);
+        int heapSelectConstant, int heapSelectMaskShift) {
+        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, heapSelectShift,
+            heapSelectConstant, heapSelectMaskShift);
     }
 
     /**
@@ -1028,11 +1041,12 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
      * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @param heapSelectMaskShift Shift applied to -1 to mask the heap select dynamic distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant) {
+        int heapSelectConstant, int heapSelectMaskShift) {
         // Shift only uses lowest 5 bits. It should use [0, 31].
         // If bits outside this are set the shift is invalid.
         if ((heapSelectShift & ~31) != 0) {
@@ -1043,6 +1057,7 @@ final class Partition {
         this.minQuickSelectSize = minQuickSelectSize;
         this.heapSelectShift = heapSelectShift;
         this.heapSelectConstant = heapSelectConstant;
+        this.heapSelectDynamicMask = -1 >>> heapSelectMaskShift;
     }
 
     /**
@@ -3760,7 +3775,7 @@ final class Partition {
      * @param n Count of indices (assumed to be strictly positive).
      */
     private void introselect(DPPartition part, double[] a, int right, int[] k, int n) {
-        final int maxDepth = createMaxDepthSinglePivot(right + 1);
+        final int maxDepth = createMaxDepthDualPivot(right + 1);
         // Handle cases without multiple keys
         if (n == 1) {
             introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
@@ -3859,8 +3874,11 @@ final class Partition {
             // |l|-----|ka1|--------|kb1|------|r|
             //  ---------s2-----------
             //          ----------s4-----------
+            // Note: The overhead of dynamic heap select distance computation is negligible.
+            // This allows various strategies for heapselect to be tested.
             if (maxDepth == 0 ||
-                Math.min(kb1 - l, r - ka1) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                Math.min(kb1 - l, r - ka1) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
+                    heapSelectDynamicMask & heapSelectEdgeDistance(n))) {
                 // Too much recursion, or ka1 and kb1 are both close to the same end
                 heapSelectRange(a, l, r, ka1, kb1);
                 return;
@@ -4111,6 +4129,239 @@ final class Partition {
      */
     void partitionIDP(double[] data, int length, int[] k, int n) {
         introselect((DPPartition) Partition::partitionDP, data, length - 1, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Note: This method does not use any configuration. It is built using the
+     * components that perform well across a benchmarking for: single keys; a pair of keys;
+     * multiple keys; all using a range of data input.
+     *
+     * <p>Note: This function pre/post-processes data to handles NaN and signed zeros.
+     * It is used for testing. The {@link Quantile} and {@link Median} implementations
+     * use a NaN policy and already perform floating-point data processing. This method should
+     * only be called by benchmarking/testing functions that may create any type
+     * of floating-point data.
+     *
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices (assumed to be strictly positive).
+     */
+    static void select(double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        if (end <= 1) {
+            // Nothing to partition
+            return;
+        }
+
+        // Filter indices invalidated by NaN check
+        int n = count;
+        if (end < k.length) {
+            for (int i = n; i > 0;) {
+                final int v = k[--i];
+                if (v >= end) {
+                    // swap(k, i, --n)
+                    k[i] = k[--n];
+                    k[n] = v;
+                }
+            }
+            if (n == 0) {
+                // NaNs for all k
+                return;
+            }
+        }
+
+        // select accepts an exclusive end
+        select(a, end, k, n);
+
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
+     * partition method by Vladimir Yaroslavskiy; switches to a single-pivot Dutch National Flag
+     * method when two pivots cannot be identified; the fall-back on poor convergence of
+     * the quickselect is a heapselect.
+     *
+     * <p>Note: This method does not use any configuration. It is built using the
+     * components that perform well across a benchmarking for: single keys; a pair of keys;
+     * multiple keys; all using a range of data input.
+     *
+     * @param a Values.
+     * @param length Length of data.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    static void select(double[] a, int length, int[] k, int n) {
+        if (n < 1) {
+            return;
+        }
+        // Ideal dual pivot recursion will take log3(n) steps as data is
+        // divided into length (n/3) at each iteration; add contingency.
+        final int maxDepth = (int) Math.floor(log3(length) * RECURSION_MULTIPLE) + RECURSION_CONSTANT;
+        // Handle cases without multiple keys
+        if (n == 1) {
+            select(a, 0, length - 1, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+            return;
+        }
+        // Special case for partition around adjacent indices (for interpolation)
+        if (n == 2 && k[0] + 1 == k[1]) {
+            select(a, 0, length - 1, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+            return;
+        }
+        IndexInterval keys;
+        if (n <= 10) {
+            final int unique = Sorting.sortIndices(k, n);
+            keys = ScanningKeyIndexInterval.of(k, unique);
+        } else {
+            keys = IndexSet.of(k, n);
+        }
+        select(a, 0, length - 1, keys, keys.left(), keys.right(), maxDepth);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts a {@link IndexInterval} of indices {@code k} and the
+     * first index {@code ka} and last index {@code kb} that define the range of indices
+     * to partition. The {@link IndexInterval} is used to search for keys in {@code [ka, kb]}
+     * to create {@code [ka, kb1]} and {@code [ka1, kb]} if partitioning splits the range.
+     *
+     * <pre>{@code
+     * left <= ka <= kb <= right
+     * }</pre>
+     *
+     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
+     * partition method by Vladimir Yaroslavskiy; switches to a single-pivot Dutch National Flag
+     * method when two pivots cannot be identified; the fall-back on poor convergence of
+     * the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Interval of indices to partition (ordered).
+     * @param ka First key.
+     * @param kb Last key.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    // package-private for benchmarking
+    static void select(double[] a, int left, int right,
+            IndexInterval k, int ka, int kb, int maxDepth) {
+        // If partitioning splits the interval then recursion is used for left and/or
+        // right sides and the middle remains within this function. If partitioning does
+        // not split the interval then it remains within this function.
+        int l = left;
+        int r = right;
+        int ka1 = ka;
+        int kb1 = kb;
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // length - 1
+            final int n = r - l;
+
+            // It is possible to use heapselect when ka1 and kb1 are close to the same end
+            // |l|-----|ka1|--------|kb1|------|r|
+            //  ---------d1-----------
+            //           ----------d2-----------
+            if (maxDepth == 0 ||
+                Math.min(kb1 - l, r - ka1) < heapSelectK(n)) {
+                // Too much recursion, or ka1 and kb1 are both close to the same end
+                heapSelectRange(a, l, r, ka1, kb1);
+                return;
+            }
+
+            if (n < MIN_QUICKSELECT_SIZE) {
+                // Full sort of small data
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+
+            // TODO:
+            // Extract select method into this loop
+
+            // Pick 2 pivots and partition
+            int p0 = DUAL_PIVOTING_STRATEGY.pivotIndex(a, l, r, upper);
+            p0 = partitionDP(a, l, r, p0, upper[0], upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            // Recursion to max depth
+            // Note: Here we possibly branch left, middle and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set in each region.
+            //                    p0 p1                p2 p3
+            // |l|--|ka1|--k----k--|P|------k--|kb1|----|P|----|r|
+            //                 kb1  |      ka1
+            // Search previous/next is bounded at ka1/kb1
+            maxDepth--;
+            // Recurse right side if required
+            if (kb1 > p3) {
+                if (ka1 > p3) {
+                    // Entirely on right-side
+                    l = p3 + 1;
+                    continue;
+                }
+                select(a, p3 + 1, r, k, k.nextIndex(p3 + 1), kb1, maxDepth);
+            }
+            // Recurse left side if required
+            if (ka1 < p0) {
+                if (kb1 < p0) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    continue;
+                }
+                select(a, l, p0 - 1, k, ka1, k.previousIndex(p0 - 1), maxDepth);
+            }
+            // Check the interval overlaps the middle; and the middle exists.
+            //                    p0 p1                p2 p3
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:     ----kb1                    ka1----
+            if (kb1 <= p1 || p2 <= ka1 || p2 - p1 <= 2) {
+                // No middle
+                return;
+            }
+            l = p1 + 1;
+            r = p2 - 1;
+            ka1 = ka1 >= l ? ka1 : k.nextIndex(l);
+            kb1 = kb1 <= r ? kb1 : k.previousIndex(r);
+        }
     }
 
     /**
@@ -5300,7 +5551,7 @@ final class Partition {
         } while (a[great] > v2);
 
         // a[less - 1] < P1 : a[great + 1] > P2
-        // sorting: unvisited in [less, great]
+        // unvisited in [less, great]
         SORTING:
         for (int k = less - 1; ++k <= great;) {
             final double v = a[k];
@@ -5849,9 +6100,114 @@ final class Partition {
     static int log3(int x) {
         // log3(2) ~ 1.5849625
         // log3(x) ~ log2(x) * 0.630929753... ~ log2(x) * 323 / 512 (0.630859375)
+        // Use (floor(log2(x))+1) * 323 / 512
         // This result is always between floor(log3(x)) and ceil(log3(x)).
         // It is correctly rounded when x +/- 1 is a power of 3.
-        return ((floorLog2(x) + 1) * 323) >>> 9;
+        return ((32 - Integer.numberOfLeadingZeros(x)) * 323) >>> 9;
+    }
+
+    /**
+     * Determine a threshold for the distance of a partition index {@code k} from the end
+     * of the length to switch to heapselect.
+     *
+     * <p>This method is used to estimate when heapselect will be faster than repeat
+     * partitioning using quickselect. Heapselect will use a heap of size {@code k}. When
+     * {@code k} is very small, relative to the length of the data, it is faster to
+     * perform a single pass heapselect.
+     *
+     * <p>Measurements on random data of variable length observed that the heapselect and
+     * quickselect run times were approximately equal when {@code k == (n >> 6)}.
+     *
+     * <p>However quickselect performs faster on structured data introducing an additional
+     * length dependence. This is observed to be approximately
+     * {@code k == (n >> log3(n))}. This threshold may be too conservative for some data
+     * (e.g. random data) and too high for other data.
+     *
+     * @param n Length.
+     * @return distance
+     */
+    static int heapSelectEdgeDistance(int n) {
+        // Ideally this should be monotonic.
+        // Applying a shift to n is not monotonic when log3(n+1) = log3(n) + 1.
+        // Thus we use a power of 2:
+        // n >> log3(n) ~ n / 2^log3(n) ~ 2^(log2(n) - log3(n)
+        // == 1 << (log2(n) - log3(n))
+        // compute log2(n) as (floor(log2(x)))
+        // compute log3(n) as (floor(log2(x))+1) * 323 / 512
+        final int log2p1 = 32 - Integer.numberOfLeadingZeros(n);
+        return 1 << (log2p1 - 1 - ((log2p1 * 323) >> 9));
+    }
+
+    /**
+     * Determine a threshold for the distance of a partition index {@code k} from the end
+     * of the length of data to switch to heapselect. For convenience this method
+     * accepts length {@code n = r - l} and not the correct {@code n = r - l + 1}.
+     *
+     * <p>This method is used to estimate when heapselect will be faster than repeat
+     * partitioning using quickselect.
+     *
+     * <p>Measurements on random data of variable length observed that the heapselect and
+     * quickselect run times were approximately equal when {@code k == (n >> 6)}.
+     *
+     * <p>However quickselect performs faster on structured data introducing an additional
+     * length dependence. This is observed to be approximately
+     * {@code k == (n >> log3(n))}. This threshold may be too conservative for some data
+     * (e.g. random data) and too high for other data. Note that this only occurs when the
+     * distance from the end is very small:
+     *
+     * <pre>{@code
+     *           n  (n >> log3(n)) / (double) n
+     *           8     0.250000
+     *          64    0.0625000
+     *         512    0.0156250
+     *        4096   0.00390625
+     *       32768  0.000976563
+     *      262144  0.000488281
+     *     2097152  0.000122070
+     *    16777216  3.05176e-05
+     *   134217728  7.62939e-06
+     *  1073741824  1.90735e-06
+     * }</pre>
+     *
+     * <p>As such it is very infrequent that heapselect is useful; it can be used to quickly collect
+     * a key at the end of the range. For example if a partition index cut a pair of target indices
+     * (k, k+1) leaving k or k+1 at the edge. Thus to avoid a clash
+     * with the fixed threshold for a full sort of small data this uses floor(log2(n)) - 1
+     * which can be computed very fast using an intrinsic method call. Note that if
+     * the distance to the end is required to be less than the value returned by this function:
+     * {@code distance < heapSelectK(r - l)} then this may start to choose heapselect when the
+     * length {@code r - l} is 4.
+     *
+     * <pre>{@code
+     *           n   floorLog2(n) - 1
+     *           0          -2
+     *           1          -1
+     *           2           0
+     *           3           0
+     *           4           1        <-- possible for distance < heapSelectK
+     *           5           1
+     *           6           1
+     *           7           1
+     *           8           2
+     *           9           2
+     * }</pre>
+     *
+     *
+     * @param n Length.
+     * @return distance
+     */
+    private static int heapSelectK(int n) {
+        // TODO: benchmark if this is as fast as a branch statement:
+        // if n < 2:
+        //   return 0
+        // if n < 10:
+        //   return 1
+        // if n < 20:
+        //   return 2
+        // return 20 (or any other small number)
+
+        // floor(log2(x)) - 1
+        return 30 - Integer.numberOfLeadingZeros(n);
     }
 
     /**

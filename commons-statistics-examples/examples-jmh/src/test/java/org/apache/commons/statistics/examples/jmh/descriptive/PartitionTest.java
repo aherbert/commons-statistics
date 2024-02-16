@@ -44,10 +44,12 @@ class PartitionTest {
     private static final int QS = 3;
     /** Default minimum quick select length for dual pivot. */
     private static final int QS2 = 5;
-    /** Default heap select shift. Using 31 disable length dependence. */
+    /** Default heap select shift. Using 31 disables length dependence. */
     private static final int HS = 31;
     /** Default heap select constant. */
     private static final int HC = 2;
+    /** Default heap select mask shift constant. Using 31 disables length dependence. */
+    private static final int MS = 31;
 
     /**
      * Partition function. Used to test different implementations.
@@ -556,27 +558,27 @@ class PartitionTest {
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPScanningKey(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionIDP);
+            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionIDP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPSearchKey(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC).setKeyStrategy(KeyStrategy.SEARCH_KEY_INTERVAL)::partitionIDP);
+            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.SEARCH_KEY_INTERVAL)::partitionIDP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionIDP);
+            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionIDP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPCompressedIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(1)::partitionIDP);
     }
@@ -584,9 +586,15 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPCompressedIndexSet2(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(2)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testSelect(double[] values, int[] indices) {
+        assertPartition(values, indices, Partition::select);
     }
 
     static void assertPartitionPaired(double[] values, int[] indices, DoublePartitionFunction2 function) {
@@ -777,6 +785,19 @@ class PartitionTest {
     void testSortIDP(double[] values) {
         assertSort(values,
             new Partition(DP, QS2)::sortIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortSelect(double[] values) {
+        // This tests that the select partitioning function performs
+        // a full sort when the IndexInterval is saturated.
+        assertSort(values, a -> {
+            final int right = Partition.sortNaN(a);
+            replaceNegativeZeros(a, 0, right);
+            Partition.select(a, 0, right, IndexIntervals.anyIndex(), 0, right, 100);
+            restoreNegativeZeros(a, 0, right);
+        });
     }
 
     @ParameterizedTest

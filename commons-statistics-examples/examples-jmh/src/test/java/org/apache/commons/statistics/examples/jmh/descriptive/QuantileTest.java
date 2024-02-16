@@ -152,6 +152,13 @@ class QuantileTest {
             Quantile::evaluateIDP, Quantile::evaluateIDP);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantile"})
+    void testQuantile(double[] values, double[] p, double[][] expected, double delta) {
+        assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
+            Quantile::evaluate, Quantile::evaluate);
+    }
+
     private static void assertQuantile(Quantile m, double[] values, double[] p,
         double[][] expected, double delta,
         QuantileFunction f1, QuantileFunction2 f2) {
