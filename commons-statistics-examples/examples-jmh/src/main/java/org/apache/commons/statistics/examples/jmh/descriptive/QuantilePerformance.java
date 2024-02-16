@@ -113,6 +113,11 @@ public class QuantilePerformance {
     /** Commons Statistics Quantile introselect implementation with dual-pivot
      * partitioning, switching to heapselect when progress is poor. */
     private static final String IDP = "IDP";
+    /** Commons Statistics Quantile implementation. This method is built using the best performing
+     * select function across a range of input data. Current implementation uses
+     * an introselect variant with a dual-pivot quickselect; switching to heapselect when
+     * progress is poor. This algorithm currently cannot be configured. */
+    private static final String SELECT = "SELECT";
 
     /** Pattern for the minimum quickselect size. */
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
@@ -120,6 +125,8 @@ public class QuantilePerformance {
     private static final Pattern HS_PATTERN = Pattern.compile("HS(\\d+)");
     /** Pattern for the heapselect constant. */
     private static final Pattern HC_PATTERN = Pattern.compile("HC(\\d+)");
+    /** Pattern for the heapselect mask shift. */
+    private static final Pattern MS_PATTERN = Pattern.compile("MS(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
     private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+\\.?\\d*)");
     /** Pattern for the recursion constant. */
@@ -616,7 +623,7 @@ public class QuantilePerformance {
             CM, SP, BM, SBM, DP, DP5,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM, IDP})
+            ISBM, IDP, SELECT})
         private String name;
 
         /** The action. */
@@ -682,6 +689,8 @@ public class QuantilePerformance {
                 function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {
                 function = withPartition(name, IDP)::evaluateIDP;
+            } else if (name.startsWith(SELECT)) {
+                function = withPartition(name, SELECT)::evaluate;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
@@ -923,7 +932,7 @@ public class QuantilePerformance {
             DP, DP5, DNF,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM, IDP})
+            ISBM, IDP, SELECT})
         private String name;
 
         /** The action. */
@@ -1041,6 +1050,12 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, IDP);
                 function = (data, indices) -> {
                     part.partitionIDP(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(SELECT)) {
+                // Not configurable
+                function = (data, indices) -> {
+                    Partition.select(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else {
@@ -1215,6 +1230,7 @@ public class QuantilePerformance {
         final int minQuickSelectSize = getMinQuickSelectSize(s);
         final int heapSelectShift = getHeapSelectShift(s);
         final int heapSelectConstant = getHeapSelectConstant(s);
+        final int heapSelectMaskShift = getHeapSelectMaskShift(s);
         final KeyStrategy keyStartegy = getKeyStrategy(s);
         final double recursionMultiple = getRecursionMultiple(s);
         final int recursionConstant = getRecursionConstant(s);
@@ -1226,7 +1242,8 @@ public class QuantilePerformance {
                     String.format("Unharvested Partition parameters: %s -> %s", name, s[0]));
             }
         }
-        final Partition p = new Partition(sp, dp, minQuickSelectSize, heapSelectShift, heapSelectConstant);
+        final Partition p = new Partition(sp, dp, minQuickSelectSize,
+            heapSelectShift, heapSelectConstant, heapSelectMaskShift);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(keyStartegy);
@@ -1284,6 +1301,23 @@ public class QuantilePerformance {
             return i;
         }
         return Partition.HEAPSELECT_CONSTANT;
+    }
+
+    /**
+     * Gets the length shift for the mask applied to the dynamic heapselect
+     * distance-from-end computation.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @return the heapselect mask shift
+     */
+    static int getHeapSelectMaskShift(String[] name) {
+        final Matcher m = MS_PATTERN.matcher(name[0]);
+        if (m.find()) {
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
+        }
+        return Partition.HEAPSELECT_MASK_SHIFT;
     }
 
     /**

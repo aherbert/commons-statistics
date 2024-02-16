@@ -87,6 +87,11 @@ public class MedianPerformance {
     /** Commons Statistics Median introselect implementation with dual-pivot
      * partitioning, switching to heapselect when progress is poor. */
     private static final String IDP = "IDP";
+    /** Commons Statistics Median implementation. This method is built using the best performing
+     * select function across a range of input data. Current implementation uses
+     * an introselect variant with a dual-pivot quickselect; switching to heapselect when
+     * progress is poor. This algorithm currently cannot be configured. */
+    private static final String SELECT = "SELECT";
 
     /**
      * Source of {@code double} array data.
@@ -118,7 +123,7 @@ public class MedianPerformance {
         /** Name of the source. */
         @Param({JDK, CM, SP, SP_NAN, SBM, BM, DP, DP5,
             SBM2,
-            ISBM, IDP,
+            ISBM, IDP, SELECT
         })
         private String name;
 
@@ -177,6 +182,8 @@ public class MedianPerformance {
                 function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {
                 function = withPartition(name, IDP)::evaluateIDP;
+            } else if (name.startsWith(SELECT)) {
+                function = withPartition(name, SELECT)::evaluate;
             } else {
                 throw new IllegalStateException("Unknown double[] function: " + name);
             }
@@ -191,7 +198,9 @@ public class MedianPerformance {
          * @return the {@link Median} instance
          */
         private static Median withKthSelector(String name, String prefix) {
-            return Median.withDefaults().withKthSelector(QuantilePerformance.createKthSelector(name, prefix));
+            return Median.withDefaults()
+                .withOverwrite(true)
+                .withKthSelector(QuantilePerformance.createKthSelector(name, prefix));
         }
 
         /**
@@ -203,7 +212,9 @@ public class MedianPerformance {
          * @return the {@link Median} instance
          */
         private static Median withPartition(String name, String prefix) {
-            return Median.withDefaults().withPartition(QuantilePerformance.createPartition(name, prefix));
+            return Median.withDefaults()
+                .withOverwrite(true)
+                .withPartition(QuantilePerformance.createPartition(name, prefix));
         }
     }
 
@@ -228,15 +239,14 @@ public class MedianPerformance {
             }
         }
         // A sort is required
-        final double[] x = values.clone();
-        Arrays.sort(x);
+        Arrays.sort(values);
         final int k = n >>> 1;
         // Odd
         if ((n & 0x1) == 0x1) {
-            return x[k];
+            return values[k];
         }
         // Even
-        return (x[k - 1] + x[k]) * 0.5;
+        return (values[k - 1] + values[k]) * 0.5;
     }
 
     /**
