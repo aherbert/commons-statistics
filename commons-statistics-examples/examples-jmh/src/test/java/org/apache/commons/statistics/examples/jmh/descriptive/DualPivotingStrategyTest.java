@@ -63,6 +63,12 @@ class DualPivotingStrategyTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSort5", "testSort5IsSorted"})
+    void testSort5BSP(double[] a) {
+        assertPivots(a, DualPivotingStrategy.SORT_5B_SP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort5", "testSort5IsSorted"})
     void testSort5C(double[] a) {
         assertPivots(a, DualPivotingStrategy.SORT_5C);
     }
@@ -177,6 +183,11 @@ class DualPivotingStrategyTest {
     @Test
     void testSort5BIndexing() {
         assertIndexing(DualPivotingStrategy.SORT_5B, 5);
+    }
+
+    @Test
+    void testSort5BSPIndexing() {
+        assertIndexing(DualPivotingStrategy.SORT_5B_SP, 5);
     }
 
     @Test
