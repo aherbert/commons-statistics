@@ -431,7 +431,7 @@ public final class Quantile {
      * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
-    public double[] evaluate(PartitionFunction part, double[] values, double... p) {
+    private double[] evaluate(PartitionFunction part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
         if (p.length == 0) {
@@ -534,7 +534,7 @@ public final class Quantile {
      * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
-    public double[] evaluate2(PartitionFunction2 part, double[] values, double... p) {
+    private double[] evaluate2(PartitionFunction2 part, double[] values, double... p) {
         if (p.length == 0) {
             throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
         }
@@ -659,7 +659,7 @@ public final class Quantile {
      * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
-    public double[] evaluate3(PartitionFunction3 part, double[] values, double... p) {
+    private double[] evaluate3(PartitionFunction3 part, double[] values, double... p) {
         if (p.length == 0) {
             throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
         }
@@ -701,6 +701,134 @@ public final class Quantile {
         // Partition
         if (count != 0) {
             part.partition(x, len, indices, count);
+        }
+        t.postProcess(x, indices, count);
+
+        // Compute
+        for (int k = 0; k < p.length; k++) {
+            final int i = (int) q[k];
+            final double alpha = q[k] - i;
+            if (alpha != 0) {
+                q[k] = DoubleMath.interpolate(x[i], x[i + 1], alpha);
+            } else {
+                q[k] = x[i];
+            }
+        }
+        return q;
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantile of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p><strong>Performance</strong>
+     *
+     * <p>It is not recommended to use this method for repeat calls for different quantiles
+     * within the same values. The {@link #evaluate(double[], double...)} method should be used
+     * which provides better performance.
+     *
+     * @param values Values.
+     * @param p Quantile.
+     * @return the quantile
+     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @see #evaluateSP(double[], double...)
+     */
+    public double evaluate(double[] values, double p) {
+        checkQuantile(p);
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
+        // Special cases
+        if (n <= 1) {
+            t.postProcess(x, null, 0);
+            return n == 0 ? Double.NaN : values[0];
+        }
+        // Length of data to partition
+        final int len = t.length();
+
+        final double pos = estimationType.index(p, n);
+        final int i = (int) pos;
+
+        // Partition and compute
+        // Do the minimal partition work below the data length.
+        if (pos > i) {
+            final int[] k = new int[] {i, i + 1};
+            if (i < len) {
+                final int kn = i <= len ? 2 : 1;
+                Partition.select(x, len, k, kn);
+                t.postProcess(x, k, kn);
+            } else {
+                t.postProcess(x, null, 0);
+            }
+            return DoubleMath.interpolate(x[i], x[i + 1], pos - i);
+        }
+        if (i < len) {
+            final int[] k = new int[] {i};
+            Partition.select(x, len, k, 1);
+            t.postProcess(x, k, 1);
+        } else {
+            t.postProcess(x, null, 0);
+        }
+        return x[i];
+    }
+
+    /**
+     * Evaluate the <code>p</code>th quantiles of the values.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * @param values Values.
+     * @param p Quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    public double[] evaluate(double[] values, double... p) {
+        if (p.length == 0) {
+            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
+        }
+        for (final double pp : p) {
+            checkQuantile(pp);
+        }
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
+        // Special cases
+        final double[] q = new double[p.length];
+        if (n <= 1) {
+            t.postProcess(x, null, 0);
+            Arrays.fill(q, n == 0 ? Double.NaN : values[0]);
+            return q;
+        }
+
+        // Length of data to partition
+        final int len = t.length();
+
+        // Collect interpolation positions. We use the output q to store factors.
+        final int[] indices = new int[p.length * 2];
+        int count = 0;
+        for (int k = 0; k < p.length; k++) {
+            final double pos = estimationType.index(p[k], n);
+            q[k] = pos;
+            final int i = (int) pos;
+            // Only have to partition up to length
+            if (i < len) {
+                indices[count++] = i;
+                if (pos > i && i <= len) {
+                    // Require the next index for interpolation
+                    indices[count++] = i + 1;
+                }
+            }
+        }
+
+        // Partition
+        if (count != 0) {
+            Partition.select(x, len, indices, count);
         }
         t.postProcess(x, indices, count);
 
@@ -774,7 +902,7 @@ public final class Quantile {
      * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
-    public double[] evaluateK1(PartitionFunction2 part, double[] values, double... p) {
+    private double[] evaluateK1(PartitionFunction2 part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
         if (p.length == 0) {
