@@ -1280,6 +1280,58 @@ final class Sorting {
      * Sort the unique indices in-place to the start of the array. The number of
      * indices is returned.
      *
+     * <p>Uses a binary search to find the insert point.
+     *
+     * <p>Warning: Requires {@code n > 1}.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndicesBinarySearch(int[] data, int n) {
+        // Sort first 2
+        if (data[1] < data[0]) {
+            final int v = data[0];
+            data[0] = data[1];
+            data[1] = v;
+        }
+        int unique = data[0] != data[1] ? 2 : 1;
+        // Insert the remaining indices if unique
+        OUTER:
+        for (int i = 1; ++i < n;) {
+            // Binary search with fast exit on match
+            int l = 0;
+            int r = unique - 1;
+            final int k = data[i];
+            while (l <= r) {
+                // Middle value
+                final int m = (l + r) >>> 1;
+                final int v = data[m];
+                // Test:
+                // l------m------r
+                //        v  k      update left
+                //     k  v         update right
+                if (v < k) {
+                    l = m + 1;
+                } else if (v > k) {
+                    r = m - 1;
+                } else {
+                    // Equal
+                    continue OUTER;
+                }
+            }
+            // key not found: insert at l
+            System.arraycopy(data, l, data, l + 1, unique - l);
+            data[l] = k;
+            unique++;
+        }
+        return unique;
+    }
+
+    /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
      * <p>Uses a heap sort modified to ignore duplicates.
      *
      * <p>Warning: Requires {@code n > 0}.

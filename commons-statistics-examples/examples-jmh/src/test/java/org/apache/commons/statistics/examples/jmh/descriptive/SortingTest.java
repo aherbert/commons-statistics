@@ -591,6 +591,12 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSortIndices"})
+    void testSortIndicesBinarySearch(int[] values, int n) {
+        assertSortIndices(Sorting::sortIndicesBinarySearch, values, n, 2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSortIndices"})
     void testSortIndicesHeapSort(int[] values, int n) {
         assertSortIndices(Sorting::sortIndicesHeapSort, values, n, 3);
     }
