@@ -4357,7 +4357,7 @@ final class Partition {
 
             if (n < MIN_QUICKSELECT_SIZE) {
                 // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+                Sorting.sort(a, l, r);
                 return;
             }
 

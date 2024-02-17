@@ -54,7 +54,7 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
-    void testDoubleInsertionSort(double[] values) {
+    void testDoubleInsertionSortInternal(double[] values) {
         assertDoubleSort(values, x -> Sorting.sort(x, 0, x.length - 1, false));
         if (values.length < 2) {
             return;
@@ -64,6 +64,18 @@ class SortingTest {
         values[0] = Arrays.stream(values).min().getAsDouble();
         // check internal sort
         assertDoubleSort(values, x -> Sorting.sort(x, 1, x.length - 1, true));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
+    void testDoubleInsertionSort(double[] values) {
+        assertDoubleSort(values, x -> Sorting.sort(x, 0, x.length - 1));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
+    void testDoubleInsertionSortB(double[] values) {
+        assertDoubleSort(values, x -> Sorting.sortb(x, 0, x.length - 1));
     }
 
     @ParameterizedTest
