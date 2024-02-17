@@ -941,7 +941,7 @@ public class QuantilePerformance {
             } else if (name.startsWith(IDP)) {
                 function = createPartition(name, IDP)::sortIDP;
             } else if ("InsertionSort".equals(name)) {
-                function = x -> Sorting.sort(x, 0, x.length, false);
+                function = x -> Sorting.sort(x, 0, x.length - 1, false);
             }
             if (function == null) {
                 throw new IllegalStateException("Unknown sort function: " + name);
