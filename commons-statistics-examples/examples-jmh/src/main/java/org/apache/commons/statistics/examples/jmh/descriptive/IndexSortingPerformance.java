@@ -48,6 +48,8 @@ import org.openjdk.jmh.infra.Blackhole;
 public class IndexSortingPerformance {
     /** Sort using a modified insertion sort that ignores duplicates. */
     private static final String INSERTION = "Insertion";
+    /** Sort using a binary search into the unique indices. */
+    private static final String BINARY_SEARCH = "BinarySearch";
     /** Sort using a modified heap sort that ignores duplicates. */
     private static final String HEAP = "Heap";
     /** Sort using a full sort and a second pass to ignore duplicates. */
@@ -170,6 +172,8 @@ public class IndexSortingPerformance {
         @Param({
             // Fast when size is small (<10)
             INSERTION,
+            // Slow (too many System.arraycopy calls)
+            //BINARY_SEARCH,
             // Slow ~ n log(n)
             //HEAP,
             // Fast sort but does not scale well with duplicates
@@ -203,6 +207,8 @@ public class IndexSortingPerformance {
             Objects.requireNonNull(name);
             if (INSERTION.equals(name)) {
                 function = Sorting::sortIndicesInsertionSort;
+            } else if (BINARY_SEARCH.equals(name)) {
+                function = Sorting::sortIndicesBinarySearch;
             } else if (HEAP.equals(name)) {
                 function = Sorting::sortIndicesHeapSort;
             } else if (SORT_UNIQUE.equals(name)) {
