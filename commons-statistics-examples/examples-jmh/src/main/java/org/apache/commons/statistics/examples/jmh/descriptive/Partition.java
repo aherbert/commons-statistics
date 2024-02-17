@@ -70,11 +70,23 @@ final class Partition {
      * Below this switch to insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in Yaroslavskiy's original paper. */
     static final int MIN_QUICKSELECT_SIZE = 27;
-    /** Default length shift for heapselect. */
-    static final int HEAPSELECT_SHIFT = 6;
-    /** Default selection constant for heapselect. */
+    /** Default length shift for heapselect. On random data this is approximately constant
+     * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
+     * of the time. On non-random data then the shift has to be larger. This idea is
+     * captured in the heap select dynamic mask which can enable/disable dynamic determination
+     * of the heap select size threshold. Note that a configurable size threshold for
+     * heap select will not target the majority of cases and it is better to do quickselect
+     * partitioning. This is disabled by default using the maximum shift. */
+    static final int HEAPSELECT_SHIFT = 31;
+    /** Default selection constant for heapselect. This is useful to pick up any indices
+     * very close to the edge. Special methods handle size 1 and 2 without a heap by 
+     * finding the min or two smallest values in a range. The default enables the fast methods;
+     * notably this will target (k, k+1) pairs of interpolation indices that may have been split
+     * by a partition pivot. */
     static final int HEAPSELECT_CONSTANT = 2;
-    /** Default shift for the heapselect dynamic threshold mask. */
+    /** Default shift for the heapselect dynamic threshold mask. Disabled by default.
+     * It is a very small number of cases where heapselect is useful
+     * (see {@link #heapSelectEdgeDistance(int)}). */
     static final int HEAPSELECT_MASK_SHIFT = 31;
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
