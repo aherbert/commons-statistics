@@ -18,6 +18,8 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
+import java.util.Objects;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
@@ -134,6 +136,10 @@ final class Partition {
     private int recursionConstant = RECURSION_CONSTANT;
     /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
     private int compression = COMPRESSION;
+    /** Consumer for the recursion level reached during partitioning. Used to analyse
+     * the distribution of the recursion for different input data.
+     */
+    private IntConsumer recursionConsumer = i -> {};
 
     /**
      * Define the strategy for processing multiple keys.
@@ -1105,6 +1111,16 @@ final class Partition {
         }
         this.compression = v;
         return this;
+    }
+
+    /**
+     * Sets the recursion consumer. This is called with the value of the recursion
+     * counter immediately before the introselect routine returns.
+     *
+     * @param v Value.
+     */
+    public void setRecursionConsumer(IntConsumer v) {
+        this.recursionConsumer = Objects.requireNonNull(v);
     }
 
     /**
@@ -3648,12 +3664,14 @@ final class Partition {
                 Math.min(kb1 - l, r - ka) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or ka and kb1 are both close to the same end
                 heapSelectRange(a, l, r, ka, kb1);
+                recursionConsumer.accept(maxDepth);
                 return;
             }
 
             if (n < minQuickSelectSize) {
                 // Full sort of small data
                 Sorting.sort(a, l, r, l > 0);
+                recursionConsumer.accept(maxDepth);
                 return;
             }
 
@@ -3683,6 +3701,7 @@ final class Partition {
             }
             if (ka >= p0) {
                 // No left side
+                recursionConsumer.accept(maxDepth);
                 return;
             }
             // Continue on the left side
@@ -3881,12 +3900,14 @@ final class Partition {
                     heapSelectDynamicMask & heapSelectEdgeDistance(n))) {
                 // Too much recursion, or ka1 and kb1 are both close to the same end
                 heapSelectRange(a, l, r, ka1, kb1);
+                recursionConsumer.accept(maxDepth);
                 return;
             }
 
             if (n < minQuickSelectSize) {
                 // Full sort of small data
                 Sorting.sort(a, l, r, l > 0);
+                recursionConsumer.accept(maxDepth);
                 return;
             }
 
@@ -3930,6 +3951,7 @@ final class Partition {
             // Eliminate:     ----kb1                    ka1----
             if (kb1 <= p1 || p2 <= ka1 || p2 - p1 <= 2) {
                 // No middle
+                recursionConsumer.accept(maxDepth);
                 return;
             }
             l = p1 + 1;
