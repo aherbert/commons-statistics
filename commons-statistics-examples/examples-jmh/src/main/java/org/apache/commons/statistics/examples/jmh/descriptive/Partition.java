@@ -1332,10 +1332,11 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMinIgnoreZeros(double[] data, int left, int right) {
-        // Sweep towards the end point where the swap takes place
-        double min = data[right];
-        int j = right;
-        for (int i = right; --i >= left;) {
+        // Sweep forward.
+        // This requires less tracking of the min on (partly) sorted data.
+        double min = data[left];
+        int j = left;
+        for (int i = left; ++i <= right;) {
             if (data[i] < min) {
                 min = data[i];
                 j = i;
@@ -1426,10 +1427,11 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
-        // Sweep towards the end point where the swap takes place
-        double max = data[left];
-        int j = left;
-        for (int i = left; ++i <= right;) {
+        // Sweep forward.
+        // This requires less tracking of the max on (partly) sorted data.
+        double max = data[right];
+        int j = right;
+        for (int i = right; --i >= left;) {
             if (data[i] > max) {
                 max = data[i];
                 j = i;
