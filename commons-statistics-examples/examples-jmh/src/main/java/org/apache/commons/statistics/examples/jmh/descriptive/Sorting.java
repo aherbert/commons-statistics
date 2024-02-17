@@ -1247,19 +1247,6 @@ final class Sorting {
      * @return the number of indices
      */
     static int sortIndicesInsertionSort(int[] data, int n) {
-        // Insert min at start to act as a sentinal
-        int min = data[0];
-        int mini = 0;
-        for (int i = 0; ++i < n;) {
-            final int v = data[i];
-            if (v < min) {
-                min = v;
-                mini = i;
-            }
-        }
-        data[mini] = data[0];
-        data[0] = min;
-
         int unique = 1;
         // Do an insertion sort but only compare the current set of unique values.
         for (int i = 0; ++i < n;) {
@@ -1271,21 +1258,17 @@ final class Sorting {
                 unique++;
             } else if (v < data[j]) {
                 // Find insertion point in the unique indices
-                // Cannot move past the sentinal at data[0]
                 do {
                     --j;
-                } while (v < data[j]);
-                // Only insert non-duplicate
-                if (v != data[j]) {
-                    // Update j so it is the insertion position
-                    j++;
-                    // Process the delayed moves
-                    // Move from [j, unique) to [j+1, unique+1)
-                    // System.arraycopy(data, j, data, j + 1, unique - j)
-                    for (int k = unique; k-- > j;) {
+                } while (j >= 0 && v < data[j]);
+                // Insertion point = j + 1
+                // Insert if at start or non-duplicate
+                if (j < 0 || v != data[j]) {
+                    // Move (j, unique) to (j+1, unique+1)
+                    for (int k = unique; --k > j;) {
                         data[k + 1] = data[k];
                     }
-                    data[j] = v;
+                    data[j + 1] = v;
                     unique++;
                 }
             }
