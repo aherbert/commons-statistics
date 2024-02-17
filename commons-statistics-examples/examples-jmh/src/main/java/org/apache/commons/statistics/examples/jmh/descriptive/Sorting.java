@@ -52,15 +52,16 @@ final class Sorting {
      * @param internal Internal flag.
      */
     static void sort(double[] data, int left, int right, boolean internal) {
-        int j;
         if (internal) {
             // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
             // => no requirement to check j >= left.
+            // Benchmarking fails to show this is faster.
             for (int i = left; ++i <= right;) {
                 final double v = data[i];
-                // Move preceding higher elements above
+                // Move preceding higher elements above (if required)
                 if (v < data[i - 1]) {
-                    for (j = i; v < data[--j];) {
+                    int j = i;
+                    while (v < data[--j]) {
                         data[j + 1] = data[j];
                     }
                     data[j + 1] = v;
@@ -69,14 +70,67 @@ final class Sorting {
         } else {
             for (int i = left; ++i <= right;) {
                 final double v = data[i];
-                // Move preceding higher elements above
+                // Move preceding higher elements above (if required)
                 if (v < data[i - 1]) {
-                    for (j = i; --j >= left && v < data[j];) {
+                    int j = i;
+                    while (--j >= left && v < data[j]) {
                         data[j + 1] = data[j];
                     }
                     data[j + 1] = v;
                 }
             }
+        }
+    }
+
+    /**
+     * Sorts an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>This method is fast up to approximately 40 - 80 values.
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void sort(double[] data, int left, int right) {
+        for (int i = left; ++i <= right;) {
+            final double v = data[i];
+            // Move preceding higher elements above (if required)
+            if (v < data[i - 1]) {
+                int j = i;
+                while (--j >= left && v < data[j]) {
+                    data[j + 1] = data[j];
+                }
+                data[j + 1] = v;
+            }
+        }
+    }
+
+    /**
+     * Sorts an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>This method is fast up to approximately 40 - 80 values.
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void sortb(double[] data, int left, int right) {
+        for (int i = left; ++i <= right;) {
+            final double v = data[i];
+            // Move preceding higher elements above.
+            // This method always uses a loop. It benchmarks slower
+            // than the method that uses an if statement on small arrays.
+            int j = i;
+            while (--j >= left && v < data[j]) {
+                data[j + 1] = data[j];
+            }
+            data[j + 1] = v;
         }
     }
 
@@ -297,7 +351,7 @@ final class Sorting {
         // Sorting network for size 4 is 5 comparisons + 2 or 3 extra.
         // This method benchmarks marginally faster (~1%) than the sorting network of size 5
         // on length 5 data. When the data is larger and the indices are uniformly
-        // spread across the range, the difference is below the noise of the timings.
+        // spread across the range, the sorting network is faster.
 
         // Order quadruple:
         //[(0,1,3,4)]
