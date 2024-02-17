@@ -48,13 +48,27 @@ import java.util.function.Supplier;
 final class Partition {
     // This class contains implementations for use in benchmarking.
 
-    /** Default pivoting strategy. */
-    static final PivotingStrategy PIVOTING_STRATEGY = PivotingStrategy.MEDIAN_OF_3;
-    /** Default pivoting strategy. */
+    /** Default pivoting strategy. Note: Using the dynamic strategy avoids excess recursion
+     * on the Bentley and McIlroy test data vs the MEDIAN_OF_3 strategy. It is possible
+     * that selecting the points from within the range would improve the MEDIAN_OF_3 method;
+     * currently it uses the left/right end points and the middle. */
+    static final PivotingStrategy PIVOTING_STRATEGY = PivotingStrategy.DYNAMIC;
+    /**
+     * Default pivoting strategy. Choosing from 5 points is unbiased on random data and
+     * has a lower standard deviation around the thirds than choosing 2 points
+     * (Yaroslavskiy's original method, see {@link DualPivotingStrategy#MEDIANS}). It
+     * performs well across various test data.
+     *
+     * <p>There are 3 variants using spacings of approximately 1/6, 1/7, and 1/8 computed
+     * using shifts to create 0.1719, 0.1406, and 0.125; with middle thirds on large
+     * lengths of 0.342, 0.28 and 0.25. The spacing using 1/7 is marginally faster when
+     * performing a full sort than the others; thus favouring a smaller middle third, but
+     * not too small, appears to be most performant.
+     */
     static final DualPivotingStrategy DUAL_PIVOTING_STRATEGY = DualPivotingStrategy.SORT_5B;
     /** Minimum selection size for quickselect.
      * Below this switch to insertion sort rather than selection.
-     * Dual-pivot quicksort used 27 in the original paper. */
+     * Dual-pivot quicksort used 27 in Yaroslavskiy's original paper. */
     static final int MIN_QUICKSELECT_SIZE = 27;
     /** Default length shift for heapselect. */
     static final int HEAPSELECT_SHIFT = 6;
@@ -137,9 +151,8 @@ final class Partition {
     /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
     private int compression = COMPRESSION;
     /** Consumer for the recursion level reached during partitioning. Used to analyse
-     * the distribution of the recursion for different input data.
-     */
-    private IntConsumer recursionConsumer = i -> {};
+     * the distribution of the recursion for different input data. */
+    private IntConsumer recursionConsumer = i -> { /* no-op */ };
 
     /**
      * Define the strategy for processing multiple keys.
@@ -607,7 +620,7 @@ final class Partition {
      *
      * <p>This method switches to a full sort when the range is small.
      *
-     * <p>Note: This does not override the {@link #sort(double[], int, int)} method
+     * <p>Note: This does not override the {@link #sort(double[], int, int, boolean, boolean)} method
      * to allow benchmarking of a sort driven using a single-pivot partition.
      */
     private class SPPartialSortFunction implements SPEPartitionFunction {
