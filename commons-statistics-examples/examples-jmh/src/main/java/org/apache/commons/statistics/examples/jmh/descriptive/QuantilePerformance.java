@@ -29,6 +29,7 @@ import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.stat.ranking.NaNStrategy;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -139,9 +140,39 @@ public class QuantilePerformance {
      *
      * <p>This uses the adverse input test suite from figure 1 in Bentley and McIlroy (1993)
      * Engineering a sort function, SOFTWARE—PRACTICE AND EXPERIENCE, VOL.23(11), 1249–1265.
+     *
+     * <p>Note
+     *
+     * <p>This class has setter methods to allow re-use in unit testing without requiring
+     * use of reflection to set fields. Parameters set by JMH are initialized to their
+     * defaults for convenience. Re-use requires:
+     *
+     * <ol>
+     * <li>Creating an instance of the abstract class that provides the data length
+     * <li>Calling {@link #setup()} to create the data
+     * <li>Iterating over the data
+     * </ol>
+     *
+     * <pre>
+     * AbstractDataSource s = new AbstractDataSource() {
+     *     protected int getLength() {
+     *         return 123;
+     *     }
+     * };
+     * s.setDistribution(Distribution.SAWTOOTH, Distribution.SHUFFLE);
+     * s.setModification(Modification.REVERSE_FRONT);
+     * s.setRange(2);
+     * s.setup();
+     * for (int i = 0; i &lt; s.size(); i++) {
+     *     s.getData(i);
+     * }
+     * </pre>
      */
     @State(Scope.Benchmark)
     public abstract static class AbstractDataSource {
+        /** All distributions / modifications. */
+        private static final String ALL = "all";
+
         /**
          * The type of distribution.
          */
@@ -176,23 +207,20 @@ public class QuantilePerformance {
             DITHER;
         }
 
-        /** All distributions / modifications. */
-        private static final String ALL = "all";
-
         /** Type of data. Multiple types can be specified in the same string using
          * lower/upper case, delimited using ':'. */
         @Param({ALL})
-        private String distribution;
+        private String distribution = ALL;
 
         /** Type of data modification. Multiple types can be specified in the same string using
          * lower/upper case, delimited using ':'. */
         @Param({ALL})
-        private String modification;
+        private String modification = ALL;
 
         /** Extra range to add to the data length.
          * E.g. Use 1 to force use of odd and even length samples for the median. */
         @Param({"1"})
-        private int range;
+        private int range = 1;
 
         /** Sample 'seed'. This is {@code m} in Bentley and McIlroy's test suite.
          * If set to zero the default is to use powers of 2 based on sample size. */
@@ -251,7 +279,7 @@ public class QuantilePerformance {
             if (length < 1) {
                 throw new IllegalStateException("Unsupported length: " + length);
             }
-            final int r = getRange() > 0 ? getRange() : 0;
+            final int r = range > 0 ? range : 0;
             if (length + (long) r > Integer.MAX_VALUE) {
                 throw new IllegalStateException("Unsupported upper length: " + length);
             }
@@ -503,14 +531,59 @@ public class QuantilePerformance {
         protected abstract int getLength();
 
         /**
-         * Gets the maximum addition to extend the length of each sample of data.
+         * Sets the distribution(s) of the data.
+         * If the input is empty then all distributions are used.
+         *
+         * @param v Values.
+         */
+        void setDistribution(Distribution... v) {
+            if (v.length == 0) {
+                distribution = ALL;
+            } else {
+                final EnumSet<Distribution> s = EnumSet.of(v[0], v);
+                distribution = s.stream().map(Enum::name).collect(Collectors.joining(":"));
+            }
+        }
+
+        /**
+         * Sets the modification of the data.
+         * If the input is empty then all modifications are used.
+         *
+         * @param v Value.
+         */
+        void setModification(Modification... v) {
+            if (v.length == 0) {
+                modification = ALL;
+            } else {
+                final EnumSet<Modification> s = EnumSet.of(v[0], v);
+                modification = s.stream().map(Enum::name).collect(Collectors.joining(":"));
+            }
+        }
+
+        /**
+         * Sets the maximum addition to extend the length of each sample of data.
          * The actual length is enumerated in {@code [length, length + range]}.
          *
-         * @return the range
-         * @see #getLength()
+         * <p>Supports positive values and the edge case of {@link Integer#MIN_VALUE}
+         * which is treated as an unisgned power of 2.
+         *
+         * @param v Value.
          */
-        protected int getRange() {
-            return range;
+        void setRange(int v) {
+            range = v;
+        }
+
+        /**
+         * Sets the sample 'seed' used to generate distributions.
+         * If set to zero the default is to use powers of 2 based on sample size.
+         *
+         * <p>Supports positive values and the edge case of {@link Integer#MIN_VALUE}
+         * which is treated as an unsigned power of 2.
+         *
+         * @param v Value (ignored if not within {@code [1, 2^31]})
+         */
+        void setSeed(int v) {
+            seed = v;
         }
     }
 
