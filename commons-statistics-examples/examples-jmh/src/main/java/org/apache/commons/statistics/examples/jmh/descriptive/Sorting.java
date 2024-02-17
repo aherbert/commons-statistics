@@ -47,16 +47,16 @@ final class Sorting {
      * is sorted.
      *
      * @param data Data array.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @param internal Internal flag.
      */
-    static void sort(double[] data, int begin, int end, boolean internal) {
+    static void sort(double[] data, int left, int right, boolean internal) {
         int j;
         if (internal) {
             // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
             // => no requirement to check j >= begin.
-            for (int i = begin; ++i <= end;) {
+            for (int i = left; ++i <= right;) {
                 final double v = data[i];
                 // Move preceding higher elements above
                 if (v < data[i - 1]) {
@@ -67,11 +67,11 @@ final class Sorting {
                 }
             }
         } else {
-            for (int i = begin; ++i <= end;) {
+            for (int i = left; ++i <= right;) {
                 final double v = data[i];
                 // Move preceding higher elements above
                 if (v < data[i - 1]) {
-                    for (j = i; --j >= begin && v < data[j];) {
+                    for (j = i; --j >= left && v < data[j];) {
                         data[j + 1] = data[j];
                     }
                     data[j + 1] = v;
@@ -822,16 +822,16 @@ final class Sorting {
      * is sorted.
      *
      * @param data Data array.
-     * @param begin Lower bound (inclusive).
-     * @param end Upper bound (inclusive).
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
      * @param internal Internal flag.
      */
-    static void sort(int[] data, int begin, int end, boolean internal) {
+    static void sort(int[] data, int left, int right, boolean internal) {
         int j;
         if (internal) {
             // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
             // => no requirement to check j >= begin.
-            for (int i = begin; ++i <= end;) {
+            for (int i = left; ++i <= right;) {
                 final int v = data[i];
                 // Move preceding higher elements above
                 if (v < data[i - 1]) {
@@ -842,11 +842,11 @@ final class Sorting {
                 }
             }
         } else {
-            for (int i = begin; ++i <= end;) {
+            for (int i = left; ++i <= right;) {
                 final int v = data[i];
                 // Move preceding higher elements above
                 if (v < data[i - 1]) {
-                    for (j = i; --j >= begin && v < data[j];) {
+                    for (j = i; --j >= left && v < data[j];) {
                         data[j + 1] = data[j];
                     }
                     data[j + 1] = v;
@@ -1261,14 +1261,13 @@ final class Sorting {
         data[0] = min;
 
         int unique = 1;
-        int j;
         // Do an insertion sort but only compare the current set of unique values.
         for (int i = 0; ++i < n;) {
             final int v = data[i];
-            j = unique - 1;
+            int j = unique - 1;
             if (v > data[j]) {
                 // Insert at end
-                data[j + 1] = v;
+                data[unique] = v;
                 unique++;
             } else if (v < data[j]) {
                 // Find insertion point in the unique indices

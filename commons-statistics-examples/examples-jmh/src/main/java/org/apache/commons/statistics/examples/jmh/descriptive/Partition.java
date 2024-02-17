@@ -79,7 +79,7 @@ final class Partition {
      * partitioning. This is disabled by default using the maximum shift. */
     static final int HEAPSELECT_SHIFT = 31;
     /** Default selection constant for heapselect. This is useful to pick up any indices
-     * very close to the edge. Special methods handle size 1 and 2 without a heap by 
+     * very close to the edge. Special methods handle size 1 and 2 without a heap by
      * finding the min or two smallest values in a range. The default enables the fast methods;
      * notably this will target (k, k+1) pairs of interpolation indices that may have been split
      * by a partition pivot. */
