@@ -55,7 +55,7 @@ final class Sorting {
         int j;
         if (internal) {
             // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
-            // => no requirement to check j >= begin.
+            // => no requirement to check j >= left.
             for (int i = left; ++i <= right;) {
                 final double v = data[i];
                 // Move preceding higher elements above
