@@ -526,18 +526,18 @@ public class QuantilePerformance {
          * The actual length is enumerated in {@code [length, length + range]}.
          *
          * @return the length
-         * @see #getRange()
          */
         protected abstract int getLength();
 
         /**
          * Sets the distribution(s) of the data.
-         * If the input is empty then all distributions are used.
+         * If the input is an empty array or the first enum value is null,
+         * then all distributions are used.
          *
          * @param v Values.
          */
         void setDistribution(Distribution... v) {
-            if (v.length == 0) {
+            if (v.length == 0 || v[0] == null) {
                 distribution = ALL;
             } else {
                 final EnumSet<Distribution> s = EnumSet.of(v[0], v);
@@ -547,12 +547,13 @@ public class QuantilePerformance {
 
         /**
          * Sets the modification of the data.
-         * If the input is empty then all modifications are used.
+         * If the input is an empty array or the first enum value is null,
+         * then all distributions are used.
          *
          * @param v Value.
          */
         void setModification(Modification... v) {
-            if (v.length == 0) {
+            if (v.length == 0 || v[0] == null) {
                 modification = ALL;
             } else {
                 final EnumSet<Modification> s = EnumSet.of(v[0], v);

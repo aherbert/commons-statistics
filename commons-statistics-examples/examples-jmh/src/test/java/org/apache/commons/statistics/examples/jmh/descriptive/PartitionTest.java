@@ -17,16 +17,26 @@
 
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Formatter;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Distribution;
+import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Modification;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -1234,6 +1244,131 @@ class PartitionTest {
         builder.add(Arguments.of(new double[] {3, 4, 10, 12, 5, 6}, 2, 3, 4, new int[] {5, 5, 5}));
         // Test greater-than fast-forward bounds check - all values are > the pivots
         builder.add(Arguments.of(new double[] {3, 4, 1, 2, 5, 6}, 2, 3, 0, new int[] {1, 1, 1}));
+        return builder.build();
+    }
+
+    /**
+     * This is not a test. It runs the introselect algorithm as a full sort on the specified
+     * data. A histogram of the level of recursion required to visit all regions is recorded
+     * to file.
+     */
+    @ParameterizedTest
+    @MethodSource
+    @Disabled("Used for testing")
+    void testRecursion(Distribution dist, Modification mod, int length, int range, boolean dualPivot) {
+        final int maxDepth = 2048;
+        final int[] h = new int[maxDepth + 1];
+        // Use the defaults.
+        // If the single pivot strategy is changed from MEDIAN_OF_3 to DYNAMIC
+        // this avoid excess recursion.
+        final Partition p = new Partition(
+            Partition.PIVOTING_STRATEGY,
+            //PivotingStrategy.MEDIAN_OF_3, // Use this to see excess recursion
+            Partition.DUAL_PIVOTING_STRATEGY,
+            Partition.MIN_QUICKSELECT_SIZE,
+            Partition.HEAPSELECT_SHIFT,
+            Partition.HEAPSELECT_CONSTANT,
+            Partition.HEAPSELECT_MASK_SHIFT);
+        p.setRecursionConsumer(i -> h[maxDepth - i]++);
+        final AbstractDataSource source = new AbstractDataSource() {
+            @Override
+            protected int getLength() {
+                return length;
+            }
+        };
+        source.setDistribution(dist);
+        source.setModification(mod);
+        source.setRange(range);
+        source.setup();
+
+        // Sort the data. This will record the recursion depth when a region is complete.
+        for (int i = 0; i < source.size(); i++) {
+            final double[] x = source.getData(i);
+            if (dualPivot) {
+                p.introselect(Partition::partitionDP, x, 0, x.length - 1,
+                    IndexIntervals.anyIndex(), 0, x.length - 1, maxDepth);
+            } else {
+                p.introselect(Partition::partitionSBM, x, 0, x.length - 1,
+                    IndexIntervals.anyIndex(), 0, x.length - 1, maxDepth);
+            }
+        }
+
+        // Bracket the histogram. Assume at least 1 non-zero value.
+        int hi = h.length;
+        do {
+            --hi;
+        } while (h[hi] == 0);
+
+        // Summary statistics
+        long s = 0;
+        long ss = 0;
+        long n = 0;
+        for (int i = 0; i < h.length; i++) {
+            final int c = h[i];
+            if (c != 0) {
+                n += c;
+                s += (long) i * c;
+                ss += (long) i * i * c;
+            }
+        }
+        final double mean = s / (double) n;
+        double variance = ss - ((double) s * s) / n;
+        if (variance > 0) {
+            variance = variance / (n - 1);
+        } else {
+            variance = Double.isFinite(variance) ? 0.0 : Double.NaN;
+        }
+        final String name = dualPivot ? "DP" : "SP";
+        final String distName = dist == null ? "ALL" : dist.name();
+        final String modName = mod == null ? "ALL" : mod.name();
+        // Flag when the method used excessive recursion.
+        // Note that recursion only occurs down to a small length which are finished with a sort.
+        final double expected = Math.log((length + range * 0.5) / Partition.MIN_QUICKSELECT_SIZE) /
+            Math.log(dualPivot ? 3 : 2);
+        String excess = "";
+        for (double m = mean; m > expected && m > mean - 10; m -= 1) {
+            excess += "*";
+        }
+        TestUtils.printf("%s %10s %15s %d-%d : n=%11d  mean=%10.6f  std=%10.6f   max=%4d : expected=%10.6f %s%n",
+            name, distName, modName, length, length + range,
+            n, mean, Math.sqrt(variance), hi, expected, excess);
+
+        // Record the histogram
+        final String dir = System.getProperty("java.io.tmpdir");
+        final Path path = Path.of(dir, String.format("%s_%s_%s_%d-%d.txt",
+            name, distName, modName, length, length + range));
+        try (BufferedWriter bw = Files.newBufferedWriter(path);
+            Formatter f = new Formatter(bw)) {
+            for (int i = 0; i <= hi; i++) {
+                f.format("%d %d%n", i, h[i]);
+            }
+        } catch (final IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    static Stream<Arguments> testRecursion() {
+        TestUtils.printf("Save directory: %s%n", System.getProperty("java.io.tmpdir"));
+
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final int length = 10000023;
+        final int range = 0;
+
+        // All
+        //builder.add(Arguments.of(null, null, length, range, true));
+        //builder.add(Arguments.of(null, null, length, range, false));
+
+        // Individual distribution / modification
+        // Both single-pivot method (using DYNAMIC pivoting strategy) and dual-pivot
+        // method have a mean recursion just above the theoretical max recursion depth.
+        for (final Boolean dp : new Boolean[] {Boolean.TRUE, Boolean.FALSE}) {
+            for (final Distribution dist : Distribution.values()) {
+                for (final Modification mod : Modification.values()) {
+                    builder.add(Arguments.of(dist, mod, length, range, dp));
+                }
+            }
+        }
+
         return builder.build();
     }
 }
