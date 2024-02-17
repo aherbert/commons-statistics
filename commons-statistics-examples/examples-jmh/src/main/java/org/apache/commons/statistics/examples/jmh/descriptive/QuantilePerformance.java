@@ -886,7 +886,7 @@ public class QuantilePerformance {
             SBM2,
             //DNF,
             // Not run by default as it is slow on large data
-            //"InsertionSort",
+            //"InsertionSort", "InsertionSort0",
             //"BM25"
             ISBM, IDP,
             })
@@ -941,7 +941,19 @@ public class QuantilePerformance {
             } else if (name.startsWith(IDP)) {
                 function = createPartition(name, IDP)::sortIDP;
             } else if ("InsertionSort".equals(name)) {
-                function = x -> Sorting.sort(x, 0, x.length - 1, false);
+                // For parity with the internal version use the same (shorter) data
+                function = x -> {
+                    // Ignored sentinal
+                    x[0] = Double.NEGATIVE_INFINITY;
+                    Sorting.sort(x, 1, x.length - 1, false);
+                };
+            } else if ("InsertionSort0".equals(name)) {
+                // Internal version
+                function = x -> {
+                    // Add a sentinal
+                    x[0] = Double.NEGATIVE_INFINITY;
+                    Sorting.sort(x, 1, x.length - 1, true);
+                };
             }
             if (function == null) {
                 throw new IllegalStateException("Unknown sort function: " + name);
