@@ -4353,6 +4353,7 @@ final class Partition {
             if (n < MIN_QUICKSELECT_SIZE) {
                 // Full sort of small data
                 Sorting.sort(a, l, r);
+                //Sorting.sort(a, l, r, l > 0);
                 return;
             }
 
@@ -4453,6 +4454,10 @@ final class Partition {
             a[r] = a[great];
             a[great] = p2;
 
+//            // save outer pivot
+//            final int lt = less;
+//            final int gt = great;
+
             // Once partitioned we possibly branch left, middle and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set in each region:
@@ -4526,6 +4531,32 @@ final class Partition {
                 great++;
             }
 
+//            // Once partitioned we possibly branch left, middle and right with multiple keys.
+//            // It is possible that the partition has split the keys
+//            // and the recursion proceeds with a reduced set in each region:
+//            //                    less                great
+//            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
+//            //                kb   |        ka
+//
+//            // Recurse left side if required
+//            if (ka < lt) {
+//                if (kb < lt) {
+//                    // Entirely on left side
+//                    r = lt - 1;
+//                    continue;
+//                }
+//                select(a, l, lt - 1, keys, ka, keys.previousIndex(lt - 1), maxDepth);
+//            }
+//            // Recurse right side if required
+//            if (kb > gt) {
+//                if (ka > gt) {
+//                    // Entirely on right-side
+//                    l = gt + 1;
+//                    continue;
+//                }
+//                select(a, gt + 1, r, keys, keys.nextIndex(gt + 1), kb, maxDepth);
+//            }
+
             // Between pivots in (less, great)
             // Check the interval overlaps the middle; and an unsorted middle exists.
             //                         less         great
@@ -4536,8 +4567,13 @@ final class Partition {
             }
             l = less + 1;
             r = great - 1;
-            ka = ka >= l ? ka : keys.nextIndex(l);
-            kb = kb <= r ? kb : keys.previousIndex(r);
+            // Housekeeping on the interval bounds
+            if (ka < l) {
+                ka = keys.nextIndex(l);
+            }
+            if (kb > r) {
+                kb = keys.previousIndex(r);
+            }
         }
     }
 
