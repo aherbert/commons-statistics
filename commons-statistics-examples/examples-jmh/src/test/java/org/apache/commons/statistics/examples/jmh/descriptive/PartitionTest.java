@@ -670,7 +670,7 @@ class PartitionTest {
 
     static Stream<Arguments> testPartition() {
         final Stream.Builder<Arguments> builder = Stream.builder();
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
+        UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
         // Sizes above and below the threshold for partitioning
         for (final int size : new int[] {5, 50, 500}) {
             final double[] values = IntStream.range(0, size).asDoubleStream().toArray();
@@ -721,6 +721,28 @@ class PartitionTest {
         builder.add(Arguments.of(new double[] {nan, 0.0, 1, -0.0, nan}, new int[] {1, 3}));
         builder.add(Arguments.of(new double[] {nan, 0.0, -0.0}, new int[] {0, 2}));
         builder.add(Arguments.of(new double[] {nan, 1.23, 0.0, -4.56, -0.0, nan}, new int[] {0, 1, 3}));
+        // Dual-pivot with a large middle region (> 5 / 8) requires equal elements loop
+        final int n = 128;
+        final double[] x = IntStream.range(0, n).asDoubleStream().toArray();
+        // Put equal elements in the central region:
+        //          2/16      6/16             10/16      14/16
+        // |  <P1    |    P1   |   P1< & < P2    |    P2    |    >P2    |
+        final int sixteenth = n / 16;
+        final int i2 = 2 * sixteenth;
+        final int i6 = 6 * sixteenth;
+        final double p1 = x[i2];
+        final double p2 = x[n - i2];
+        // Lots of values equal to the pivots
+        Arrays.fill(x, i2, i6, p1);
+        Arrays.fill(x, n - i6, n - i2, p2);
+        // Equal value in between the pivots
+        Arrays.fill(x, i6, n - i6, (p1 + p2) / 2);
+        // Shuffle this and partition in the middle.
+        // Use a fix seed to ensure we hit coverage with only 5 loops.
+        rng = RandomSource.XO_SHI_RO_128_PP.create(-8111061151820577011L);
+        for (int i = 0; i < 5; i++) {
+            builder.add(Arguments.of(TestUtils.shuffle(rng, x.clone()), new int[] {50}));
+        }
         return builder.build();
     }
 
