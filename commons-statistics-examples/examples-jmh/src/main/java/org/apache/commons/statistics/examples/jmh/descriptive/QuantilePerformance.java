@@ -282,7 +282,7 @@ public class QuantilePerformance {
         /**
          * Create the data.
          */
-        @Setup
+        @Setup(Level.Iteration)
         public void setup() {
             Objects.requireNonNull(distribution);
             Objects.requireNonNull(modification);
@@ -306,6 +306,11 @@ public class QuantilePerformance {
                         a[j] = s.sample();
                     }
                 }
+                return;
+            }
+
+            // Only run per iteration for random distribution mode
+            if (data != null) {
                 return;
             }
 
