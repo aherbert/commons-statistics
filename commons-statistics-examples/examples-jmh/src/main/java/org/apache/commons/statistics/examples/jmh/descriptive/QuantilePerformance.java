@@ -1252,7 +1252,7 @@ public class QuantilePerformance {
     @State(Scope.Benchmark)
     public static class KFunctionSource {
         /** Name of the source. */
-        @Param({JDK, SPH,
+        @Param({SORT + JDK, SPH,
             SP, BM, SBM,
             DP, DP5, DNF,
             SBM2, KSBM, K1SBM,
