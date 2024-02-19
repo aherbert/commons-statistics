@@ -4280,8 +4280,11 @@ final class Partition {
             select(a, 0, length - 1, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
             return;
         }
+        // This should be abstracted to a dedicated method.
+        // If the keys are sorted then the ScanningKeyIndexInterval
+        // is fine up to 100 keys.
         IndexInterval keys;
-        if (n <= 10) {
+        if (n <= 20) {
             final int unique = Sorting.sortIndices(k, n);
             keys = ScanningKeyIndexInterval.of(k, unique);
         } else {
