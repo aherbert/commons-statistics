@@ -781,12 +781,56 @@ final class IndexSet implements PivotCache, IndexInterval {
 
     @Override
     public int previousIndex(int k) {
-        return previousSetBitOrElse(k, left - 1);
+        // Re-implement previousSetBitOrElse without index checks
+        // as this supports left <= k <= right
+
+        final int index = k - left;
+        int i = getLongIndex(index);
+
+        // Mask bits before the bit index
+        // mask = 00011111 = -1L >>> (64 - ((index + 1) % 64))
+        long bits = data[i] & (LONG_MASK >>> -(index + 1));
+        for (;;) {
+            if (bits != 0) {
+                //(i+1)       i
+                // |  index   |
+                // |    |     |
+                // 0  001010000
+                return (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits) - 1 + left;
+            }
+            // Unsupported: the interval should contain k
+            //if (i == 0) {
+            //    return left - 1;
+            //}
+            bits = data[--i];
+        }
     }
 
     @Override
     public int nextIndex(int k) {
-        return nextSetBitOrElse(k, right + 1);
+        // Re-implement nextSetBitOrElse without index checks
+        // as this supports left <= k <= right
+
+        final int index = k - left;
+        int i = getLongIndex(index);
+
+        // Mask bits after the bit index
+        // mask = 11111000 = -1L << (index % 64)
+        long bits = data[i] & (LONG_MASK << index);
+        for (;;) {
+            if (bits != 0) {
+                //(i+1)       i
+                // |    index |
+                // |      |   |
+                // 0  001010000
+                return i * Long.SIZE + Long.numberOfTrailingZeros(bits) + left;
+            }
+            // Unsupported: the interval should contain k
+            //if (++i == data.length) {
+            //    return right + 1;
+            //}
+            bits = data[++i];
+        }
     }
 
     /**
