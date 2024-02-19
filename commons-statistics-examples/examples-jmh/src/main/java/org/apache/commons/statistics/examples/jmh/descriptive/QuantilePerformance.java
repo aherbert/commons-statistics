@@ -87,6 +87,10 @@ public class QuantilePerformance {
     private static final String DNF = "DNF";
     /** Use the JDK sort function. */
     private static final String JDK = "JDK";
+    /** Use a sort function. */
+    private static final String SORT = "Sort";
+    /** Baseline for the benchmark. */
+    private static final String BASELINE = "Baseline";
 
     // Second generation partition functions
 
@@ -1107,11 +1111,28 @@ public class QuantilePerformance {
             Objects.requireNonNull(name);
             // Note: For parity in the test, each partition method that accepts the keys as any array
             // receives a clone of the indices.
-            if (JDK.equals(name)) {
-                function = (data, indices) -> {
-                    Arrays.sort(data);
-                    return extractIndices(data, indices);
-                };
+            if (name.equals(BASELINE)) {
+                function = (data, indices) -> extractIndices(data, indices.clone());
+            } else  if (name.startsWith(SORT)) {
+                // Sort variants (do not clone the keys)
+                if (name.contains(ISBM)) {
+                    final Partition part = createPartition(name.substring(SORT.length()), ISBM);
+                    function = (data, indices) -> {
+                        part.sortISBM(data);
+                        return extractIndices(data, indices);
+                    };
+                } else if (name.contains(IDP)) {
+                    final Partition part = createPartition(name.substring(SORT.length()), IDP);
+                    function = (data, indices) -> {
+                        part.sortIDP(data);
+                        return extractIndices(data, indices);
+                    };
+                } else if (name.contains(JDK)) {
+                    function = (data, indices) -> {
+                        Arrays.sort(data);
+                        return extractIndices(data, indices);
+                    };
+                }
             // First generation kth-selector functions
             } else if (name.startsWith(SPH)) {
                 // Ported CM implementation with a heap
@@ -1212,7 +1233,8 @@ public class QuantilePerformance {
                     Partition.select(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
-            } else {
+            }
+            if (function == null) {
                 throw new IllegalStateException("Unknown selector function: " + name);
             }
         }
