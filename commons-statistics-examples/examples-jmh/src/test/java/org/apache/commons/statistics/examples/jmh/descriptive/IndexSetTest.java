@@ -20,6 +20,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
@@ -98,7 +99,6 @@ class IndexSetTest {
             ref.set(i);
             Assertions.assertTrue(set.get(i));
         }
-        Assertions.assertEquals(ref.cardinality(), set.cardinality(), "Cardinality");
     }
 
     @ParameterizedTest
@@ -296,5 +296,93 @@ class IndexSetTest {
         final int min = Arrays.stream(indices).min().getAsInt();
         final int max = Arrays.stream(indices).max().getAsInt();
         return IndexSet.ofRange(min, max);
+    }
+
+    @Test
+    void testCardinalityEmpty() {
+        final IndexSet set = IndexSet.ofRange(34, 219);
+        Assertions.assertEquals(0, set.cardinality());
+        Assertions.assertEquals(0, set.cardinality2());
+        Assertions.assertEquals(0, set.cardinality4());
+        Assertions.assertEquals(0, set.cardinality8());
+        Assertions.assertEquals(0, set.cardinality16());
+        Assertions.assertEquals(0, set.cardinality32());
+        Assertions.assertEquals(0, set.cardinality64());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality(int[] indices) {
+        // No compression here but re-use the method for simplicity
+        Assertions.assertEquals(compressedCardinality(indices, 0), IndexSet.of(indices).cardinality());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality2(int[] indices) {
+        Assertions.assertEquals(compressedCardinality(indices, 1), IndexSet.of(indices).cardinality2());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality4(int[] indices) {
+        Assertions.assertEquals(compressedCardinality(indices, 2), IndexSet.of(indices).cardinality4());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality8(int[] indices) {
+        Assertions.assertEquals(compressedCardinality(indices, 3), IndexSet.of(indices).cardinality8());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality16(int[] indices) {
+        Assertions.assertEquals(compressedCardinality(indices, 4), IndexSet.of(indices).cardinality16());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality32(int[] indices) {
+        Assertions.assertEquals(compressedCardinality(indices, 5), IndexSet.of(indices).cardinality32());
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet", "testCardinality"})
+    void testCardinality64(int[] indices) {
+        Assertions.assertEquals(compressedCardinality(indices, 6), IndexSet.of(indices).cardinality64());
+    }
+
+    private static int compressedCardinality(int[] indices, int compression) {
+        final int min = Arrays.stream(indices).min().orElse(0);
+        final int max = Arrays.stream(indices).max().orElse(64);
+        final BitSet ref = new BitSet((max - min) >>> compression);
+        for (final int i : indices) {
+            ref.set((i - min) >>> compression);
+        }
+        return ref.cardinality() << compression;
+    }
+
+    static Stream<int[]> testCardinality() {
+        final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
+        final Stream.Builder<int[]> builder = Stream.builder();
+        for (int i = 0; i < 64; i++) {
+            builder.accept(new int[] {i});
+            for (int j = 0; i < 64; i++) {
+                builder.accept(new int[] {i, j});
+            }
+        }
+        builder.accept(IntStream.range(0, 64).toArray());
+        for (int i = 0; i < 50; i++) {
+            builder.accept(rng.ints(30, 0, 500).toArray());
+            builder.accept(rng.ints(10, 499, 879).toArray());
+            builder.accept(rng.ints(2, 0, 64).toArray());
+            builder.accept(rng.ints(4, 0, 64).toArray());
+            builder.accept(rng.ints(8, 0, 64).toArray());
+            builder.accept(rng.ints(16, 0, 64).toArray());
+            builder.accept(rng.ints(32, 0, 64).toArray());
+            builder.accept(rng.ints(64, 0, 64).toArray());
+        }
+        return builder.build();
     }
 }

@@ -198,6 +198,172 @@ final class IndexSet implements PivotCache, IndexInterval {
         return 1L << bitIndex;
     }
 
+    // Compressed cardinality methods
+
+    /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 2 to 1. This counts as enabled <em>all</em> bits of each consecutive
+     * 2 bits if <em>any</em> of the consecutive 2 bits are set to {@code true}.
+     * <pre>
+     * 0010100011000101000100
+     * 0 2 2 0 2 0 2 2 0 2 0
+     * </pre>
+     * <p>This method can be used to assess the saturation of the indices in the range.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 2 to 1
+     */
+    public int cardinality2() {
+        int c = 0;
+        for (long x : data) {
+            // Shift and mask out the bits that were shifted
+            x = (x | (x >>> 1)) & 0b0101010101010101010101010101010101010101010101010101010101010101L;
+            // Add [0, 32]
+            c += Long.bitCount(x);
+        }
+        // Multiply by 2
+        return c << 1;
+    }
+
+    /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 4 to 1. This counts as enabled <em>all</em> bits of each consecutive
+     * 4 bits if <em>any</em> of the consecutive 4 bits are set to {@code true}.
+     * <pre>
+     * 0010000011000101000100
+     * 4   0   4   4   4   0
+     * </pre>
+     * <p>This method can be used to assess the saturation of the indices in the range.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet} using a compression
+     * of 8 to 1
+     */
+    public int cardinality4() {
+        int c = 0;
+        for (long x : data) {
+            // Shift powers of 2 and mask out the bits that were shifted
+            x = x | (x >>> 1);
+            x = (x | (x >>> 2)) & 0b0001000100010001000100010001000100010001000100010001000100010001L;
+            // Expect a population count intrinsic method
+            // Add [0, 16]
+            c += Long.bitCount(x);
+        }
+        // Multiply by 4
+        return c << 2;
+    }
+
+    /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 8 to 1. This counts as enabled <em>all</em> bits of each consecutive
+     * 8 bits if <em>any</em> of the consecutive 8 bits are set to {@code true}.
+     * <pre>
+     * 0010000011000101000000
+     * 8       8       0
+     * </pre>
+     * <p>This method can be used to assess the saturation of the indices in the range.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet} using a compression
+     * of 8 to 1
+     */
+    public int cardinality8() {
+        int c = 0;
+        for (long x : data) {
+            // Shift powers of 2 and mask out the bits that were shifted
+            x = x | (x >>> 1);
+            x = x | (x >>> 2);
+            x = (x | (x >>> 4)) & 0b0000000100000001000000010000000100000001000000010000000100000001L;
+            // Expect a population count intrinsic method
+            // Add [0, 8]
+            c += Long.bitCount(x);
+        }
+        // Multiply by 8
+        return c << 3;
+    }
+
+    /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 16 to 1. This counts as enabled <em>all</em> bits of each consecutive
+     * 16 bits if <em>any</em> of the consecutive 16 bits are set to {@code true}.
+     * <pre>
+     * 0010000011000101000000
+     * 16              0
+     * </pre>
+     * <p>This method can be used to assess the saturation of the indices in the range.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet} using a compression
+     * of 16 to 1
+     */
+    public int cardinality16() {
+        int c = 0;
+        for (long x : data) {
+            // Shift powers of 2 and mask out the bits that were shifted
+            x = x | (x >>> 1);
+            x = x | (x >>> 2);
+            x = x | (x >>> 4);
+            x = (x | (x >>> 8)) & 0b0000000000000001000000000000000100000000000000010000000000000001L;
+            // Expect a population count intrinsic method ???
+            // c += Long.bitCount(x)
+
+            // Count the bits using folding
+            // x = mask:
+            // 0000000000000001000000000000001000000000000000100000000000000010  (x += (x >>> 16))
+            // 0000000100000001000000100000001000000011000000110000010000000100  (x += (x >>> 32))
+            x = x + (x >>> 16); // put count of each 32 bits into their lowest 2 bits
+            x = x + (x >>> 32); // put count of each 64 bits into their lowest 3 bits
+            // Add [0, 4]
+            c += (int) x & 0b111;
+        }
+        // Multiply by 16
+        return c << 4;
+    }
+
+    /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 32 to 1. This counts as enabled <em>all</em> bits of each consecutive
+     * 32 bits if <em>any</em> of the consecutive 32 bits are set to {@code true}.
+     * <pre>
+     * 0010000011000101000000
+     * 32
+     * </pre>
+     * <p>This method can be used to assess the saturation of the indices in the range.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet} using a compression
+     * of 32 to 1
+     */
+    public int cardinality32() {
+        int c = 0;
+        for (final long x : data) {
+            // Are any lower 32-bits or upper 32-bits set?
+            c += (int) x != 0 ? 1 : 0;
+            c += (x >>> 32) != 0L ? 1 : 0;
+        }
+        // Multiply by 32
+        return c << 5;
+    }
+
+    /**
+     * Returns the number of bits set to {@code true} in this {@code IndexSet} using a
+     * compression of 64 to 1. This counts as enabled <em>all</em> bits of each consecutive
+     * 64 bits if <em>any</em> of the consecutive 64 bits are set to {@code true}.
+     * <pre>
+     * 0010000011000101000000
+     * 64
+     * </pre>
+     * <p>This method can be used to assess the saturation of the indices in the range.
+     *
+     * @return the number of bits set to {@code true} in this {@code IndexSet} using a compression
+     * of 64 to 1
+     */
+    public int cardinality64() {
+        int c = 0;
+        for (final long x : data) {
+            // Are any bits set?
+            c += x != 0L ? 1 : 0;
+        }
+        // Multiply by 64
+        return c << 6;
+    }
+
     // Adapt method API from BitSet
 
     /**
