@@ -2013,4 +2013,23 @@ public class QuantilePerformance {
         }
         return sum;
     }
+
+    /**
+     * Benchmark the creation of an interval of indices for controlling a partition algorithm.
+     *
+     * <p>This baselines the {@link #indexInterval(IndexIntervalSource, IndexSource)} benchmark.
+     * For the BitSet-type structures the main overhead is the memory allocation to create
+     * the {@link IndexInterval}.
+     *
+     * @param function Source of the interval.
+     * @param source Source of the data.
+     * @param bh Data sink.
+     */
+    @Benchmark
+    public void createIndexInterval(IndexIntervalSource function, IndexSource source, Blackhole bh) {
+        final int[][] indices = source.getIndices();
+        for (final int[] x : indices) {
+            bh.consume(function.create(x));
+        }
+    }
 }
