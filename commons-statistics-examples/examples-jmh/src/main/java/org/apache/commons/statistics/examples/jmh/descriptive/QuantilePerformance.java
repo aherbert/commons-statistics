@@ -984,7 +984,9 @@ public class QuantilePerformance {
         @Param({"ScanningKeyIndexInterval",
             "BinarySearchKeyIndexInterval",
             "IndexSet",
-            "CompressedIndexSet"})
+            "CompressedIndexSet",
+            "CompressedIndexSet2",
+            })
         private String name;
 
         /** The factory. */
@@ -1020,7 +1022,11 @@ public class QuantilePerformance {
                 factory = k -> {
                     return IndexSet.of(k);
                 };
+            } else if (name.equals("CompressedIndexSet2")) {
+                factory = CompressedIndexSet2::of;
             } else if (name.startsWith("CompressedIndexSet")) {
+                // To use compression 2 requires CompressedIndexSet_2 otherwise
+                // a fixed compression set will be returned
                 final int c = getCompression(name);
                 factory = k -> {
                     return CompressedIndexSet.of(c, k);

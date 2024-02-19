@@ -29,7 +29,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Test for {@link CompressedIndexSet}.
+ * Test for {@link CompressedIndexSet} and {@link CompressedIndexSet2}.
  */
 class CompressedIndexSetTest {
     /** Compression levels to test. */
@@ -44,6 +44,12 @@ class CompressedIndexSetTest {
         Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet.ofRange(c, 456, 123));
         Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet.of(c, new int[0]));
         Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet.of(c, new int[] {-1}));
+        // Fixed compression
+        Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet2.ofRange(-1, 3));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet2.ofRange(0, -1));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet2.ofRange(456, 123));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet2.of(new int[0]));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> CompressedIndexSet2.of(new int[] {-1}));
     }
 
     @Test
@@ -180,7 +186,7 @@ class CompressedIndexSetTest {
     @MethodSource(value = {"testGetSet"})
     void testNextPreviousIndex(int[] indices, int ignored) {
         for (final int c : COMPRESSION) {
-            final CompressedIndexSet set = CompressedIndexSet.of(c, indices, indices.length);
+            final CompressedIndexSet set = CompressedIndexSet.of(c, indices);
             final int left = set.left();
             final int right = set.right();
             Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.previousIndex(left - 1));
@@ -229,6 +235,61 @@ class CompressedIndexSetTest {
         return builder.build();
     }
 
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet"})
+    void testGetSet2(int[] indices, int n) {
+        final int c = 1;
+        final CompressedIndexSet2 set = createCompressedIndexSet2(indices);
+        final BitSet ref = new BitSet(n);
+        final int left = set.left();
+        final int range = 1 << c;
+        for (final int i : indices) {
+            // The contains value is a probability due to the compression.
+            // It will be true if any of the indices in the compressed range are set.
+            final int mapped = getCompressedIndexLow(c, left, i);
+            boolean contains = ref.get(mapped);
+            for (int j = 1; !contains && j < range; j++) {
+                contains = ref.get(mapped + j);
+            }
+            Assertions.assertEquals(contains, set.get(i), () -> String.valueOf(i));
+            set.set(i);
+            ref.set(i);
+            Assertions.assertTrue(set.get(i));
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testGetSet"})
+    void testNextPreviousIndex2(int[] indices, int ignored) {
+        final int c = 1;
+        final CompressedIndexSet ref = CompressedIndexSet.of(c, indices);
+        final CompressedIndexSet2 set = CompressedIndexSet2.of(indices);
+        final int left = set.left();
+        final int right = set.right();
+        Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.previousIndex(left - 1));
+        Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.previousIndex(right + Long.SIZE << c));
+        Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.nextIndex(left - 1));
+        Assertions.assertThrows(IndexOutOfBoundsException.class, () -> set.nextIndex(right + Long.SIZE << c));
+        for (final int i : indices) {
+            // Test against validated method
+            final int lo = getCompressedIndexLow(c, left, i);
+            final int hi = getCompressedIndexHigh(c, left, right, i);
+            // Search with left <= k <= right
+            Assertions.assertTrue(lo >= left && hi <= right);
+            for (int j = lo; j <= hi; j++) {
+                Assertions.assertEquals(ref.previousIndexOrLeftMinus1(j), set.previousIndex(j));
+                Assertions.assertEquals(ref.nextIndexOrRightPlus1(j), set.nextIndex(j));
+            }
+            if (lo > left) {
+                Assertions.assertEquals(ref.previousIndexOrLeftMinus1(lo - 1), set.previousIndex(lo - 1));
+            }
+            if (hi < right) {
+                Assertions.assertEquals(ref.nextIndexOrRightPlus1(hi + 1), set.nextIndex(hi + 1));
+            }
+        }
+    }
+
     /**
      * Creates the compressed index set using the min/max of the indices.
      *
@@ -240,6 +301,21 @@ class CompressedIndexSetTest {
         final int min = Arrays.stream(indices).min().getAsInt();
         final int max = Arrays.stream(indices).max().getAsInt();
         final CompressedIndexSet set = CompressedIndexSet.ofRange(compression, min, max);
+        Assertions.assertEquals(min, set.left());
+        Assertions.assertEquals(max, set.right());
+        return set;
+    }
+
+    /**
+     * Creates the compressed index set using the min/max of the indices.
+     *
+     * @param indices Indices.
+     * @return the set
+     */
+    private static CompressedIndexSet2 createCompressedIndexSet2(int[] indices) {
+        final int min = Arrays.stream(indices).min().getAsInt();
+        final int max = Arrays.stream(indices).max().getAsInt();
+        final CompressedIndexSet2 set = CompressedIndexSet2.ofRange(min, max);
         Assertions.assertEquals(min, set.left());
         Assertions.assertEquals(max, set.right());
         return set;
