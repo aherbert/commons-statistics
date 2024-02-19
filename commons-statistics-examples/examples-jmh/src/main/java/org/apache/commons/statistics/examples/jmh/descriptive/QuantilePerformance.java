@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -875,6 +876,172 @@ public class QuantilePerformance {
             final UniformRandomProvider rng = RANDOM_SOURCE.create();
             final PermutationSampler s = new PermutationSampler(rng, getLength(), k);
             indices = s.samples(repeats).toArray(int[][]::new);
+        }
+    }
+
+    /**
+     * Source of k-th indices to be searched by an {@link IndexInterval}.
+     */
+    @State(Scope.Benchmark)
+    public static class IndexSource {
+        /** Upper bound (exclusive) on the indices. */
+        @Param({"1000", "1000000"})
+        private int length;
+        /** Number of indices to select. */
+        @Param({"5", "10", "20", "40"})
+        private int k;
+        /** Number of repeats. */
+        @Param({"10"})
+        private int repeats;
+
+        /** Indices. */
+        private int[][] indices;
+        /** Search points. */
+        private int[][] points;
+
+        /**
+         * @return the indices
+         */
+        public int[][] getIndices() {
+            return indices;
+        }
+
+        /**
+         * @return the search points
+         */
+        public int[][] getPoints() {
+            return points;
+        }
+
+        /**
+         * Create the indices and search points.
+         */
+        @Setup(Level.Iteration)
+        public void setup() {
+            if (k < 2) {
+                throw new IllegalStateException("Require multiple indices");
+            }
+            // Data will be randomized per iteration
+            final UniformRandomProvider rng = RANDOM_SOURCE.create();
+            final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, length - 1);
+
+            indices = new int[repeats][];
+            points = new int[repeats][];
+
+            for (int i = repeats; --i >= 0;) {
+                // Indices with possible repeats
+                final int[] x = new int[k];
+                for (int j = k; --j >= 0;) {
+                    x[j] = s.sample();
+                }
+
+                // Get the sorted unique indices
+                final int[] y = x.clone();
+                final int unique = Sorting.sortIndices(y, k);
+
+                // Create the cut points between each unique index
+                final int[] p = new int[unique - 1];
+                for (int j = 0; j < p.length; j++) {
+                    p[j] = (y[j] + y[j + 1]) >>> 1;
+                }
+                shuffle(rng, p);
+
+                indices[i] = x;
+                points[i] = p;
+            }
+        }
+        /**
+         * Shuffles the entries of the given array.
+         *
+         * @param rng Source of randomness.
+         * @param array Array whose entries will be shuffled (in-place).
+         */
+        private static void shuffle(UniformRandomProvider rng, int[] array) {
+            for (int i = array.length; i > 1; i--) {
+                swap(array, i - 1, rng.nextInt(i));
+            }
+        }
+
+        /**
+         * Swaps the two specified elements in the array.
+         *
+         * @param array Array.
+         * @param i First index.
+         * @param j Second index.
+         */
+        private static void swap(int[] array, int i, int j) {
+            final int tmp = array[i];
+            array[i] = array[j];
+            array[j] = tmp;
+        }
+    }
+    /**
+     * Source of an {@link IndexInterval}.
+     */
+    @State(Scope.Benchmark)
+    public static class IndexIntervalSource {
+        /** Name of the source. */
+        @Param({"ScanningKeyIndexInterval",
+            "BinarySearchKeyIndexInterval",
+            "IndexSet",
+            "CompressedIndexSet"})
+        private String name;
+
+        /** The factory. */
+        private Function<int[], IndexInterval> factory;
+
+        /**
+         * @param indices Indices.
+         * @return {@link IndexInterval}
+         */
+        public IndexInterval create(int[] indices) {
+            return factory.apply(indices);
+        }
+
+        /**
+         * Create the function.
+         */
+        @Setup
+        public void setup() {
+            Objects.requireNonNull(name);
+            if ("ScanningKeyIndexInterval".equals(name)) {
+                factory = k -> {
+                    k = k.clone();
+                    final int unique = Sorting.sortIndices(k, k.length);
+                    return ScanningKeyIndexInterval.of(k, unique);
+                };
+            } else if ("BinarySearchKeyIndexInterval".equals(name)) {
+                factory = k -> {
+                    k = k.clone();
+                    final int unique = Sorting.sortIndices(k, k.length);
+                    return BinarySearchKeyIndexInterval.of(k, unique);
+                };
+            } else if ("IndexSet".equals(name)) {
+                factory = k -> {
+                    return IndexSet.of(k);
+                };
+            } else if (name.startsWith("CompressedIndexSet")) {
+                final int c = getCompression(name);
+                factory = k -> {
+                    return CompressedIndexSet.of(c, k);
+                };
+            } else {
+                throw new IllegalStateException("Unknown IndexInterval: " + name);
+            }
+        }
+
+        /**
+         * Gets the compression from the last character of the name.
+         *
+         * @param name Name.
+         * @return the compression
+         */
+        private static int getCompression(String name) {
+            final char c = name.charAt(name.length() - 1);
+            if (Character.isDigit(c)) {
+                return Character.digit(c, 10);
+            }
+            return 1;
         }
     }
 
@@ -1803,5 +1970,41 @@ public class QuantilePerformance {
                 bh.consume(fun.apply(source.getData(j), i));
             }
         }
+    }
+
+    /**
+     * Benchmark the tracking of an interval of indices during a partition algorithm.
+     *
+     * <p>The {@link IndexInterval} is created for the indices of interest. These are then
+     * cut at all points in the interval between indices to simulate a partition algorithm
+     * dividing the data and requiring a new interval to use in each part:
+     * <pre>{@code
+     *            cut
+     *             |
+     * -------k--------k---------k------k---------k--------
+     *          <-- scan previous
+     *    scan next -->
+     * }</pre>
+     *
+     * @param function Source of the interval.
+     * @param source Source of the data.
+     * @return value to consume
+     */
+    @Benchmark
+    public long indexInterval(IndexIntervalSource function, IndexSource source) {
+        final int[][] indices = source.getIndices();
+        final int[][] points = source.getPoints();
+        // Ensure we have something to consume during the benchmark
+        long sum = 0;
+        for (int i = 0; i < indices.length; i++) {
+            final int[] x = indices[i];
+            final int[] p = points[i];
+            final IndexInterval interval = function.create(x);
+            for (final int k : p) {
+                sum += interval.nextIndex(k);
+                sum += interval.previousIndex(k);
+            }
+        }
+        return sum;
     }
 }
