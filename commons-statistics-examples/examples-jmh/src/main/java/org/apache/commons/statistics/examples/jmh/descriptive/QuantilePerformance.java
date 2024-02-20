@@ -903,13 +903,13 @@ public class QuantilePerformance {
     @State(Scope.Benchmark)
     public static class IndexSource {
         /** Upper bound (exclusive) on the indices. */
-        @Param({"1000", "1000000"})
+        @Param({"1000", "1000000", "1000000000"})
         private int length;
         /** Number of indices to select. */
-        @Param({"5", "10", "20", "40"})
+        @Param({"10", "20", "40", "80", "160"})
         private int k;
         /** Number of repeats. */
-        @Param({"10"})
+        @Param({"1000"})
         private int repeats;
         /** RNG seed. Created using ThreadLocalRandom.current().nextLong(). Each benchmark
          * executed by JMH will use the same random data, even across JVMs. */
@@ -1012,7 +1012,8 @@ public class QuantilePerformance {
             "BinarySearchKeyIndexInterval",
             "IndexSet",
             "CompressedIndexSet",
-            "CompressedIndexSet2",
+            // Same speed as the CompressedIndexSet
+            //"CompressedIndexSet2",
             })
         private String name;
 
@@ -2027,10 +2028,22 @@ public class QuantilePerformance {
      * <pre>{@code
      *            cut
      *             |
-     * -------k--------k---------k------k---------k--------
+     * -------k1--------k2---------k3---- ... ---------kn--------
      *          <-- scan previous
      *    scan next -->
      * }</pre>
+     *
+     * <p>Note: If a cut is made in the interval then the smallest region of data
+     * that was most recently partitioned was the length between the two flanking k.
+     * This involves a full scan (and partitioning) over the data of length (k2 - k1).
+     * A BitSet-type structure will require a scan over 1/64 of this length of data
+     * to find the next and previous index from a cut point. In practice
+     * the interval may be partitioned over a much larger length, e.g. (kn - k1).
+     * Thus the length of time for the partition algorithm is expected to be at least
+     * 64x the length of time for the BitSet-type scan. The disadvantage of the
+     * BitSet-type structure is memory consumption. For a small number of keys the
+     * structures that search the entire set of keys are fast enough. At very high
+     * density the BitSet-type structures are preferred.
      *
      * @param function Source of the interval.
      * @param source Source of the data.
