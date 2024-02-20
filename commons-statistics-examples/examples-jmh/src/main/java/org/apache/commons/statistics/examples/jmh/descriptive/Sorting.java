@@ -55,7 +55,16 @@ final class Sorting {
         if (internal) {
             // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
             // => no requirement to check j >= left.
-            // Benchmarking fails to show this is faster.
+
+            // Note:
+            // Benchmarking fails to show that this is faster
+            // even though it is the same method with fewer instructions.
+            // There may be an issue with the benchmarking data, or noise in the timings.
+
+            // There are also paired-insertion sort methods for internal regions
+            // which benchmark as slower on random data.
+            // On structured data with many ascending runs they are faster.
+
             for (int i = left; ++i <= right;) {
                 final double v = data[i];
                 // Move preceding higher elements above (if required)
@@ -67,6 +76,7 @@ final class Sorting {
                     data[j + 1] = v;
                 }
             }
+
         } else {
             for (int i = left; ++i <= right;) {
                 final double v = data[i];
@@ -131,6 +141,151 @@ final class Sorting {
                 data[j + 1] = data[j];
             }
             data[j + 1] = v;
+        }
+    }
+
+    /**
+     * Sorts an array using a paired insertion sort.
+     *
+     * <p>Warning: It is assumed that the value at {@code data[begin - 1]} is sorted.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void sortPairedInternal1(double[] data, int left, int right) {
+        // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
+        // => no requirement to check j >= left.
+
+        // Paired insertion sort. Move largest of two elements down the array.
+        // When inserted move the smallest of the two elements down the rest of the array.
+
+        // Pairs require an even length so start at left for even or left + 1 for odd.
+        // This will do nothing when right <= left.
+
+        // Using one index which requires i += 2.
+        for (int i = left + ((right - left + 1) & 0x1); i < right; i += 2) {
+            double v1 = data[i];
+            double v2 = data[i + 1];
+            // Sort the pair
+            if (v2 < v1) {
+                v1 = v2;
+                v2 = data[i];
+            }
+            // Move preceding higher elements above the largest value
+            int j = i;
+            while (v2 < data[--j]) {
+                data[j + 2] = data[j];
+            }
+            // Insert at j + 2. Update j for the next scan down.
+            data[++j + 1] = v2;
+            // Move preceding higher elements above the smallest value
+            while (v1 < data[--j]) {
+                data[j + 1] = data[j];
+            }
+            data[j + 1] = v1;
+        }
+    }
+
+    /**
+     * Sorts an array using a paired insertion sort.
+     *
+     * <p>Warning: It is assumed that the value at {@code data[begin - 1]} is sorted.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void sortPairedInternal2(double[] data, int left, int right) {
+        // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
+        // => no requirement to check j >= left.
+
+        // Paired insertion sort. Move largest of two elements down the array.
+        // When inserted move the smallest of the two elements down the rest of the array.
+
+        // Pairs require an even length so start at left for even or left + 1 for odd.
+        // This will do nothing when right <= left.
+
+        // Use pair (i, j)
+        for (int i = left + ((right - left + 1) & 0x1), j = i; ++j <= right; i = ++j) {
+            double v1 = data[i];
+            double v2 = data[j];
+            // Sort the pair
+            if (v2 < v1) {
+                v1 = v2;
+                v2 = data[i];
+            }
+            // Move preceding higher elements above the largest value
+            while (v2 < data[--i]) {
+                data[i + 2] = data[i];
+            }
+            // Insert at i + 2. Update i for the next scan down.
+            data[++i + 1] = v2;
+            // Move preceding higher elements above the smallest value
+            while (v1 < data[--i]) {
+                data[i + 1] = data[i];
+            }
+            data[i + 1] = v1;
+        }
+    }
+
+    /**
+     * Sorts an array using a paired insertion sort.
+     *
+     * <p>Warning: It is assumed that the value at {@code data[begin - 1]} is sorted.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void sortPairedInternal3(double[] data, int left, int right) {
+        // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
+        // => no requirement to check j >= left.
+
+        // Paired insertion sort. Move largest of two elements down the array.
+        // When inserted move the smallest of the two elements down the rest of the array.
+
+        // Pairs require an even length so start at left for even or left + 1 for odd.
+        // This will do nothing when right <= left.
+
+        // As above but only move if required
+        for (int i = left + ((right - left + 1) & 0x1), j = i; ++j <= right; i = ++j) {
+            double v1 = data[i];
+            double v2 = data[j];
+            // Sort the pair
+            if (v2 < v1) {
+                v1 = v2;
+                v2 = data[i];
+                // In the event of no move of v2
+                data[j] = v2;
+            }
+            // Move preceding higher elements above the largest value (if required)
+            if (v2 < data[i - 1]) {
+                while (v2 < data[--i]) {
+                    data[i + 2] = data[i];
+                }
+                // Insert at i + 2. Update i for the next scan down.
+                data[++i + 1] = v2;
+            }
+            // Move preceding higher elements above the smallest value (if required)
+            if (v1 < data[i - 1]) {
+                while (v1 < data[--i]) {
+                    data[i + 1] = data[i];
+                }
+                // Insert at i+1
+                i++;
+            }
+            // Always write v1 as v2 may have moved down
+            data[i] = v1;
         }
     }
 
