@@ -192,8 +192,6 @@ public class QuantilePerformance {
     public abstract static class AbstractDataSource {
         /** All distributions / modifications. */
         private static final String ALL = "all";
-        /** Fixed seed for the random source. */
-        private static final byte[] SEED = RANDOM_SOURCE.createSeed();
 
         /**
          * The type of distribution.
@@ -253,6 +251,12 @@ public class QuantilePerformance {
         @Param({"0"})
         private int samples;
 
+        /** RNG seed. Created using ThreadLocalRandom.current().nextLong(). This is advanced
+         * for the random distribution mode per iteration. Each benchmark executed by
+         * JMH will use the same random data, even across JVMs. */
+        @Param({"-7450238124206088695"})
+        private long rngSeed = -7450238124206088695L;
+
         /** Data. This is stored as integer data which saves memory. Note that when ranking
          * data it is not necessary to have the full range of the double data type; the same
          * number of unique values can be recorded in an array using an integer type.
@@ -301,7 +305,13 @@ public class QuantilePerformance {
 
             // Special case for random distribution mode
             if (dist.contains(Distribution.RANDOM) && dist.size() == 1 && samples > 0) {
-                final UniformRandomProvider rng = RANDOM_SOURCE.create();
+                final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
+                // Advance the seed. Note: It can be verified that the RNG has different
+                // state per iteration but the same sequence across benchmarks by printing
+                // a few ints to the console. This scheme is used to eliminate unfair
+                // benchmarking where some methods may receive different random data.
+                // It also allows benchmarking across JVM platforms with the same data.
+                rngSeed = rng.nextLong();
                 data = new int[samples][length];
                 final int upper = seed > 0 ? seed : Integer.MAX_VALUE;
                 final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, upper);
@@ -333,7 +343,7 @@ public class QuantilePerformance {
             // Data using the RNG will be randomized only once.
             // Here we use the same seed for parity across methods.
             // Note that most distributions do not use the source of randomness.
-            final UniformRandomProvider rng = RANDOM_SOURCE.create(SEED);
+            final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
             final ArrayList<int[]> sampleData = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
                 // Note: Large lengths may wish to limit the range of m to limit
@@ -463,7 +473,8 @@ public class QuantilePerformance {
          * @param m Sample seed (in [1, 2^31])
          * @return the samples
          */
-        private List<int[]> createDistributions(EnumSet<Distribution> dist, UniformRandomProvider rng, int n, int m) {
+        private static List<int[]> createDistributions(EnumSet<Distribution> dist,
+                UniformRandomProvider rng, int n, int m) {
             final ArrayList<int[]> distData = new ArrayList<>(5);
             int[] x;
             if (dist.contains(Distribution.SAWTOOTH)) {
@@ -574,6 +585,13 @@ public class QuantilePerformance {
          * @return the length
          */
         protected abstract int getLength();
+
+        /**
+         * @return the seed for the RNG
+         */
+        long getRngSeed() {
+            return rngSeed;
+        }
 
         /**
          * Sets the distribution(s) of the data.
@@ -873,7 +891,7 @@ public class QuantilePerformance {
         public void setup() {
             super.setup();
             // Data will be randomized per iteration
-            final UniformRandomProvider rng = RANDOM_SOURCE.create();
+            final UniformRandomProvider rng = RANDOM_SOURCE.create(getRngSeed());
             final PermutationSampler s = new PermutationSampler(rng, getLength(), k);
             indices = s.samples(repeats).toArray(int[][]::new);
         }
@@ -893,6 +911,10 @@ public class QuantilePerformance {
         /** Number of repeats. */
         @Param({"10"})
         private int repeats;
+        /** RNG seed. Created using ThreadLocalRandom.current().nextLong(). Each benchmark
+         * executed by JMH will use the same random data, even across JVMs. */
+        @Param({"-7450238124206088695"})
+        private long rngSeed;
 
         /** Indices. */
         private int[][] indices;
@@ -921,8 +943,13 @@ public class QuantilePerformance {
             if (k < 2) {
                 throw new IllegalStateException("Require multiple indices");
             }
-            // Data will be randomized per iteration
-            final UniformRandomProvider rng = RANDOM_SOURCE.create();
+            // Data will be randomized per iteration. It is the same sequence across
+            // benchmarks and JVM instances and allows benchmarking across JVM platforms
+            // with the same data.
+            final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
+            // Advance the seed for the next iteration.
+            rngSeed = rng.nextLong();
+
             final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, length - 1);
 
             indices = new int[repeats][];
@@ -1184,6 +1211,23 @@ public class QuantilePerformance {
                     x[0] = Double.NEGATIVE_INFINITY;
                     Sorting.sort(x, 1, x.length - 1);
                 };
+            } else if (name.startsWith("PairedInsertionSort")) {
+                if (name.endsWith("1")) {
+                    function = x -> {
+                        x[0] = Double.NEGATIVE_INFINITY;
+                        Sorting.sortPairedInternal1(x, 1, x.length - 1);
+                    };
+                } else if (name.endsWith("2")) {
+                    function = x -> {
+                        x[0] = Double.NEGATIVE_INFINITY;
+                        Sorting.sortPairedInternal2(x, 1, x.length - 1);
+                    };
+                } else if (name.endsWith("3")) {
+                    function = x -> {
+                        x[0] = Double.NEGATIVE_INFINITY;
+                        Sorting.sortPairedInternal3(x, 1, x.length - 1);
+                    };
+                }
             } else if ("InsertionSortB".equals(name)) {
                 function = x -> {
                     x[0] = Double.NEGATIVE_INFINITY;

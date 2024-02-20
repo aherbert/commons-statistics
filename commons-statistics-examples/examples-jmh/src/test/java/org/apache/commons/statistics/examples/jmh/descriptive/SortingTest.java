@@ -53,7 +53,7 @@ class SortingTest {
     // double[]
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleSort"})
+    @MethodSource(value = {"testDoubleSort", "testDoubleInsertionSortInternal"})
     void testDoubleInsertionSortInternal(double[] values) {
         assertDoubleSort(values, x -> Sorting.sort(x, 0, x.length - 1, false));
         if (values.length < 2) {
@@ -64,6 +64,19 @@ class SortingTest {
         values[0] = Arrays.stream(values).min().getAsDouble();
         // check internal sort
         assertDoubleSort(values, x -> Sorting.sort(x, 1, x.length - 1, true));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort", "testDoubleInsertionSortInternal"})
+    void testDoublePairedInsertionSortInternal(double[] values) {
+        if (values.length < 2) {
+            return;
+        }
+        // Set pivot at lower end
+        values[0] = Arrays.stream(values).min().getAsDouble();
+        assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal1(x, 1, x.length - 1));
+        assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal2(x, 1, x.length - 1));
+        assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal3(x, 1, x.length - 1));
     }
 
     @ParameterizedTest
@@ -319,6 +332,42 @@ class SortingTest {
         return builder.build();
     }
 
+    static Stream<double[]> testDoubleInsertionSortInternal() {
+        final Stream.Builder<double[]> builder = Stream.builder();
+        builder.add(new double[] {});
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+        // Use small sizes to test the pair
+        for (final int size : new int[] {1, 2, 3, 4, 5}) {
+            double[] a = new double[size];
+            Arrays.fill(a, 1.23);
+            builder.add(a.clone());
+            for (int ii = 0; ii < size; ii++) {
+                a[ii] = ii;
+            }
+            builder.add(a.clone());
+            for (int ii = 0; ii < size; ii++) {
+                a[ii] = size - ii;
+            }
+            builder.add(a.clone());
+            if (size == 1) {
+                continue;
+            }
+            for (int i = 0; i < 5; i++) {
+                a = rng.doubles(size).toArray();
+                builder.add(a.clone());
+                final int j = rng.nextInt(size);
+                // Pick a different index
+                final int k = (j + rng.nextInt(size - 1)) % size;
+                a[j] = -0.0;
+                a[k] = 0.0;
+                builder.add(a.clone());
+                for (int z = 0; z < size; z++) {
+                    a[z] = rng.nextBoolean() ? -0.0 : 0.0;
+                }
+            }
+        }
+        return builder.build();
+    }
     static Stream<Arguments> testDoubleSort3Internal() {
         return testDoubleSortInternal(3);
     }
