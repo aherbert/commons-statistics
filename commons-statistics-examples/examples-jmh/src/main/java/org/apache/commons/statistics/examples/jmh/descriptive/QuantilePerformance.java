@@ -1019,18 +1019,14 @@ public class QuantilePerformance {
                     return BinarySearchKeyIndexInterval.of(k, unique);
                 };
             } else if ("IndexSet".equals(name)) {
-                factory = k -> {
-                    return IndexSet.of(k);
-                };
+                factory = IndexSet::of;
             } else if (name.equals("CompressedIndexSet2")) {
                 factory = CompressedIndexSet2::of;
             } else if (name.startsWith("CompressedIndexSet")) {
                 // To use compression 2 requires CompressedIndexSet_2 otherwise
                 // a fixed compression set will be returned
                 final int c = getCompression(name);
-                factory = k -> {
-                    return CompressedIndexSet.of(c, k);
-                };
+                factory = k -> CompressedIndexSet.of(c, k);
             } else {
                 throw new IllegalStateException("Unknown IndexInterval: " + name);
             }
@@ -2018,8 +2014,9 @@ public class QuantilePerformance {
      * Benchmark the creation of an interval of indices for controlling a partition algorithm.
      *
      * <p>This baselines the {@link #indexInterval(IndexIntervalSource, IndexSource)} benchmark.
-     * For the BitSet-type structures the main overhead is the memory allocation to create
-     * the {@link IndexInterval}.
+     * For the BitSet-type structures a large overhead is the memory allocation to create
+     * the {@link IndexInterval}. Note that this will be at most 1/64 the size of the array
+     * that is being partitioned and in practice this overhead is not significant.
      *
      * @param function Source of the interval.
      * @param source Source of the data.
