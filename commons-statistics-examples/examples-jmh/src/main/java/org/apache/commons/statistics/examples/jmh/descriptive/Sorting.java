@@ -1421,6 +1421,64 @@ final class Sorting {
     }
 
     /**
+     * Sort the unique indices in-place to the start of the array. The number of
+     * indices is returned.
+     *
+     * <pre>{@code
+     * int[] indices = ...
+     * int n sortIndices(indices, indices.length);
+     * int min = indices[0];
+     * int max = indices[n - 1]
+     * }</pre>
+     *
+     * <p>This method assumes the {@code data} contains only positive integers;
+     * and that {@code n} is small relative to the range of indices {@code [min, max]} such
+     * that storing all indices in an {@link IndexSet} is not memory efficient.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of indices
+     */
+    static int sortIndices2(int[] data, int n) {
+        // Simple cases
+        if (n < 3) {
+            if (n == 2) {
+                final int i0 = data[0];
+                final int i1 = data[1];
+                if (i0 > i1) {
+                    data[0] = i1;
+                    data[1] = i0;
+                } else if (i0 == i1) {
+                    return 1;
+                }
+            }
+            // n=0,1,2 unique values
+            return n;
+        }
+
+        // Strategy: Must be fast on already ascending data.
+        // Note: The recommended way to generate a lot of partition indices from
+        // many quantiles for interpolation is to generate in sequence.
+
+        // n <= small:
+        //   Modified insertion sort (naturally finds ascending data)
+        // n > small:
+        //   Look for ascending sequence and compact
+        // else:
+        //   Remove duplicates using an order(1) data structure and sort
+
+        if (n <= UNIQUE_INSERTION_SORT) {
+            return sortIndicesInsertionSort(data, n);
+        }
+
+        if (isAscending(data, n)) {
+            return compressDuplicates(data, n);
+        }
+
+        return sortIndicesHashIndexSet(data, n);
+    }
+
+    /**
      * Test the data is in ascending order: {@code data[i] <= data[i+1]}  for all {@code i}.
      * Data is assumed to be at least length 1.
      *
