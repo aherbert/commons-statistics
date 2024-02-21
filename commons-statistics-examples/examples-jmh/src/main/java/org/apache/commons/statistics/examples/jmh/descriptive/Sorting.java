@@ -1487,13 +1487,11 @@ final class Sorting {
      * @return true if ascending
      */
     private static boolean isAscending(int[] data, int n) {
-        int v = data[0];
         for (int i = 0; ++i < n;) {
-            if (data[i] < v) {
+            if (data[i] < data[i - 1]) {
                 // descending
                 return false;
             }
-            v = data[i];
         }
         return true;
     }
