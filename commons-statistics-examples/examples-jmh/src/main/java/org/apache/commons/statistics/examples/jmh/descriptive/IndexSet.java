@@ -301,9 +301,6 @@ final class IndexSet implements PivotCache, IndexInterval {
             x = x | (x >>> 2);
             x = x | (x >>> 4);
             x = (x | (x >>> 8)) & 0b0000000000000001000000000000000100000000000000010000000000000001L;
-            // Expect a population count intrinsic method ???
-            // c += Long.bitCount(x)
-
             // Count the bits using folding
             // x = mask:
             // 0000000000000001000000000000001000000000000000100000000000000010  (x += (x >>> 16))

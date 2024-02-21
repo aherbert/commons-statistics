@@ -68,8 +68,11 @@ final class Partition {
     static final DualPivotingStrategy DUAL_PIVOTING_STRATEGY = DualPivotingStrategy.SORT_5B;
     /** Minimum selection size for quickselect.
      * Below this switch to insertion sort rather than selection.
-     * Dual-pivot quicksort used 27 in Yaroslavskiy's original paper. */
-    static final int MIN_QUICKSELECT_SIZE = 27;
+     * Dual-pivot quicksort used 27 in Yaroslavskiy's original paper.
+     *
+     * <p>This is set at a power of 2. This allows analysis of the indices saturation of
+     * the range using compressed indices where compression uses a power of 2. */
+    static final int MIN_QUICKSELECT_SIZE = 32;
     /** Default length shift for heapselect. On random data this is approximately constant
      * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
      * of the time. On non-random data then the shift has to be larger. This idea is
@@ -96,6 +99,8 @@ final class Partition {
     static final int RECURSION_CONSTANT = 0;
     /** Default compression. */
     static final int COMPRESSION = 1;
+    /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
+    private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
 
     /** Transformer factory for double data with the behaviour of a JDK sort.
      * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
@@ -2898,6 +2903,110 @@ final class Partition {
     }
 
     /**
+     * Creates the {@link IndexInterval} for the partition of data of the specified
+     * {@code size}.
+     *
+     * <p>This method assesses the saturation of the indices given the {@code size} and
+     * returns a suitable {@link IndexInterval} for partitioning.
+     *
+     * <p>Returns {@code null} if the indices {@code k} saturate the {@code size}; this
+     * occurs when partitioning will require visiting all regions of the data. In this
+     * case a full sort of the data is recommended.
+     *
+     * <p>The heuristics used within this method may not always return the optimal
+     * {@link IndexInterval}. The method aims to avoid poor decisions, and recommend a
+     * full sort when it is obvious that there are too many indices to efficiently
+     * partition.
+     *
+     * <p>Partitioning
+     *
+     * <p>The partition algorithm should correctly sort all target indices between the
+     * minimum ({@code k1}) and maximum ({@code kn}) index. During partitioning a sorted
+     * point (@code pivot}) may cut the current interval. The partition algorithm then
+     * requires updating the range of interest on either side of the cut point:
+     *
+     * <pre>{@code
+     *           pivot
+     *             |
+     *        k1--------k2---------k3---- ... ---------kn    initial interval
+     *         <--| find previous
+     *    find next |-->
+     *        k1        k2---------k3---- ... ---------kn    divided intervals
+     * }</pre>
+     *
+     * <p>If a {@code pivot} is found in the interval then the smallest region of data
+     * that was most recently partitioned was the length between the two flanking k. This
+     * involves a full scan (and partitioning) over the data of length (k2 - k1). If the
+     * {@link IndexInterval} uses a BitSet-type structure it will require a scan over 1/64
+     * of this length of data to find the next and previous index from a {@code pivot}
+     * point. In practice the interval may be partitioned over a much larger length, e.g.
+     * (kn - k1). Thus the length of time for the partition algorithm is expected to be at
+     * least 64x the length of time for the BitSet-type scan. The disadvantage of the
+     * BitSet-type structure is memory consumption. For a small number of keys a structure
+     * that searches the entire set of keys is fast enough. However this requires that the
+     * keys are unique and ordered.
+     *
+     * <p>This method will return an ordered interval of indices when {@code n} is small.
+     * When {@code n} is large then a BitSet-type structure is returned. The maximum
+     * memory consumption is approximately {@code size / 8} bytes.
+     *
+     * @param size Length of the data to partition.
+     * @param k Indices.
+     * @param n Count of indices (must be strictly positive).
+     * @return the index interval (or {@code null} to recommend a full sort)
+     */
+    static IndexInterval createIndexInterval(int size, int[] k, int n) {
+        if (size < MIN_QUICKSELECT_SIZE) {
+            // Sort tiny data
+            return null;
+        }
+
+        // The partition algorithm performs a full sort of data when any sub-length
+        // is below 32. If keys are separated by at most 32 throughout the range
+        // then the data is suitable for a full sort. However benchmarking shows that
+        // partitioning with many indices performs close to the speed of a full sort
+        // using the same quicksort algorithm; even when keys should be saturated,
+        // e.g. 5000 random indices in length 10000. Thus switching to a full sort is
+        // not performed until it is obvious the indices saturate the range.
+        // Note that this method cannot know about any structure in the data.
+        // Data that is structured (runs of continuous ascending/descending
+        // data) will benefit from the additional algorithms within the JDK sort function
+        // such as merge sort. The JDK sort function also supports parallel execution
+        // which can outperform single-threaded partitioning depending on parallelism
+        // and the spread of indices.
+
+        // We check for saturation by compressing each index by 16-to-1. Any indices
+        // separated by < 16 will be the same compressed index or adjacent compressed indices;
+        // any indices separated by [16, 32) may be compressed indices separated by 1 or 2.
+        // If there are no gaps in the compressed indices then a full sort is recommended
+        // as it is clear that all regions must be sorted. This heuristic avoids switching
+        // to a full sort in all but the most obvious cases of saturation; however it may
+        // choose to partition when a full sort would be faster.
+
+        // Set the limit on the number of indices that have to be sorted.
+        // Subtracting the quickselect size pads the min/max range of indices
+        // at the ends.
+        final int limit = size - MIN_QUICKSELECT_SIZE;
+
+        // Use a shift with a long to avoid overflow (of an excessive number of keys !!!).
+        // It is not expected to partition more than a few hundred keys.
+        if (((long) n << LOG2_HALF_QUICKSELECT_SIZE) > limit) {
+            // Keys could cover the entire data.
+            final IndexSet keys = IndexSet.of(k, n);
+            // Quick check if the range is smaller than the limit.
+            if ((keys.right() - keys.left()) < limit) {
+                return keys;
+            }
+            // Special cardinality count using 16-to-1 compression
+            final int c = keys.cardinality16();
+            return c < limit ? keys : null;
+        }
+
+        // This occurs when the indices cannot saturate the range.
+        return IndexIntervals.create(k, n);
+    }
+
+    /**
      * Partition the array such that indices {@code k} correspond to their correctly
      * sorted value in the equivalent fully sorted array. For all indices {@code k}
      * and any index {@code i}:
@@ -4275,22 +4384,21 @@ final class Partition {
             select(a, 0, length - 1, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
             return;
         }
-        // Special case for partition around adjacent indices (for interpolation)
-        if (n == 2 && k[0] + 1 == k[1]) {
-            select(a, 0, length - 1, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+        // Special case for partition around adjacent indices (for interpolation).
+        // If the keys are not separated then they are effectively a single key.
+        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
+            final int ka = Math.min(k[0], k[1]);
+            final int kb = Math.max(k[0], k[1]);
+            select(a, 0, length - 1, IndexIntervals.anyIndex(), ka, kb, maxDepth);
             return;
         }
-        // This should be abstracted to a dedicated method.
-        // If the keys are sorted then the ScanningKeyIndexInterval
-        // is fine up to 100 keys.
-        IndexInterval keys;
-        if (n <= 20) {
-            final int unique = Sorting.sortIndices(k, n);
-            keys = ScanningKeyIndexInterval.of(k, unique);
+        final IndexInterval keys = createIndexInterval(length, k, n);
+        if (keys == null) {
+            // Full sort recommended
+            Arrays.sort(a, 0, length);
         } else {
-            keys = IndexSet.of(k, n);
+            select(a, 0, length - 1, keys, keys.left(), keys.right(), maxDepth);
         }
-        select(a, 0, length - 1, keys, keys.left(), keys.right(), maxDepth);
     }
 
     /**
