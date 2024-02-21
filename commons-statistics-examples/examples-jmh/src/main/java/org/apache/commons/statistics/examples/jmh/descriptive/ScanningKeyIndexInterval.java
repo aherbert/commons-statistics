@@ -19,15 +19,26 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
  * An {@link IndexInterval} backed by an array of ordered keys. The interval is searched using
- * a linear scan from either end.
+ * a linear scan of the data. The scan start point is chosen from reference points within the data.
  *
  * <p>The scan is fast when the number of keys is small.
  */
 final class ScanningKeyIndexInterval implements IndexInterval {
+    // Note:
+    // Using 4 markers into the data allows this class to return the same
+    // performance as using a binary search within the data when n < 1600.
+    // Benchmarked by searching once for next and previous from all points between k.
+
     /** The ordered keys. */
     private final int[] keys;
     /** The original number of keys. */
     private final int n;
+    /** Index into the keys (used for fast-forward). */
+    private final int i1;
+    /** Index into the keys (used for fast-forward). */
+    private final int i2;
+    /** Index into the keys (used for fast-forward). */
+    private final int i3;
 
     /**
      * Create an instance with the provided keys.
@@ -38,6 +49,10 @@ final class ScanningKeyIndexInterval implements IndexInterval {
     ScanningKeyIndexInterval(int[] indices, int n) {
         keys = indices;
         this.n = n;
+        // Divide into quarters for fast-forward
+        i1 = n >>> 2;
+        i2 = n >>> 1;
+        i3 = i1 + i2;
     }
 
     /**
@@ -86,11 +101,18 @@ final class ScanningKeyIndexInterval implements IndexInterval {
         // Scan the sorted keys from the end.
         // Assume left <= k <= right thus no index checks required.
         // IndexOutOfBoundsException indicates incorrect usage by the caller.
-        for (int i = n;;) {
-            if (keys[--i] <= k) {
-                return keys[i];
-            }
+
+        // Attempt fast-forward
+        int i;
+        if (keys[i2] > k) {
+            i = keys[i1] > k ? i1 : i2;
+        } else {
+            i = keys[i3] > k ? i3 : n;
         }
+        do {
+            --i;
+        } while (keys[i] > k);
+        return keys[i];
     }
 
     @Override
@@ -98,10 +120,17 @@ final class ScanningKeyIndexInterval implements IndexInterval {
         // Scan the sorted keys from the start.
         // Assume left <= k <= right thus no index checks required.
         // IndexOutOfBoundsException indicates incorrect usage by the caller.
-        for (int i = -1;;) {
-            if (keys[++i] >= k) {
-                return keys[i];
-            }
+
+        // Attempt fast-forward
+        int i;
+        if (keys[i2] < k) {
+            i = keys[i3] < k ? i3 : i2;
+        } else {
+            i = keys[i1] < k ? i1 : -1;
         }
+        do {
+            ++i;
+        } while (keys[i] < k);
+        return keys[i];
     }
 }
