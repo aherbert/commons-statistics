@@ -159,6 +159,20 @@ class QuantileTest {
             Quantile::evaluate, Quantile::evaluate);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantile"})
+    void testQuantileSorted(double[] values, double[] p, double[][] expected, double delta) {
+        assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
+            (m, x, q) -> {
+                Arrays.sort(x);
+                return m.evaluate(x.length, i -> x[i], q);
+            },
+            (m, x, q) -> {
+                Arrays.sort(x);
+                return m.evaluate(x.length, i -> x[i], q);
+            });
+    }
+
     private static void assertQuantile(Quantile m, double[] values, double[] p,
         double[][] expected, double delta,
         QuantileFunction f1, QuantileFunction2 f2) {

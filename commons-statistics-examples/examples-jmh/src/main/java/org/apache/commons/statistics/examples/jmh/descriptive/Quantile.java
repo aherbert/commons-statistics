@@ -18,6 +18,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.IntToDoubleFunction;
 import java.util.function.Supplier;
 
 /**
@@ -63,6 +64,8 @@ public final class Quantile {
     // To allow changes to the classes performing the partitioning and
     // the estimation, methods for index selection are not public.
 
+    /** Message when the quantile is not in the range {@code [0, 1]}. */
+    private static final String INVALID_QUANTILE = "Invalid quantile: ";
     /** Message when no quantiles are provided for the varargs method. */
     private static final String NO_QUANTILES_SPECIFIED = "No quantiles specified";
 
@@ -239,7 +242,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -275,7 +278,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -292,12 +295,7 @@ public final class Quantile {
     public double[] evaluateSPH(double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -317,7 +315,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -336,12 +334,7 @@ public final class Quantile {
     public double[] evaluateSPE(double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -377,7 +370,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -419,7 +412,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -434,12 +427,7 @@ public final class Quantile {
     private double[] evaluate(PartitionFunction part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -469,7 +457,7 @@ public final class Quantile {
 
         // Compute
         for (int k = 0; k < p.length; k++) {
-            int i = indices[k];
+            final int i = indices[k];
             if (q[k] != 0) {
                 q[k] = DoubleMath.interpolate(x[i], x[i + 1], q[k]);
             } else {
@@ -480,7 +468,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -522,7 +510,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -535,12 +523,7 @@ public final class Quantile {
      * or no quantiles are specified.
      */
     private double[] evaluate2(PartitionFunction2 part, double[] values, double... p) {
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Implicit NPE
         final int n = values.length;
         // Special cases
@@ -584,7 +567,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -645,7 +628,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -660,12 +643,7 @@ public final class Quantile {
      * or no quantiles are specified.
      */
     private double[] evaluate3(PartitionFunction3 part, double[] values, double... p) {
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -718,7 +696,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -733,7 +711,7 @@ public final class Quantile {
      * @param p Quantile.
      * @return the quantile
      * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
-     * @see #evaluateSP(double[], double...)
+     * @see #evaluate(double[], double...)
      */
     public double evaluate(double[] values, double p) {
         checkQuantile(p);
@@ -776,7 +754,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -788,12 +766,7 @@ public final class Quantile {
      * or no quantiles are specified.
      */
     public double[] evaluate(double[] values, double... p) {
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -846,7 +819,80 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
+     *
+     * <p>This method can be used when the values of known size are already sorted.
+     *
+     * <pre>{@code
+     * short[] x = ...
+     * Arrays.sort(x);
+     * double q = Quantile.evaluate(x.length, i -> x[i], 0.05);
+     * }</pre>
+     *
+     * @param n Size of the values.
+     * @param values Values function.
+     * @param p Quantile.
+     * @return the quantile
+     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     */
+    public double evaluate(int n, IntToDoubleFunction values, double p) {
+        checkQuantile(p);
+        // Special case
+        if (n <= 1) {
+            return n == 0 ? Double.NaN : values.applyAsDouble(0);
+        }
+        final double pos = estimationType.index(p, n);
+        final int i = (int) pos;
+        final double v1 = values.applyAsDouble(i);
+        if (pos > i) {
+            final double v2 = values.applyAsDouble(i + 1);
+            return DoubleMath.interpolate(v1, v2, pos - i);
+        }
+        return v1;
+    }
+
+    /**
+     * Evaluate the {@code p}th quantiles of the values.
+     *
+     * <p>This method can be used when the values of known size are already sorted.
+     *
+     * <pre>{@code
+     * short[] x = ...
+     * Arrays.sort(x);
+     * double[] q = Quantile.evaluate(x.length, i -> x[i], 0.25, 0.5, 0.75);
+     * }</pre>
+     *
+     * @param n Size of the values.
+     * @param values Values function.
+     * @param p Quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    public double[] evaluate(int n, IntToDoubleFunction values, double... p) {
+        checkQuantiles(p);
+        // Special case
+        final double[] q = new double[p.length];
+        if (n <= 1) {
+            Arrays.fill(q, n == 0 ? Double.NaN : values.applyAsDouble(0));
+            return q;
+        }
+        for (int k = 0; k < p.length; k++) {
+            final double pos = estimationType.index(p[k], n);
+            final int i = (int) pos;
+            final double v1 = values.applyAsDouble(i);
+            if (pos > i) {
+                final double v2 = values.applyAsDouble(i + 1);
+                q[k] = DoubleMath.interpolate(v1, v2, pos - i);
+            } else {
+                q[k] = v1;
+            }
+        }
+        return q;
+    }
+
+    /**
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -890,7 +936,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -905,12 +951,7 @@ public final class Quantile {
     private double[] evaluateK1(PartitionFunction2 part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -947,7 +988,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -989,7 +1030,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1004,12 +1045,7 @@ public final class Quantile {
     public double[] evaluatePaired(PartitionFunction part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
-        }
-        for (final double pp : p) {
-            checkQuantile(pp);
-        }
+        checkQuantiles(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -1050,7 +1086,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1074,7 +1110,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1092,7 +1128,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1116,7 +1152,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1134,7 +1170,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1158,7 +1194,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1176,7 +1212,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1200,7 +1236,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1218,7 +1254,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1242,7 +1278,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1260,7 +1296,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1284,7 +1320,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1302,7 +1338,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1326,7 +1362,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1344,7 +1380,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1368,7 +1404,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1386,7 +1422,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1410,7 +1446,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1428,7 +1464,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1454,7 +1490,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1474,7 +1510,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantile of the values.
+     * Evaluate the {@code p}th quantile of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1499,7 +1535,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the <code>p</code>th quantiles of the values.
+     * Evaluate the {@code p}th quantiles of the values.
      *
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1525,7 +1561,23 @@ public final class Quantile {
      */
     private static void checkQuantile(double p) {
         if (!(p >= 0 && p <= 1)) {
-            throw new IllegalArgumentException("Invalid quantile: " + p);
+            throw new IllegalArgumentException(INVALID_QUANTILE + p);
+        }
+    }
+
+    /**
+     * Check the quantiles {@code p} are in the range {@code [0, 1]}.
+     *
+     * @param p Quantiles.
+     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    private static void checkQuantiles(double... p) {
+        if (p.length == 0) {
+            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
+        }
+        for (final double pp : p) {
+            checkQuantile(pp);
         }
     }
 
@@ -1567,7 +1619,7 @@ public final class Quantile {
         HF1 {
             @Override
             double position0(double p, int n) {
-                double pos = n * p;
+                final double pos = n * p;
                 // ceil(j + alpha) : note j is 1-based
                 return Math.ceil(pos) - 1;
             }
@@ -1580,10 +1632,10 @@ public final class Quantile {
         HF2 {
             @Override
             double position0(double p, int n) {
-                double pos = n * p;
+                final double pos = n * p;
                 // Average at discontinuities
-                int j = (int) Math.floor(pos);
-                double alpha = pos - j;
+                final int j = (int) Math.floor(pos);
+                final double alpha = pos - j;
                 if (alpha == 0) {
                     return j - 0.5;
                 }
