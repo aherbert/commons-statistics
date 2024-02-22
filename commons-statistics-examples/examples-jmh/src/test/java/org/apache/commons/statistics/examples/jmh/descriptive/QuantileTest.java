@@ -19,7 +19,10 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import org.apache.commons.rng.UniformRandomProvider;
+import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
 import org.junit.jupiter.api.Assertions;
@@ -41,6 +44,10 @@ class QuantileTest {
 
     interface QuantileFunction2 {
         double[] evaluate(Quantile m, double[] values, double[] p);
+    }
+
+    interface QuantileRangeFunction {
+        double[] evaluate(Quantile m, double[] values, int c);
     }
 
     @Test
@@ -164,10 +171,12 @@ class QuantileTest {
     void testQuantileSorted(double[] values, double[] p, double[][] expected, double delta) {
         assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
             (m, x, q) -> {
+                // No clone here as later calls with the same array will also sort it
                 Arrays.sort(x);
                 return m.evaluate(x.length, i -> x[i], q);
             },
             (m, x, q) -> {
+                // No clone here as later calls with the same array will also sort it
                 Arrays.sort(x);
                 return m.evaluate(x.length, i -> x[i], q);
             });
@@ -271,6 +280,7 @@ class QuantileTest {
             new double[] {2, nan, 2, 2, nan, nan, nan, nan, nan});
         // Note: Any method using interpolation between negative zeros will return
         // positive zero because we use the scheme: x + (y - x) * alpha
+        // (0.0 - -0.0) == 0.0
         // (-0.0 - -0.0) == 0.0
         // Thus signed zeros do not need to be maintained for interpolation.
         // They are required for discrete schemes, or if the user wishes to
@@ -346,6 +356,10 @@ class QuantileTest {
             Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateSBM(values, new double[] {p}));
             Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateDP(values, p));
             Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateDP(values, new double[] {p}));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(values, p));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(values, new double[] {p}));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(10, i -> 1, p));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(10, i -> 1, new double[] {p}));
         }
     }
 
@@ -363,5 +377,101 @@ class QuantileTest {
         Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateSBM(values, new double[0]));
         Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateDP(values));
         Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateDP(values, new double[0]));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(values));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(values, new double[0]));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(10, i -> 1, new double[0]));
+    }
+
+    @Test
+    void testInvalidSizeThrows() {
+        final Quantile m = Quantile.withDefaults();
+        for (final int n : new int[] {-1, -42, Integer.MIN_VALUE}) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(n, i -> 1, 0.5));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluate(n, i -> 1, 0.5, 0.75));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateRange(n, i -> 1, 100));
+        }
+    }
+
+    @Test
+    void testInvalidNumberOfQuantilesThrows() {
+        final Quantile m = Quantile.withDefaults();
+        for (final int c : new int[] {-1, 0, -42, Integer.MIN_VALUE}) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> m.evaluateRange(10, i -> 1, c));
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantileRange"})
+    void testQuantileRange(double[] values, int n) {
+        assertQuantileRange(Quantile.withDefaults(), values, n,
+            (m, x, c) -> m.evaluateRange(x, c));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantileRange"})
+    void testQuantileRangeSorted(double[] values, int n) {
+        assertQuantileRange(Quantile.withDefaults(), values, n,
+            (m, x, c) -> {
+                // No clone here as later calls with the same array will also sort it
+                Arrays.sort(x);
+                return m.evaluateRange(x.length, i -> x[i], c);
+            });
+    }
+
+    private static void assertQuantileRange(Quantile m, double[] values, int c, QuantileRangeFunction f) {
+        // Use Quantile components to compute the expected value from a sorted copy
+        final double[] copy = values.clone();
+        Arrays.sort(copy);
+        // Uniform quantiles
+        final double[] p = IntStream.rangeClosed(1, c).mapToDouble(i -> i / (c + 1.0)).toArray();
+        final double[] expected = new double[c];
+
+        // Evaluate
+        for (final EstimationMethod type : TYPES) {
+            m = m.with(type);
+
+            // Create expected result
+            for (int k = 0; k < c; k++) {
+                final double pos = type.index(p[k], copy.length);
+                final int i = (int) pos;
+                if (pos > i) {
+                    expected[k] = DoubleMath.interpolate(copy[i], copy[i + 1], pos - i);
+                } else {
+                    expected[k] = copy[i];
+                }
+            }
+
+            Assertions.assertArrayEquals(expected, f.evaluate(m, values, c),
+                () -> type.toString());
+        }
+    }
+
+    static Stream<Arguments> testQuantileRange() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final double nan = Double.NaN;
+        builder.add(Arguments.of(new double[] {nan}, 1));
+        builder.add(Arguments.of(new double[] {nan, nan}, 10));
+        builder.add(Arguments.of(new double[] {1, nan, nan}, 10));
+        builder.add(Arguments.of(new double[] {1, 2, nan, nan}, 10));
+        builder.add(Arguments.of(new double[] {1, 3, 2, 4}, 2));
+        builder.add(Arguments.of(new double[] {1, 3, 2, 4}, 5));
+        // NIST data
+        final double[] x = {95.1772, 95.1567, 95.1937, 95.1959, 95.1442, 95.0610, 95.1591, 95.1195, 95.1772, 95.0925,
+            95.1990, 95.1682};
+        builder.add(Arguments.of(x, 5));
+        builder.add(Arguments.of(x, 10));
+        // Some data
+        final double[] y = {12.5, 12.0, 11.8, 14.2, 14.9, 14.5, 21.0, 8.2, 10.3, 11.3, 14.1, 9.9, 12.2, 12.0, 12.1,
+            11.0, 19.8, 11.0, 10.0, 8.8, 9.0, 12.3};
+        builder.add(Arguments.of(y, 5));
+        builder.add(Arguments.of(y, 10));
+        // Random data of different lengths
+        final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
+        for (int p = 5; p <= 10; p++) {
+            final int size = 1 << p;
+            builder.add(Arguments.of(rng.doubles(size).toArray(), p - 3));
+            builder.add(Arguments.of(rng.doubles(size + 1).toArray(), p - 3));
+        }
+        return builder.build();
     }
 }

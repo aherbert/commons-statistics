@@ -28,6 +28,7 @@
   <suppress checks="ParameterNumber" files=".*[/\\]jmh[/\\]descriptive[/\\]Sorting.java" />
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]KthSelector.java" />
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Partition.java" />
+  <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Quantile.java" />
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]QuantilePerformance.java" />
   <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Sorting.java" />
   <!-- Be more lenient on tests. -->
