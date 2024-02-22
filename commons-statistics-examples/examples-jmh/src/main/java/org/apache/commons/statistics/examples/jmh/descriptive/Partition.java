@@ -6592,6 +6592,9 @@ final class Partition {
             // l------m------r
             //        v  k      update left
             //     k  v         update right
+
+            // Full binary search
+            // Run time is up to log2(n) (fast exit on a match) but has more comparisons
             if (v < k) {
                 l = m + 1;
             } else if (v > k) {
@@ -6600,6 +6603,14 @@ final class Partition {
                 // Equal
                 return m;
             }
+
+            // Modified search that does not expect a match
+            // Run time is log2(n). Benchmarks as the same speed.
+            //if (v > k) {
+            //    r = m - 1;
+            //} else {
+            //    l = m + 1;
+            //}
         }
         // Return largest known value below:
         // r is always moved downward when a middle index value is too high
@@ -6666,6 +6677,9 @@ final class Partition {
             // l------m------r
             //        v  k      update left
             //     k  v         update right
+
+            // Full binary search
+            // Run time is up to log2(n) (fast exit on a match) but has more comparisons
             if (v < k) {
                 l = m + 1;
             } else if (v > k) {
@@ -6674,6 +6688,14 @@ final class Partition {
                 // Equal
                 return m;
             }
+
+            // Modified search that does not expect a match
+            // Run time is log2(n). Benchmarks as the same speed.
+            //if (v < k) {
+            //    l = m + 1;
+            //} else {
+            //    r = m - 1;
+            //}
         }
         // Smallest known value above
         // l is always moved upward when a middle index value is too low
