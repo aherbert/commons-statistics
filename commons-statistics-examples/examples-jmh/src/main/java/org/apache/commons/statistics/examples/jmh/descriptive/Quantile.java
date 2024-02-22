@@ -68,6 +68,10 @@ public final class Quantile {
     private static final String INVALID_QUANTILE = "Invalid quantile: ";
     /** Message when no quantiles are provided for the varargs method. */
     private static final String NO_QUANTILES_SPECIFIED = "No quantiles specified";
+    /** Message when the size is not valid. */
+    private static final String INVALID_SIZE = "Invalid size: ";
+    /** Message when the number of quantiles in a range is not valid. */
+    private static final String INVALID_NUMBER_OF_QUANTILES = "Invalid number of quantiles: ";
 
     /** Default instance.
      * Note: Numpy and R use method 7 as default. Method 8 is recommended by Hyndman and Fan. */
@@ -244,7 +248,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot partition method with a heap to cache pivots points.
@@ -280,7 +284,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot partition method with a heap to cache pivots points.
@@ -289,7 +293,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateSPH(double[] values, double... p) {
@@ -317,7 +321,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot partition method. Estimation is coupled to the
@@ -328,7 +332,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateSPE(double[] values, double... p) {
@@ -372,7 +376,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p><strong>Performance</strong>
@@ -414,14 +418,14 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     private double[] evaluate(PartitionFunction part, double[] values, double... p) {
@@ -470,7 +474,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p><strong>Performance</strong>
@@ -512,14 +516,14 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     private double[] evaluate2(PartitionFunction2 part, double[] values, double... p) {
@@ -569,7 +573,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p><strong>Performance</strong>
@@ -630,7 +634,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>The partition function is not required to handle NaN or signed zeros.
@@ -639,7 +643,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     private double[] evaluate3(PartitionFunction3 part, double[] values, double... p) {
@@ -698,7 +702,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p><strong>Performance</strong>
@@ -756,13 +760,13 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluate(double[] values, double... p) {
@@ -819,6 +823,78 @@ public final class Quantile {
     }
 
     /**
+     * Evaluate {@code c} evenly spaced quantiles of the {@code values}.
+     *
+     * <pre>
+     * 1/(c + 1), 2/(c + 1), ..., c/(c + 1)
+     * </pre>
+     *
+     * <p>Note: This method may partially sort the input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * @param values Values.
+     * @param c Number of quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if {@code c < 1}
+     */
+    public double[] evaluateRange(double[] values, int c) {
+        checkQuantileRange(c);
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
+        // Special cases
+        final double[] q = new double[c];
+        if (n <= 1) {
+            t.postProcess(x, null, 0);
+            Arrays.fill(q, n == 0 ? Double.NaN : values[0]);
+            return q;
+        }
+
+        // Length of data to partition
+        final int len = t.length();
+
+        // TODO:
+        // If the number of quantiles saturates the range then perform a sort
+
+        // Collect interpolation positions. We use the output q to store factors.
+        final int[] indices = new int[c * 2];
+        int count = 0;
+        final double c1 = c + 1.0;
+        for (int k = 0; k < c; k++) {
+            final double pos = estimationType.index((k + 1.0) / c1, n);
+            q[k] = pos;
+            final int i = (int) pos;
+            // Only have to partition up to length
+            if (i < len) {
+                indices[count++] = i;
+                if (pos > i && i <= len) {
+                    // Require the next index for interpolation
+                    indices[count++] = i + 1;
+                }
+            }
+        }
+
+        // Partition
+        if (count != 0) {
+            Partition.select(x, len, indices, count);
+        }
+        t.postProcess(x, indices, count);
+
+        // Compute
+        for (int k = 0; k < c; k++) {
+            final int i = (int) q[k];
+            final double alpha = q[k] - i;
+            if (alpha != 0) {
+                q[k] = DoubleMath.interpolate(x[i], x[i + 1], alpha);
+            } else {
+                q[k] = x[i];
+            }
+        }
+        return q;
+    }
+
+    /**
      * Evaluate the {@code p}th quantile of the values.
      *
      * <p>This method can be used when the values of known size are already sorted.
@@ -826,16 +902,18 @@ public final class Quantile {
      * <pre>{@code
      * short[] x = ...
      * Arrays.sort(x);
-     * double q = Quantile.evaluate(x.length, i -> x[i], 0.05);
+     * double q = Quantile.withDefaults().evaluate(x.length, i -> x[i], 0.05);
      * }</pre>
      *
      * @param n Size of the values.
      * @param values Values function.
      * @param p Quantile.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if {@code size < 0}; or if the quantile {@code p} is
+     * not in the range {@code [0, 1]}
      */
     public double evaluate(int n, IntToDoubleFunction values, double p) {
+        checkSize(n);
         checkQuantile(p);
         // Special case
         if (n <= 1) {
@@ -859,17 +937,18 @@ public final class Quantile {
      * <pre>{@code
      * short[] x = ...
      * Arrays.sort(x);
-     * double[] q = Quantile.evaluate(x.length, i -> x[i], 0.25, 0.5, 0.75);
+     * double[] q = Quantile.withDefaults().evaluate(x.length, i -> x[i], 0.25, 0.5, 0.75);
      * }</pre>
      *
      * @param n Size of the values.
      * @param values Values function.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if {@code size < 0}; if any quantile {@code p} is
+     * not in the range {@code [0, 1]}; or no quantiles are specified.
      */
     public double[] evaluate(int n, IntToDoubleFunction values, double... p) {
+        checkSize(n);
         checkQuantiles(p);
         // Special case
         final double[] q = new double[p.length];
@@ -892,9 +971,54 @@ public final class Quantile {
     }
 
     /**
+     * Evaluate {@code c} evenly spaced quantiles of the {@code values}.
+     *
+     * <pre>
+     * 1/(c + 1), 2/(c + 1), ..., c/(c + 1)
+     * </pre>
+     *
+     * <p>This method can be used when the values of known size are already sorted.
+     *
+     * <pre>{@code
+     * short[] x = ...
+     * Arrays.sort(x);
+     * double[] q = Quantile.withDefaults().evaluateRange(x.length, i -> x[i], 100);
+     * }</pre>
+     *
+     * @param n Size of the values.
+     * @param values Values function.
+     * @param c Number of quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if {@code size < 0}; or if {@code c < 1}
+     */
+    public double[] evaluateRange(int n, IntToDoubleFunction values, int c) {
+        checkSize(n);
+        checkQuantileRange(c);
+        // Special cases
+        final double[] q = new double[c];
+        if (n <= 1) {
+            Arrays.fill(q, n == 0 ? Double.NaN : values.applyAsDouble(0));
+            return q;
+        }
+        final double c1 = c + 1.0;
+        for (int k = 0; k < c; k++) {
+            final double pos = estimationType.index((k + 1.0) / c1, n);
+            final int i = (int) pos;
+            final double v1 = values.applyAsDouble(i);
+            if (pos > i) {
+                final double v2 = values.applyAsDouble(i + 1);
+                q[k] = DoubleMath.interpolate(v1, v2, pos - i);
+            } else {
+                q[k] = v1;
+            }
+        }
+        return q;
+    }
+
+    /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p><strong>Performance</strong>
@@ -938,14 +1062,14 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     private double[] evaluateK1(PartitionFunction2 part, double[] values, double... p) {
@@ -990,7 +1114,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p><strong>Performance</strong>
@@ -1032,14 +1156,14 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluatePaired(PartitionFunction part, double[] values, double... p) {
@@ -1088,7 +1212,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot partition method.
@@ -1112,7 +1236,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot partition method.
@@ -1120,7 +1244,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateSP(double[] values, double... p) {
@@ -1130,7 +1254,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method.
@@ -1154,7 +1278,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method.
@@ -1162,7 +1286,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateBM(double[] values, double... p) {
@@ -1172,7 +1296,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1196,7 +1320,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1204,7 +1328,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateSBM(double[] values, double... p) {
@@ -1214,7 +1338,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
@@ -1238,7 +1362,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
@@ -1246,7 +1370,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateDP(double[] values, double... p) {
@@ -1256,7 +1380,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
@@ -1280,7 +1404,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
@@ -1288,7 +1412,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateDP5(double[] values, double... p) {
@@ -1298,7 +1422,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1322,7 +1446,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1330,7 +1454,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateSBM2(double[] values, double... p) {
@@ -1340,7 +1464,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1364,7 +1488,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1372,7 +1496,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateKSBM(double[] values, double... p) {
@@ -1382,7 +1506,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1406,7 +1530,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1414,7 +1538,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateK1SBM(double[] values, double... p) {
@@ -1424,7 +1548,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1448,7 +1572,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
@@ -1456,7 +1580,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluatePairedSBM(double[] values, double... p) {
@@ -1466,7 +1590,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
@@ -1492,7 +1616,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
@@ -1502,7 +1626,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateISBM(double[] values, double... p) {
@@ -1512,7 +1636,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantile of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a dual-pivot quickselect partition method;
@@ -1537,7 +1661,7 @@ public final class Quantile {
     /**
      * Evaluate the {@code p}th quantiles of the values.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a dual-pivot quickselect partition method;
@@ -1546,7 +1670,7 @@ public final class Quantile {
      * @param values Values.
      * @param p Quantiles.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     public double[] evaluateIDP(double[] values, double... p) {
@@ -1560,6 +1684,7 @@ public final class Quantile {
      * @throws IllegalArgumentException if the quantile is not in the range {@code [0, 1]}
      */
     private static void checkQuantile(double p) {
+        // Logic negation will detect NaN
         if (!(p >= 0 && p <= 1)) {
             throw new IllegalArgumentException(INVALID_QUANTILE + p);
         }
@@ -1569,7 +1694,7 @@ public final class Quantile {
      * Check the quantiles {@code p} are in the range {@code [0, 1]}.
      *
      * @param p Quantiles.
-     * @throws IllegalArgumentException if any quantile {@code p} not in the range {@code [0, 1]};
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
      * or no quantiles are specified.
      */
     private static void checkQuantiles(double... p) {
@@ -1578,6 +1703,30 @@ public final class Quantile {
         }
         for (final double pp : p) {
             checkQuantile(pp);
+        }
+    }
+
+    /**
+     * Check the {@code size} is positive.
+     *
+     * @param n Size of the values.
+     * @throws IllegalArgumentException if {@code size < 0}
+     */
+    private static void checkSize(int n) {
+        if (n < 0) {
+            throw new IllegalArgumentException(INVALID_SIZE + n);
+        }
+    }
+
+    /**
+     * Check the number of quantile {@code n} is strictly positive.
+     *
+     * @param c Number of quantiles.
+     * @throws IllegalArgumentException if {@code c < 1}
+     */
+    private static void checkQuantileRange(int c) {
+        if (c < 1) {
+            throw new IllegalArgumentException(INVALID_NUMBER_OF_QUANTILES + c);
         }
     }
 
