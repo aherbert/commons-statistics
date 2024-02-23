@@ -22,7 +22,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * @since 1.1
  */
 final class IndexIntervals {
-    /** Size to perform key analysis. This avoids key analysis */
+    /** Size to perform key analysis. This avoids key analysis for a small number of keys. */
     private static final int KEY_ANALYSIS_SIZE = 10;
 
     /** Size to use a {@link BinarySearchKeyIndexInterval}. Note that the
