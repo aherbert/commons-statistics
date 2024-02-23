@@ -1710,7 +1710,7 @@ final class Partition {
         if (count > 0) {
             // Heap size
             n--;
-            // Sifting limited to heap size of 3
+            // Sifting limited to heap size of 3 (i.e. don't sift heap n==2)
             for (int c = Math.min(count, n - 2); --c >= 0;) {
                 // Sift down top element and reduce heap size by 1
                 maxHeapSiftDown(a, left, 0, n--);
@@ -1745,18 +1745,54 @@ final class Partition {
         // right child: 2i + 2
         // parent: floor((i-1) / 2)
 
+        //// Value to sift
+        //int p = root;
+        //final double v = a[offset + p];
+        //// Left child of root: p * 2 + 1
+        //int c = (p << 1) + 1;
+        //while (c < n) {
+        //    // Left child value
+        //    double cv = a[offset + c];
+        //    // Use the right child if greater
+        //    if (c + 1 < n && cv < a[offset + c + 1]) {
+        //        cv = a[offset + c + 1];
+        //        c++;
+        //    }
+        //    // Max heap requires parent >= child
+        //    if (v >= cv) {
+        //        // Greater than largest child - done
+        //        break;
+        //    }
+        //    // Swap and descend
+        //    a[offset + p] = cv;
+        //    p = c;
+        //    c = (p << 1) + 1;
+        //}
+        //a[offset + p] = v;
+
+        // Incorporate the offset into the parent and child locations
+        // parent = offset + p
+        // child1 = offset + 2 * p + 1
+        //        = offset + 2 * (parent - offset) + 1
+        //        = 2 * parent - offset + 1
+        // child2 = offset + 2 * p + 2
+        //        = offset + 2 * (parent - offset) + 2
+        //        = 2 * parent - offset + 2
+        // Requires updating n with offset:
+        // c < n ==> offset + c < offset + n
+        n += offset;
+
         // Value to sift
-        int p = root;
-        final double v = a[offset + p];
-        // Left child of root: p * 2 + 1
-        int c = (p << 1) + 1;
+        int p = offset + root;
+        final double v = a[p];
+        // Left child
+        int c = (p << 1) - offset + 1;
         while (c < n) {
             // Left child value
-            double cv = a[offset + c];
-            // Use the right child if greater
-            if (c + 1 < n && cv < a[offset + c + 1]) {
-                cv = a[offset + c + 1];
-                c++;
+            double cv = a[c];
+            // Use the right child if it exists and is greater
+            if (c + 1 < n && cv < a[c + 1]) {
+                cv = a[++c];
             }
             // Max heap requires parent >= child
             if (v >= cv) {
@@ -1764,11 +1800,11 @@ final class Partition {
                 break;
             }
             // Swap and descend
-            a[offset + p] = cv;
+            a[p] = cv;
             p = c;
-            c = (p << 1) + 1;
+            c = (p << 1) - offset + 1;
         }
-        a[offset + p] = v;
+        a[p] = v;
     }
 
     /**
@@ -1838,7 +1874,7 @@ final class Partition {
         if (count > 0) {
             // Heap size
             n--;
-            // Sifting limited to heap size of 3
+            // Sifting limited to heap size of 3 (i.e. don't sift heap n==2)
             for (int c = Math.min(count, n - 2); --c >= 0;) {
                 // Sift down top element and reduce heap size by 1
                 minHeapSiftDown(a, right, 0, n--);
@@ -1874,17 +1910,52 @@ final class Partition {
         // parent: floor((i-1) / 2)
 
         // Value to sift
-        int p = root;
-        final double v = a[offset - p];
-        // Left child of root: p * 2 + 1
-        int c = (p << 1) + 1;
-        while (c < n) {
+        //int p = root;
+        //final double v = a[offset - p];
+        //// Left child of root: p * 2 + 1
+        //int c = (p << 1) + 1;
+        //while (c < n) {
+        //    // Left child value
+        //    double cv = a[offset - c];
+        //    // Use the right child if less
+        //    if (c + 1 < n && cv > a[offset - c - 1]) {
+        //        cv = a[offset - c - 1];
+        //        c++;
+        //    }
+        //    // Min heap requires parent <= child
+        //    if (v <= cv) {
+        //        // Less than smallest child - done
+        //        break;
+        //    }
+        //    // Swap and descend
+        //    a[offset - p] = cv;
+        //    p = c;
+        //    c = (p << 1) + 1;
+        //}
+        //a[offset - p] = v;
+
+        // Incorporate the offset into the parent and child locations
+        // parent = offset - p
+        // child1 = offset - (2 * p + 1)
+        //        = offset - 2 * (offset - parent) - 1
+        //        = 2 * parent - offset - 1
+        // child2 = offset - (2 * p + 2)
+        //        = offset - 2 * (offset - parent) - 2
+        //        = 2 * parent - offset - 2
+        // Requires updating n with offset:
+        // c < n ==> offset - c > offset - n
+        n = offset - n;
+
+        int p = offset - root;
+        final double v = a[p];
+        // Left child
+        int c = (p << 1) - offset - 1;
+        while (c > n) {
             // Left child value
-            double cv = a[offset - c];
-            // Use the right child if less
-            if (c + 1 < n && cv > a[offset - c - 1]) {
-                cv = a[offset - c - 1];
-                c++;
+            double cv = a[c];
+            // Use the right child if it exists and is less
+            if (c - 1 > n && cv > a[c - 1]) {
+                cv = a[--c];
             }
             // Min heap requires parent <= child
             if (v <= cv) {
@@ -1892,11 +1963,11 @@ final class Partition {
                 break;
             }
             // Swap and descend
-            a[offset - p] = cv;
+            a[p] = cv;
             p = c;
-            c = (p << 1) + 1;
+            c = (p << 1) - offset - 1;
         }
-        a[offset - p] = v;
+        a[p] = v;
     }
 
     /**
