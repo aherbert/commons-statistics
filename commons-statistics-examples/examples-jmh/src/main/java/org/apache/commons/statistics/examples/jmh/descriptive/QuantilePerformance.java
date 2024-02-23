@@ -113,7 +113,7 @@ public class QuantilePerformance {
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
     /** Commons Statistics Quantile introselect implementation with Dutch National Flag partitioning
-     * partitioning, switching to heapselect when progress is poor. The DNF algorithm is appened
+     * partitioning, switching to heapselect when progress is poor. The DNF algorithm is appended
      * as a suffix. */
     private static final String IDNF = "IDNF";
     /** Commons Statistics Quantile introselect implementation with dual-pivot
