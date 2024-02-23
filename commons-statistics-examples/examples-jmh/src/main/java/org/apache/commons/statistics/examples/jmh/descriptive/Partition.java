@@ -43,6 +43,42 @@ import java.util.function.Supplier;
  * k=4,8 : [0, 1, 2, 1], [2], [3, 3, 2], [5], [6, 7, 7, 7, 7]
  * </pre>
  *
+ * <p>References
+ *
+ * <p>Quickselect is introduced in Hoare [1]. This selects an element {@code k} from {@code n}
+ * using repeat division of the data around a partition element, recursing into the
+ * partition that contains {@code k}.
+ *
+ * <p>Introselect is introduced in Musser [2]. This detects excess recursion in quickselect
+ * and reverts to heapselect to achieve an improved worst case bound on selection.
+ *
+ * <p>Use of dual-pivot quickselect is analysed in Wild et al [3] and shown to require
+ * marginally more comparisons than single-pivot quickselect on a uniformly chosen order
+ * statistic {@code k} and extremal order statistic (see table 1, page 19). This analysis
+ * is reflected in the current implementation where dual-pivot quickselect is marginally
+ * slower when {@code k} is close to the end of the data. However the dual-pivot quickselect
+ * outperforms single-pivot quickselect when using multiple {@code k}; often significantly
+ * when {@code k} or {@code n} are large.
+ *
+ * <ol>
+ * <li>
+ * Hoare (1961)
+ * Algorithm 65: Find
+ * <a href="https://doi.org/10.1145%2F366622.366647">Comm. ACM. 4 (7): 321–322</a>
+ * <li>
+ * Musser (1999)
+ * Introspective Sorting and Selection Algorithms
+ * <a href="https://doi.org/10.1002/(SICI)1097-024X(199708)27:8%3C983::AID-SPE117%3E3.0.CO;2-%23">
+ * Software: Practice and Experience 27, 983-993.</a>
+ * <li>
+ * Wild, Nebel and Mahmoud (2013)
+ * Analysis of Quickselect under Yaroslavskiy's Dual-Pivoting Algorithm
+ * <a href="https://doi.org/10.48550/arXiv.1306.3819">arXiv:1306.3819</a>
+ * <li><a href="https://en.wikipedia.org/wiki/Quickselect">Quickselect (Wikipedia)</a>
+ * <li><a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
+ * <li><a href="https://en.wikipedia.org/wiki/Introselect">Introselect (Wikipedia)</a>
+ * </ol>
+ *
  * @since 1.1
  */
 final class Partition {
