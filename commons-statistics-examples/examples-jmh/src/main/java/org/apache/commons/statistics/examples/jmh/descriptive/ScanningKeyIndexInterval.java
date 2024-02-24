@@ -98,6 +98,55 @@ final class ScanningKeyIndexInterval implements IndexInterval {
 
     @Override
     public int previousIndex(int k) {
+        return keys[previous(k)];
+    }
+
+    @Override
+    public int nextIndex(int k) {
+        return keys[next(k)];
+    }
+
+    @Override
+    public int splitLower(int k, int[] upper) {
+        int i = previous(k - 1);
+        final int lower = keys[i];
+        // Find the upper.
+        // Note: Should never be called when n == 1 as it requires left < k <= right.
+        // We know the keys are ascending and unique so check the neighbour.
+        if (keys[++i] > k) {
+            // Keys (i, i+1) are non-consecutive and k is between them.
+            upper[0] = keys[i];
+        } else {
+            // Either keys are consecutive, or k == right()
+            upper[0] = i < n - 1 ? keys[++i] : right() + 1;
+        }
+        return lower;
+    }
+
+    @Override
+    public int splitUpper(int k, int[] lower) {
+        int i = next(k + 1);
+        final int upper = keys[i];
+        // Find the lower.
+        // Note: Should never be called when n == 1 as it requires left <= k < right.
+        // We know the keys are ascending and unique so check the neighbour.
+        if (keys[--i] < k) {
+            // Keys (i, i+1) are non-consecutive and k is between them.
+            lower[0] = keys[i];
+        } else {
+            // Either keys are consecutive, or k == left()
+            lower[0] = i > 0 ? keys[--i] : left() - 1;
+        }
+        return upper;
+    }
+
+    /**
+     * Find the key index {@code i} of {@code keys[i] <= k}.
+     *
+     * @param k Target key.
+     * @return the key index
+     */
+    private int previous(int k) {
         // Scan the sorted keys from the end.
         // Assume left <= k <= right thus no index checks required.
         // IndexOutOfBoundsException indicates incorrect usage by the caller.
@@ -112,11 +161,16 @@ final class ScanningKeyIndexInterval implements IndexInterval {
         do {
             --i;
         } while (keys[i] > k);
-        return keys[i];
+        return i;
     }
 
-    @Override
-    public int nextIndex(int k) {
+    /**
+     * Find the key index {@code i} of {@code keys[i] >= k}.
+     *
+     * @param k Target key.
+     * @return the key index
+     */
+    private int next(int k) {
         // Scan the sorted keys from the start.
         // Assume left <= k <= right thus no index checks required.
         // IndexOutOfBoundsException indicates incorrect usage by the caller.
@@ -131,6 +185,6 @@ final class ScanningKeyIndexInterval implements IndexInterval {
         do {
             ++i;
         } while (keys[i] < k);
-        return keys[i];
+        return i;
     }
 }

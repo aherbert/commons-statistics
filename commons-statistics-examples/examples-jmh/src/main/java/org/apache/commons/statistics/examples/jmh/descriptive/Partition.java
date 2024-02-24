@@ -4553,6 +4553,7 @@ final class Partition {
         int r = right;
         int ka = k1;
         int kb = kn;
+        final int[] index = {0};
         while (true) {
             // length - 1
             final int n = r - l;
@@ -4690,7 +4691,9 @@ final class Partition {
                     r = less - 1;
                     continue;
                 }
-                select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
+                //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
+                select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
+                ka = index[0];
             }
             // Recurse right side if required
             if (kb > great) {
@@ -4699,10 +4702,15 @@ final class Partition {
                     l = great + 1;
                     continue;
                 }
-                select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
+                //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
+                select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
+                kb = index[0];
             }
 
             // Continue with central region: (less, great)
+            // less <= ka && kb <= great : omit overlap check here as it is rare for
+            // kb <= less || great <= ka so we process possible equal elements first.
+
             // Here we look for equal elements if the centre is more than 5/8 the length.
             // Occurs with ~7% frequency on random data and (far) more often
             // when duplicates are present. Pivots must be different!
@@ -4785,7 +4793,10 @@ final class Partition {
             }
             l = less + 1;
             r = great - 1;
-            // Housekeeping on the interval bounds
+            // Housekeeping on the interval bounds. Note that ka and kb are updated
+            // when the interval is split. This is only used if the P1 or P2
+            // regions contained equal values. It is done here after the central
+            // region is known to contain part of the interval.
             if (ka < l) {
                 ka = keys.nextIndex(l);
             }
