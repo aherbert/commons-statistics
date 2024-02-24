@@ -36,7 +36,7 @@ final class IndexIntervals {
     private IndexIntervals() {}
 
     /**
-     * Returns an interval that covers all indices.
+     * Returns an interval that covers all indices ({@code [0, MAX_VALUE)}).
      *
      * @return the interval
      */
@@ -157,11 +157,11 @@ final class IndexIntervals {
     }
 
     /**
-     * {@link IndexInterval} for range {@code [0, MAX_VALUE]}.
+     * {@link IndexInterval} for range {@code [0, MAX_VALUE)}.
      */
     private static final class AnyIndex implements IndexInterval {
         /** Singleton instance. */
-        private static final AnyIndex INSTANCE = new AnyIndex();
+        static final AnyIndex INSTANCE = new AnyIndex();
 
         @Override
         public int left() {
@@ -170,7 +170,7 @@ final class IndexIntervals {
 
         @Override
         public int right() {
-            return Integer.MAX_VALUE;
+            return Integer.MAX_VALUE - 1;
         }
 
         @Override
@@ -181,6 +181,18 @@ final class IndexIntervals {
         @Override
         public int nextIndex(int k) {
             return k;
+        }
+
+        @Override
+        public int splitLower(int k, int[] upper) {
+            upper[0] = k + 1;
+            return k - 1;
+        }
+
+        @Override
+        public int splitUpper(int k, int[] lower) {
+            lower[0] = k - 1;
+            return k + 1;
         }
     }
 }
