@@ -35,12 +35,18 @@ class IndexIntervalTest {
     @Test
     void testAnyIndex() {
         final IndexInterval interval = IndexIntervals.anyIndex();
-        // Full range of valid indices
+        // Full range of valid indices.
+        // Note Integer.MAX_VALUE is not a valid array index.
         Assertions.assertEquals(0, interval.left());
-        Assertions.assertEquals(Integer.MAX_VALUE, interval.right());
-        for (final int i : new int[] {0, 1, 2, 42, 678268, Integer.MAX_VALUE - 1, Integer.MAX_VALUE}) {
+        Assertions.assertEquals(Integer.MAX_VALUE - 1, interval.right());
+        final int[] index = {0};
+        for (final int i : new int[] {0, 1, 2, 42, 678268, Integer.MAX_VALUE - 1}) {
             Assertions.assertEquals(i, interval.previousIndex(i));
             Assertions.assertEquals(i, interval.nextIndex(i));
+            Assertions.assertEquals(i - 1, interval.splitLower(i, index));
+            Assertions.assertEquals(i + 1, index[0]);
+            Assertions.assertEquals(i + 1, interval.splitUpper(i, index));
+            Assertions.assertEquals(i - 1, index[0]);
         }
     }
 
@@ -102,6 +108,7 @@ class IndexIntervalTest {
     void testPreviousNextCompressedIndexSet(int[] indices) {
         // Skip this due to excess memory consumption
         Assumptions.assumeTrue(indices[indices.length - 1] < Integer.MAX_VALUE - 1);
+        final int[] index = {0};
         // The test is adjusted as the compressed index set does not store all indices.
         // So we scan previous and next instead and check we do not miss the index.
         for (final int c : new int[] {1, 2, 3}) {
@@ -119,6 +126,11 @@ class IndexIntervalTest {
                     final int prev = indices[i - 1];
                     int steps = 1;
                     int j = interval.previousIndex(indices[i] - 1);
+                    // Splitting is tested against previous and next
+                    Assertions.assertEquals(j, interval.splitLower(indices[i], index));
+                    Assertions.assertEquals(i < nm1 ? interval.nextIndex(indices[i] + 1) : indices[nm1] + 1,
+                        index[0]);
+                    // Scan previous
                     while (j > prev) {
                         steps++;
                         j = interval.previousIndex(j - 1);
@@ -132,6 +144,10 @@ class IndexIntervalTest {
                     final int next = indices[i + 1];
                     int steps = 1;
                     int j = interval.nextIndex(indices[i] + 1);
+                    // Splitting is tested against previous and next
+                    Assertions.assertEquals(j, interval.splitUpper(indices[i], index));
+                    Assertions.assertEquals(i > 0 ? interval.previousIndex(indices[i] - 1) : indices[0] - 1,
+                        index[0]);
                     while (j < next) {
                         steps++;
                         j = interval.nextIndex(j + 1);
@@ -147,19 +163,36 @@ class IndexIntervalTest {
         final int nm1 = indices.length - 1;
         Assertions.assertEquals(indices[0], interval.left());
         Assertions.assertEquals(indices[nm1], interval.right());
-
-        // For performance scanning is not supported outside the range
-        //Assertions.assertTrue(interval.previousIndex(indices[0] - 1) < indices[0]);
-        //Assertions.assertTrue(interval.nextIndex(indices[nm1] + 1) > indices[nm1]);
-
+        final int[] index = {0};
+        // Note: For performance scanning is not supported outside the range
         for (int i = 0; i < indices.length; i++) {
             if (i > 0) {
                 Assertions.assertEquals(indices[i - 1], interval.previousIndex(indices[i] - 1));
+                // Split on an index: Cannot call when k == left
+                Assertions.assertEquals(indices[i - 1], interval.splitLower(indices[i], index));
+                Assertions.assertEquals(i < nm1 ? indices[i + 1] : indices[nm1] + 1,
+                    index[0]);
+                if (indices[i - 1] < indices[i] - 1) {
+                    // Split between indices
+                    final int middle = (indices[i - 1] + indices[i]) >>> 1;
+                    Assertions.assertEquals(indices[i - 1], interval.splitLower(middle, index));
+                    Assertions.assertEquals(indices[i], index[0]);
+                }
             }
             Assertions.assertEquals(indices[i], interval.previousIndex(indices[i]));
             Assertions.assertEquals(indices[i], interval.nextIndex(indices[i]));
             if (i < nm1) {
                 Assertions.assertEquals(indices[i + 1], interval.nextIndex(indices[i] + 1));
+                // Split on an index: Cannot call when k == right
+                Assertions.assertEquals(indices[i + 1], interval.splitUpper(indices[i], index));
+                Assertions.assertEquals(i > 0 ? indices[i - 1] : indices[0] - 1,
+                    index[0]);
+                if (indices[i] < indices[i + 1] - 1) {
+                    // Split between indices
+                    final int middle = (indices[i] + indices[i + 1]) >>> 1;
+                    Assertions.assertEquals(indices[i + 1], interval.splitUpper(middle, index));
+                    Assertions.assertEquals(indices[i], index[0]);
+                }
             }
         }
     }
