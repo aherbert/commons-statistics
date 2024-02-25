@@ -253,7 +253,9 @@ public class QuantilePerformance {
 
         /** RNG seed. Created using ThreadLocalRandom.current().nextLong(). This is advanced
          * for the random distribution mode per iteration. Each benchmark executed by
-         * JMH will use the same random data, even across JVMs. */
+         * JMH will use the same random data, even across JVMs.
+         * 
+         * <p>If this is zero then a random seed is chosen. */
         @Param({"-7450238124206088695"})
         private long rngSeed = -7450238124206088695L;
 
@@ -301,6 +303,12 @@ public class QuantilePerformance {
             final int length = getLength();
             if (length < 1) {
                 throw new IllegalStateException("Unsupported length: " + length);
+            }
+
+            // Allow random seeding. The default is for a fixed random seed to allow
+            // repeating with the same random data across JVM instances.
+            if (rngSeed == 0) {
+                rngSeed = RandomSource.createLong();
             }
 
             // Special case for random distribution mode
