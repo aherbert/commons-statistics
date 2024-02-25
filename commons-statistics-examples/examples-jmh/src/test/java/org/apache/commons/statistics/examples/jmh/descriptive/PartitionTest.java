@@ -1347,7 +1347,7 @@ class PartitionTest {
         final String distName = dist == null ? "ALL" : dist.name();
         final String modName = mod == null ? "ALL" : mod.name();
         // Flag when the method used excessive recursion.
-        // Note that recursion only occurs down to a small length which are finished with a sort.
+        // Note that recursion only occurs down to a small length which is finished with a sort.
         final double expected = Math.log((length + range * 0.5) / Partition.MIN_QUICKSELECT_SIZE) /
             Math.log(dualPivot ? 3 : 2);
         String excess = "";
@@ -1376,8 +1376,9 @@ class PartitionTest {
         TestUtils.printf("Save directory: %s%n", System.getProperty("java.io.tmpdir"));
 
         final Stream.Builder<Arguments> builder = Stream.builder();
-        final int length = 10000023;
-        final int range = 0;
+        //final int length = 10000023;
+        final int length = 1023;
+        final int range = 2;
 
         // All
         //builder.add(Arguments.of(null, null, length, range, true));
