@@ -179,7 +179,8 @@ enum PivotingStrategy {
 
         @Override
         int pivotIndex(int[] data, int left, int right) {
-            throw new IllegalStateException("Unsupported");
+            // Unsupported
+            throw new IllegalStateException();
         }
 
         @Override
@@ -226,7 +227,8 @@ enum PivotingStrategy {
 
         @Override
         int pivotIndex(int[] data, int left, int right) {
-            throw new IllegalStateException("Unsupported");
+            // Unsupported
+            throw new IllegalStateException();
         }
 
         @Override
