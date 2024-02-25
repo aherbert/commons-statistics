@@ -32,119 +32,120 @@ import org.junit.jupiter.params.provider.MethodSource;
  */
 class PivotingStrategyTest {
     @ParameterizedTest
-    @MethodSource
-    void testCentral(double[] a, int expected) {
-        assertPivot(a, expected, PivotingStrategy.CENTRAL);
+    @MethodSource(value = {"testPivot"})
+    void testCentral(double[] a) {
+        assertPivot(a, PivotingStrategy.CENTRAL);
     }
 
     @ParameterizedTest
-    @MethodSource
-    void testMedianOf3(double[] a, int expected) {
-        assertPivot(a, expected, PivotingStrategy.MEDIAN_OF_3);
+    @MethodSource(value = {"testPivot"})
+    void testMedianOf3(double[] a) {
+        assertPivot(a, PivotingStrategy.MEDIAN_OF_3);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testMedianOf3"})
-    void testMedianOf9as3(double[] a, int expected) {
-        assertPivot(a, expected, PivotingStrategy.MEDIAN_OF_9);
-    }
-
-    private static void assertPivot(double[] a, int p1, PivotingStrategy s) {
-        Assertions.assertEquals(p1, s.pivotIndex(a, 0, a.length - 1));
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testMedianOf9"})
-    void testMedianOf9(double[] a, int i, int j, int k) {
+    @MethodSource(value = {"testPivot"})
+    void testMedianOf9(double[] a) {
         // Sometimes this is off by an index of 1
-        final int index = PivotingStrategy.MEDIAN_OF_9.pivotIndex(a, 0, a.length - 1);
-        if (index != j && index != i && index != k) {
-            Assertions.fail(() -> String.valueOf(index));
+        assertPivot(a, PivotingStrategy.MEDIAN_OF_9, -1, 1);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPivot", "testMedianOf5"})
+    void testMedianOf5(double[] a) {
+        assertPivot(a, PivotingStrategy.MEDIAN_OF_5);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPivot", "testMedianOf5"})
+    void testMedianOf5B(double[] a) {
+        assertPivot(a, PivotingStrategy.MEDIAN_OF_5B);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPivot"})
+    void testDynamic(double[] a) {
+        final int index = PivotingStrategy.DYNAMIC.pivotIndex(a, 0, a.length - 1);
+        PivotingStrategy s;
+        if (PivotingStrategy.DYNAMIC.getSampledIndices(0, a.length - 1).length == 3) {
+            s = PivotingStrategy.MEDIAN_OF_3;
+        } else {
+            s = PivotingStrategy.MEDIAN_OF_9;
         }
+        Assertions.assertEquals(s.pivotIndex(a, 0, a.length - 1), index);
+    }
+
+    private static void assertPivot(double[] a, PivotingStrategy s, int... offset) {
+        final double[] copy = a.clone();
+        final int[] k = s.getSampledIndices(0, a.length - 1);
+        // Extract data
+        final double[] x = new double[k.length];
+        for (int i = 0; i < k.length; i++) {
+            x[i] = a[k[i]];
+        }
+        final int p1 = s.pivotIndex(a, 0, a.length - 1);
+        // Extract data after
+        final double[] y = new double[k.length];
+        for (int i = 0; i < k.length; i++) {
+            y[i] = a[k[i]];
+        }
+        // Test the effect on the data
+        final int effect = s.samplingEffect();
+        if (effect == PivotingStrategy.SORT) {
+            Arrays.sort(x);
+            Assertions.assertArrayEquals(x, y, "Data at indices not sorted");
+        } else if (effect == PivotingStrategy.UNCHANGED) {
+            Assertions.assertArrayEquals(x, y, "Data at indices changed");
+            // Sort the data to obtain the expected pivot
+            Arrays.sort(x);
+        }
+        // Pivot should be the centre of the sorted sample
+        final int m = k.length >>> 1;
+        // Allowed to be offset
+        if (offset.length != 0) {
+            boolean ok = x[m] == a[p1];
+            for (final int o : offset) {
+                if (ok) {
+                    break;
+                }
+                ok = x[m + o] == a[p1];
+            }
+            Assertions.assertTrue(ok, () -> "Unexpected pivot: " + p1);
+        } else {
+            Assertions.assertEquals(x[m], a[p1], () -> "Unexpected pivot: " + p1);
+        }
+        // Flip data, pivot value should be the same
+        for (int i = 0, j = k.length - 1; i < j; i++, j--) {
+            final double v = copy[k[i]];
+            copy[k[i]] = copy[k[j]];
+            copy[k[j]] = v;
+        }
+        final int p1a = s.pivotIndex(copy, 0, a.length - 1);
+        Assertions.assertEquals(a[p1], copy[p1a], "Pivot changed");
     }
 
     @Test
     void testMedianOf5Indexing() {
-        // Safe from length 5. At small lengths the indexes cannot spread across the range
-        // efficiently. This is OK from about length 20.
-        for (int i = 5; i < 50; i++) {
+        assertIndexing(PivotingStrategy.MEDIAN_OF_5, 5);
+    }
+
+    @Test
+    void testMedianOf5BIndexing() {
+        assertIndexing(PivotingStrategy.MEDIAN_OF_5B, 5);
+    }
+
+    private static void assertIndexing(PivotingStrategy s, int safeLength) {
+        final double[] a = new double[safeLength - 1];
+        Assertions.assertThrows(ArrayIndexOutOfBoundsException.class, () -> s.pivotIndex(a, 0, a.length - 1),
+            () -> "Length: " + (safeLength - 1));
+        for (int i = safeLength; i < 50; i++) {
             final int n = i;
-            final double[] a = new double[i];
-            Assertions.assertDoesNotThrow(() -> PivotingStrategy.MEDIAN_OF_5.pivotIndex(a, 0, a.length - 1),
-                () -> "Length: " + n);
+            final double[] b = new double[i];
+            Assertions.assertDoesNotThrow(() -> s.pivotIndex(b, 0, b.length - 1), () -> "Length: " + n);
         }
     }
 
-    @ParameterizedTest
-    @MethodSource
-    void testMedianOf5(double[] a, int expected) {
-        assertPivot(a, expected, PivotingStrategy.MEDIAN_OF_5);
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void testMedianOf5sorted(double[] a, int i, int j, int k, int l, int m) {
-        final double[] before = new double[] {a[i], a[j], a[k], a[l], a[m]};
-        assertPivot(a, k, PivotingStrategy.MEDIAN_OF_5);
-        final double[] after = new double[] {a[i], a[j], a[k], a[l], a[m]};
-        Arrays.sort(before);
-        Assertions.assertArrayEquals(before, after);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testMedianOf3", "testDynamic"})
-    void testDynamic(double[] a) {
-        final int index = PivotingStrategy.DYNAMIC.pivotIndex(a, 0, a.length - 1);
-        final int j = PivotingStrategy.MEDIAN_OF_3.pivotIndex(a, 0, a.length - 1);
-        if (index != j) {
-            Assertions.assertEquals(PivotingStrategy.MEDIAN_OF_9.pivotIndex(a, 0, a.length - 1),
-                index);
-        }
-    }
-
-    static Stream<Arguments> testCentral() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        add(builder, 0, 42.0, 46.0);
-        add(builder, 1, 42.0, 46.0, 49.0);
-        add(builder, 1, -3.0, -46.0, -2.0);
-        add(builder, 1, -3.0, -46.0, -2.0, 8.0);
-        add(builder, 2, -3.0, -46.0, -2.0, 8.0, 1.23);
-        add(builder, 4, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
-        add(builder, 4, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0);
-        add(builder, 5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0);
-        return builder.build();
-    }
-
-    static Stream<Arguments> testMedianOf3() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        add(builder, 1, 1, 3, 5);
-        add(builder, 2, 1, 5, 3);
-        add(builder, 0, 3, 1, 5);
-        add(builder, 0, 3, 5, 1);
-        add(builder, 2, 5, 1, 3);
-        add(builder, 1, 5, 3, 1);
-        return builder.build();
-    }
-
-    static Stream<Arguments> testMedianOf9() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        // Original version used a Double.compare sort order
-        final double z = 9; //Double.NaN;
-        final double l = 4;
-        final double m = 5;
-        final double n = 6;
-        final double[] a = {1, 2, 3, l, m, n, 7, z, z};
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
-        // Permutations is 9! = 362880
-        // Sample from them
-        for (int i = 0; i < 500; i++) {
-            TestUtils.shuffle(rng, a);
-            builder.add(Arguments.of(a.clone(), indexOf(a, l), indexOf(a, m), indexOf(a, n)));
-        }
-        return builder.build();
-    }
-
-    static Stream<double[]> testDynamic() {
+    static Stream<double[]> testPivot() {
         final Stream.Builder<double[]> builder = Stream.builder();
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
         // Big enough to use median of 9
@@ -190,38 +191,5 @@ class PivotingStrategyTest {
             }
         }
         return builder.build();
-    }
-
-    static Stream<Arguments> testMedianOf5sorted() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
-        for (int n = 8; n < 256; n *= 2) {
-            for (int i = 0; i < 10; i++) {
-                int length = rng.nextInt(n, n * 2);
-                // Copy logic for indices: 1/6, 1/3, 1/2, 2/3, 5/6
-                int len = length - 1;
-                int sixth = 1 + (len >>> 3) + (len >>> 5);
-                int p3 = len >>> 1;
-                int p2 = p3 - sixth;
-                int p1 = p2 - sixth;
-                int p4 = p3 + sixth;
-                int p5 = p4 + sixth;
-                builder.add(Arguments.of(rng.doubles(length).toArray(), p1, p2, p3, p4, p5));
-            }
-        }
-        return builder.build();
-    }
-
-    private static void add(Stream.Builder<Arguments> builder, int expected, double... a) {
-        builder.add(Arguments.of(a, expected));
-    }
-
-    private static int indexOf(double[] a, double v) {
-        for (int i = 0; i < a.length; i++) {
-            if (a[i] == v) {
-                return i;
-            }
-        }
-        return -1;
     }
 }
