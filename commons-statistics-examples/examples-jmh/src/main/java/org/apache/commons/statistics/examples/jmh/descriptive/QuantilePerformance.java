@@ -924,11 +924,22 @@ public class QuantilePerformance {
          * <p>If this is zero then a random seed is chosen. */
         @Param({"-7450238124206088695"})
         private long rngSeed;
+        /** Division mode. */
+        @Param({"RANDOM", "BINARY"})
+        private DivisionMode mode;
 
         /** Indices. */
         private int[][] indices;
         /** Search points. */
         private int[][] points;
+
+        /** Options for the division mode. */
+        public enum DivisionMode {
+            /** Randomly divide. */
+            RANDOM,
+            /** Divide using binary division with recursion left then right. */
+            BINARY;
+        }
 
         /**
          * @return the indices
@@ -968,12 +979,16 @@ public class QuantilePerformance {
             indices = new int[repeats][];
             points = new int[repeats][];
 
+            // Set the division mode
+            final boolean random = Objects.requireNonNull(mode) == DivisionMode.RANDOM;
+
             for (int i = repeats; --i >= 0;) {
                 // Indices with possible repeats
                 final int[] x = new int[k];
                 for (int j = k; --j >= 0;) {
                     x[j] = s.sample();
                 }
+                indices[i] = x;
 
                 // Get the sorted unique indices
                 final int[] y = x.clone();
@@ -981,15 +996,50 @@ public class QuantilePerformance {
 
                 // Create the cut points between each unique index
                 final int[] p = new int[unique - 1];
-                for (int j = 0; j < p.length; j++) {
-                    p[j] = (y[j] + y[j + 1]) >>> 1;
+                if (random) {
+                    for (int j = 0; j < p.length; j++) {
+                        p[j] = (y[j] + y[j + 1]) >>> 1;
+                    }
+                    shuffle(rng, p);
+                    points[i] = p;
+                } else {
+                    // binary division
+                    final int c = divide(y, 0, unique - 1, p, 0);
+                    points[i] = Arrays.copyOf(p, c);
                 }
-                shuffle(rng, p);
-
-                indices[i] = x;
-                points[i] = p;
             }
         }
+
+        /**
+         * Divide the indices using binary division with recursion left then right.
+         * If a division is possible store the division point and update the count.
+         *
+         * @param indices Indices to divide
+         * @param lo Lower index in indices (inclusive).
+         * @param hi Upper index in indices (inclusive).
+         * @param p Division points.
+         * @param c Count of division points.
+         * @return the updated count of division points.
+         */
+        private static int divide(int[] indices, int lo, int hi, int[] p, int c) {
+            if (lo < hi) {
+                // Divide the interval in half
+                final int m = (lo + hi) >>> 1;
+                // Create a division point at approximately the midpoint
+                final int m1 = m + 1;
+                // Ignore dense keys
+                if (indices[m] + 1 < indices[m1]) {
+                    final int k = (indices[m] + indices[m1]) >>> 1;
+                    p[c++] = k;
+                }
+                // Recurse left then right.
+                // Does nothing if lo + 1 == hi as m == lo and m1 == hi.
+                c = divide(indices, lo, m, p, c);
+                c = divide(indices, m1, hi, p, c);
+            }
+            return c;
+        }
+
         /**
          * Shuffles the entries of the given array.
          *
