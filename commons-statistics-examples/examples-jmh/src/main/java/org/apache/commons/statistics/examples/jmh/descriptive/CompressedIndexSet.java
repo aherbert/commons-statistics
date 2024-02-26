@@ -138,6 +138,9 @@ final class CompressedIndexSet implements IndexInterval {
      * range required to store the minimum and maximum index at the specified
      * {@code compression} level.
      *
+     * <p>This object can be used as an {@link IndexInterval} as the left and right
+     * indices will be set.
+     *
      * @param compression Compression level (in {@code [1, 31])}
      * @param indices Indices.
      * @param n Number of indices.
@@ -162,6 +165,20 @@ final class CompressedIndexSet implements IndexInterval {
             set.set(indices[i]);
         }
         return set;
+    }
+
+    /**
+     * Create an {@link IndexIterator} with the {@code indices}.
+     *
+     * @param compression Compression level (in {@code [1, 31])}
+     * @param indices Indices.
+     * @param n Number of indices.
+     * @return the index set
+     * @throws IllegalArgumentException if {@code compression} is not in {@code [1, 31]};
+     * or if {@code n == 0}; or if {@code left < 0}
+     */
+    static IndexIterator iterator(int compression, int[] indices, int n) {
+        return of(compression, indices, n).new Iterator();
     }
 
     /**
@@ -426,6 +443,80 @@ final class CompressedIndexSet implements IndexInterval {
     }
 
     /**
+     * Returns the index of the first bit that is set to {@code false} that occurs on or
+     * before the specified starting index <em>within the supported range</em>. If no such
+     * bit exists then {@code -1} is returned.
+     *
+     * <p>Assumes {@code k} is within an enabled compressed index.
+     *
+     * @param k Index to start checking from (inclusive).
+     * @return the index of the previous unset bit, or {@code left - 1} if there is no such bit
+     */
+    int previousClearBit(int k) {
+        // WARNING: No range checks !!!
+        // Assume left <= k <= right and that left and right are set bits acting as sentinals.
+        final int index = compressIndex(k);
+
+        int i = getLongIndex(index);
+
+        // Note: This method is conceptually the same as previousIndex with the exception
+        // that: all the data is bit-flipped; a check is made when the scan reaches the end;
+        // and no check is made for k within an unset compressed index.
+
+        // Mask bits before the bit index
+        // mask = 00011111 = -1L >>> (64 - ((index + 1) % 64))
+        long bits = ~data[i] & (LONG_MASK >>> -(index + 1));
+        for (;;) {
+            if (bits != 0) {
+                final int c = (i + 1) * Long.SIZE - Long.numberOfLeadingZeros(bits);
+                return (c << compression) - 1 + left;
+            }
+            if (i == 0) {
+                return left - 1;
+            }
+            bits = ~data[--i];
+        }
+    }
+
+    /**
+     * Returns the index of the first bit that is set to {@code false} that occurs on or
+     * after the specified starting index <em>within the supported range</em>. If no such
+     * bit exists then the {@code capacity} is returned where {@code capacity = index + 1}
+     * with {@code index} the largest index that can be added to the set without an error.
+     *
+     * <p>Assumes {@code k} is within an enabled compressed index.
+     *
+     * @param k Index to start checking from (inclusive).
+     * @return the index of the next unset bit, or the {@code capacity} if there is no such bit
+     */
+    int nextClearBit(int k) {
+        // WARNING: No range checks !!!
+        // Assume left <= k <= right
+        final int index = compressIndex(k);
+
+        int i = getLongIndex(index);
+
+        // Note: This method is conceptually the same as nextIndex with the exception
+        // that: all the data is bit-flipped; a check is made for the capacity when the
+        // scan reaches the end; and no check is made for k within an unset compressed index.
+
+        // Mask bits after the bit index
+        // mask = 11111000 = -1L << (fromIndex % 64)
+        long bits = ~data[i] & (LONG_MASK << index);
+        for (;;) {
+            if (bits != 0) {
+                final int c = i * Long.SIZE + Long.numberOfTrailingZeros(bits);
+                return (c << compression) + left;
+            }
+            if (++i == data.length) {
+                // Capacity
+                return right + 1;
+            }
+            bits = ~data[i];
+        }
+    }
+
+    /**
      * Check the compression is valid.
      *
      * @param compression Compression level.
@@ -460,6 +551,73 @@ final class CompressedIndexSet implements IndexInterval {
         if (right < left) {
             throw new IllegalArgumentException(
                 String.format("Invalid range: [%d, %d]", left, right));
+        }
+    }
+
+    /**
+     * {@link IndexIterator} implementation.
+     *
+     * <p>This iterator will can efficiently iterate over high-density indices
+     * if the compression level is set to create spacing equal to or above the expected
+     * separation between indices.
+     */
+    private class Iterator implements IndexIterator {
+        /** Iterator left. l is a compressed index. */
+        private int l;
+        /** Iterator right. (r+1) is a clear bit. */
+        private int r;
+
+        /**
+         * Create an instance.
+         */
+        Iterator() {
+            l = CompressedIndexSet.this.left();
+            r = nextClearBit(l) - 1;
+        }
+
+        @Override
+        public int left() {
+            return l;
+        }
+
+        @Override
+        public int right() {
+            return r;
+        }
+
+        @Override
+        public int end() {
+            return CompressedIndexSet.this.right();
+        }
+
+        @Override
+        public boolean next() {
+            if (r < end()) {
+                // Here (r+1) is a clear bit
+                l = nextIndex(r + 1);
+                r = nextClearBit(l) - 1;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean positionAfter(int index) {
+            // Even though this can provide random access we only allow advancing
+            if (r <= index && r < end()) {
+                if (get(index + 1)) {
+                    // (index+1) is set.
+                    // Find [left <= index+1 <= right]
+                    r = nextClearBit(index + 1) - 1;
+                    l = previousClearBit(index) + 1;
+                } else {
+                    // (index+1) is clear.
+                    // Advance to the next [left, right] pair
+                    l = nextIndex(index + 1);
+                    r = nextClearBit(l) - 1;
+                }
+            }
+            return r > index;
         }
     }
 }
