@@ -2113,7 +2113,7 @@ public class QuantilePerformance {
      * @return value to consume
      */
     @Benchmark
-    public long indexInterval(IndexIntervalSource function, IndexSource source) {
+    public long indexIntervalNextPrevious(IndexIntervalSource function, IndexSource source) {
         final int[][] indices = source.getIndices();
         final int[][] points = source.getPoints();
         // Ensure we have something to consume during the benchmark
@@ -2131,9 +2131,58 @@ public class QuantilePerformance {
     }
 
     /**
+     * Benchmark the tracking of an interval of indices during a partition algorithm.
+     *
+     * <p>This is similar to {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)}.
+     * It uses the {@link IndexInterval#splitLower(int, int[])} and
+     * {@link IndexInterval#splitUpper(int, int[])} methods. These require {@code k} to be
+     * in a half-open interval. Some modes of the {@link IndexSource} do not ensure that
+     * {@code left < k < right} for all split points so we have to check this before calling
+     * the split method.
+     *
+     * @param function Source of the interval.
+     * @param source Source of the data.
+     * @return value to consume
+     */
+    @Benchmark
+    public long indexIntervalSplit(IndexIntervalSource function, IndexSource source) {
+        final int[][] indices = source.getIndices();
+        final int[][] points = source.getPoints();
+        // Ensure we have something to consume during the benchmark
+        long sum = 0;
+        int[] bound = {0};
+        for (int i = 0; i < indices.length; i++) {
+            final int[] x = indices[i];
+            final int[] p = points[i];
+            // Note: A partition algorithm would only call 1 of splitLower or splitUpper
+            // depending on the direction the algorithm decided to branch. So we create
+            // the interval and call a single function for all points, then repeat.
+            IndexInterval interval = function.create(x);
+            final int left = interval.left();
+            for (final int k : p) {
+                // Ensure k is in the required bound
+                if (k > left) {
+                    sum += interval.splitLower(k, bound);
+                    sum += bound[0];
+                }
+            }
+            interval = function.create(x);
+            final int right = interval.right();
+            for (final int k : p) {
+                // Ensure k is in the required bound
+                if (k < right) {
+                    sum += interval.splitUpper(k, bound);
+                    sum += bound[0];
+                }
+            }
+        }
+        return sum;
+    }
+
+    /**
      * Benchmark the creation of an interval of indices for controlling a partition algorithm.
      *
-     * <p>This baselines the {@link #indexInterval(IndexIntervalSource, IndexSource)} benchmark.
+     * <p>This baselines the {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)} benchmark.
      * For the BitSet-type structures a large overhead is the memory allocation to create
      * the {@link IndexInterval}. Note that this will be at most 1/64 the size of the array
      * that is being partitioned and in practice this overhead is not significant.
