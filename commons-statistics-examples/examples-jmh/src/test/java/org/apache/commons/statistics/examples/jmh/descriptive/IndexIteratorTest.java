@@ -18,6 +18,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.function.BiFunction;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -100,54 +101,125 @@ class IndexIteratorTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testNextIndex"})
-    void testNextKeyIndexIterator(int[] indices) {
-        assertNext(KeyIndexIterator::of, indices, false);
+    @MethodSource(value = {"testIterator"})
+    void testKeyIndexIterator(int[] indices) {
+        // This default to joining keys with a minimum separation of 2
+        assertIterator(KeyIndexIterator::of, indices, 2, 0);
     }
 
-    private static void assertNext(BiFunction<int[], Integer, IndexIterator> constructor,
-        int[] indices, boolean sparse) {
+    @ParameterizedTest
+    @MethodSource(value = {"testIterator"})
+    void testCompressedIndexIterator1(int[] indices) {
+        assertIterator((k, n) -> CompressedIndexSet.iterator(1, k, k.length), indices, 0, 1);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testIterator"})
+    void testCompressedIndexIterator2(int[] indices) {
+        assertIterator((k, n) -> CompressedIndexSet.iterator(2, k, k.length), indices, 0, 2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testIterator"})
+    void testCompressedIndexIterator3(int[] indices) {
+        assertIterator((k, n) -> CompressedIndexSet.iterator(3, k, k.length), indices, 0, 3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testIterator"})
+    void testCompressedIndexIterator5(int[] indices) {
+        assertIterator((k, n) -> CompressedIndexSet.iterator(5, k, k.length), indices, 0, 5);
+    }
+
+    /**
+     * Assert iterating along the indices.
+     *
+     * <p>Supported compressed indices. Each indices is compressed by a power of 2, then
+     * decompressed to create a range of indices {@code [from, to)}. See
+     * {@link #createBitSet(int[], int)} for details of the indices that must be iterated
+     * over.
+     *
+     * @param constructor Iterator constructor.
+     * @param indices Indices.
+     * @param separation Minimum separation between uncompressed indices.
+     * @param compression Compression level (for compressed indices).
+     */
+    private static void assertIterator(BiFunction<int[], Integer, IndexIterator> constructor,
+        int[] indices, int separation, int compression) {
+
+        // Reference
+        final BitSet set = createBitSet(indices, compression);
+        final int first = indices[0];
+        final int last = indices[indices.length - 1];
+
         IndexIterator iterator = constructor.apply(indices, indices.length);
-        final int nm1 = indices.length - 1;
-        Assertions.assertEquals(indices[0], iterator.left());
-        Assertions.assertEquals(indices[nm1], iterator.end());
+        Assertions.assertEquals(last, iterator.end());
         // Check invariants
         Assertions.assertTrue(iterator.left() <= iterator.right());
         Assertions.assertTrue(iterator.right() <= iterator.end());
-        int j = 0;
-        if (!sparse) {
-            int i = j;
-            j = Arrays.binarySearch(indices, iterator.right());
-            Assertions.assertTrue(j >= i, "Index not in original indices");
+
+        // Expected
+        int l = first;
+        int r;
+        if (compression == 0) {
+            r = l;
+            while (true) {
+                int n = set.nextSetBit(r + 1);
+                if (n < 0 || r + separation < n) {
+                    break;
+                }
+                r = n;
+            }
+        } else {
+            r = Math.min(last, set.nextClearBit(l) - 1);
         }
+        Assertions.assertEquals(l, iterator.left(), "left");
+        Assertions.assertEquals(r, iterator.right(), "right");
+
         // Iterate
         while (iterator.right() < iterator.end()) {
             final int previous = iterator.right();
+
             Assertions.assertTrue(iterator.next());
             Assertions.assertTrue(previous < iterator.left(), "Did not advance");
             // Check invariants
             Assertions.assertTrue(iterator.left() <= iterator.right());
             Assertions.assertTrue(iterator.right() <= iterator.end());
-            if (!sparse) {
-                int i = Arrays.binarySearch(indices, iterator.left());
-                Assertions.assertEquals(j + 1, i, "next skipped original indices");
-                j = Arrays.binarySearch(indices, iterator.right());
-                Assertions.assertTrue(j >= i, "Index not in original indices");
+
+            // Expected
+            l = set.nextSetBit(previous + 1);
+            if (compression == 0) {
+                r = l;
+                while (true) {
+                    int n = set.nextSetBit(r + 1);
+                    if (n < 0 || r + separation < n) {
+                        break;
+                    }
+                    r = n;
+                }
+            } else {
+                r = Math.min(last, set.nextClearBit(l) - 1);
             }
+            Assertions.assertEquals(l, iterator.left(), "left");
+            Assertions.assertEquals(r, iterator.right(), "right");
         }
-        Assertions.assertEquals(indices[nm1], iterator.right());
+        Assertions.assertEquals(last, iterator.right());
         Assertions.assertFalse(iterator.next());
-        Assertions.assertEquals(indices[nm1], iterator.right());
+        Assertions.assertEquals(last, iterator.right());
         Assertions.assertFalse(iterator.next());
 
         // Test position after
+        iterator = constructor.apply(indices, indices.length);
+        Assertions.assertFalse(iterator.positionAfter(last + 1));
+        Assertions.assertEquals(last, iterator.right());
+
         for (final int jump : new int[] {1, 2, 3}) {
             iterator = constructor.apply(indices, indices.length);
             IndexIterator iterator2 = constructor.apply(indices, indices.length);
 
             for (int i = jump; i < indices.length; i += jump) {
                 final int k = indices[i];
-                if (k == iterator.end()) {
+                if (k == last) {
                     Assertions.assertFalse(iterator.positionAfter(k));
                     Assertions.assertEquals(k, iterator.right());
                 } else {
@@ -161,15 +233,50 @@ class IndexIteratorTest {
                 }
                 Assertions.assertEquals(iterator2.left(), iterator.left(), () -> "left after " + k);
                 Assertions.assertEquals(iterator2.right(), iterator.right(), () -> "right after " + k);
+
+                // Expected
+                if (compression == 0) {
+                    r = set.nextSetBit(Math.min(k + 1, last));
+                    while (true) {
+                        int n = set.nextSetBit(r + 1);
+                        if (n < 0 || r + separation < n) {
+                            break;
+                        }
+                        r = n;
+                    }
+                    l = r;
+                    while (true) {
+                        int n = set.previousSetBit(l - 1);
+                        if (n < 0 || l - separation > n) {
+                            break;
+                        }
+                        l = n;
+                    }
+                } else {
+                    if (set.get(k + 1)) {
+                        l = set.previousClearBit(k + 1) + 1;
+                        r = Math.min(last, set.nextClearBit(k + 1) - 1);
+                    } else {
+                        if (k == last) {
+                            r = last;
+                            l = set.previousClearBit(last) + 1;
+                        } else {
+                            l = set.nextSetBit(k + 1);
+                            r = Math.min(last, set.nextClearBit(l + 1) - 1);
+                        }
+                    }
+                }
+                Assertions.assertEquals(l, iterator.left(), "left");
+                Assertions.assertEquals(r, iterator.right(), "right");
             }
-            Assertions.assertFalse(iterator.positionAfter(indices[nm1]));
-            Assertions.assertEquals(indices[nm1], iterator.right());
-            Assertions.assertFalse(iterator.positionAfter(indices[nm1]));
-            Assertions.assertEquals(indices[nm1], iterator.right());
+            Assertions.assertFalse(iterator.positionAfter(last));
+            Assertions.assertEquals(last, iterator.right());
+            Assertions.assertFalse(iterator.positionAfter(last));
+            Assertions.assertEquals(last, iterator.right());
         }
     }
 
-    static Stream<int[]> testNextIndex() {
+    static Stream<int[]> testIterator() {
         final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
         final Stream.Builder<int[]> builder = Stream.builder();
         builder.accept(new int[] {4});
@@ -181,12 +288,38 @@ class IndexIteratorTest {
             for (final int n : new int[] {2, 5, 10}) {
                 final int[] a = rng.ints(n, 0, size).distinct().sorted().toArray();
                 builder.accept(a.clone());
-                // Force use of index 0 and max index
+                // Force use of index 0
                 a[0] = 0;
-                a[a.length - 1] = Integer.MAX_VALUE - 1;
                 builder.accept(a);
             }
         }
         return builder.build();
+    }
+
+    /**
+     * Creates the BitSet using the indices.
+     *
+     * <p>Compressed indices are created using {@code c = (i - min) >>> compression}.
+     * This is then decompressed {@code from = (c << compression) + min}. The BitSet
+     * has all bits set in {@code [from, from + (1 << compression))}.
+     *
+     * @param indices Indices.
+     * @param compression Compression level.
+     * @return the set
+     */
+    private static BitSet createBitSet(int[] indices, int compression) {
+        final int max = indices[indices.length - 1] + 1 + (1 << compression);
+        final BitSet set = new BitSet(max);
+        if (compression == 0) {
+            Arrays.stream(indices).forEach(set::set);
+        } else {
+            final int min = indices[0];
+            final int width = 1 << compression;
+            Arrays.stream(indices).forEach(i -> {
+                i = (((i - min) >>> compression) << compression) + min;
+                set.set(i, i + width);
+            });
+        }
+        return set;
     }
 }
