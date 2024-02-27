@@ -572,7 +572,7 @@ final class CompressedIndexSet implements IndexInterval {
          */
         Iterator() {
             l = CompressedIndexSet.this.left();
-            r = nextClearBit(l) - 1;
+            r = Math.min(end(), nextClearBit(l) - 1);
         }
 
         @Override
@@ -595,7 +595,7 @@ final class CompressedIndexSet implements IndexInterval {
             if (r < end()) {
                 // Here (r+1) is a clear bit
                 l = nextIndex(r + 1);
-                r = nextClearBit(l) - 1;
+                r = Math.min(end(), nextClearBit(l) - 1);
                 return true;
             }
             return false;
@@ -604,17 +604,23 @@ final class CompressedIndexSet implements IndexInterval {
         @Override
         public boolean positionAfter(int index) {
             // Even though this can provide random access we only allow advancing
-            if (r <= index && r < end()) {
-                if (get(index + 1)) {
-                    // (index+1) is set.
-                    // Find [left <= index+1 <= right]
-                    r = nextClearBit(index + 1) - 1;
-                    l = previousClearBit(index) + 1;
+            if (r <= index) {
+                if (index < end()) {
+                    if (get(index + 1)) {
+                        // (index+1) is set.
+                        // Find [left <= index+1 <= right]
+                        r = Math.min(end(), nextClearBit(index + 1) - 1);
+                        l = previousClearBit(index) + 1;
+                    } else {
+                        // (index+1) is clear.
+                        // Advance to the next [left, right] pair
+                        l = nextIndex(index + 1);
+                        r = Math.min(end(), nextClearBit(l) - 1);
+                    }
                 } else {
-                    // (index+1) is clear.
-                    // Advance to the next [left, right] pair
-                    l = nextIndex(index + 1);
-                    r = nextClearBit(l) - 1;
+                    // Advance to end
+                    r = end();
+                    l = previousClearBit(r) + 1;
                 }
             }
             return r > index;
