@@ -25,12 +25,58 @@ import org.apache.commons.rng.simple.RandomSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Test for {@link IndexIterator} implementations.
  */
-class IndexInteratorTest {
+class IndexIteratorTest {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 42, Integer.MAX_VALUE - 1})
+    void testSingleIndex(int k) {
+        final IndexIterator iterator = IndexIterators.ofIndex(k);
+        Assertions.assertEquals(k,  iterator.left());
+        Assertions.assertEquals(k,  iterator.right());
+        Assertions.assertEquals(k,  iterator.end());
+        Assertions.assertFalse(iterator.next());
+        Assertions.assertFalse(iterator.positionAfter(k + 1));
+        Assertions.assertFalse(iterator.positionAfter(k));
+        Assertions.assertTrue(iterator.positionAfter(k - 1));
+        Assertions.assertEquals(k,  iterator.left());
+        Assertions.assertEquals(k,  iterator.right());
+        Assertions.assertEquals(k,  iterator.end());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "0, 0",
+        "10, 0",
+        "0, 10",
+        "5615236, 1263818376",
+    })
+    void testSingleInterval(int l, int r) {
+        if (r < l) {
+            final int t = l;
+            l = r;
+            r = t;
+        }
+        final IndexIterator iterator = IndexIterators.ofInterval(l, r);
+        Assertions.assertEquals(l,  iterator.left());
+        Assertions.assertEquals(r,  iterator.right());
+        Assertions.assertEquals(r,  iterator.end());
+        Assertions.assertFalse(iterator.next());
+        Assertions.assertFalse(iterator.positionAfter(r + 1));
+        Assertions.assertFalse(iterator.positionAfter(r));
+        Assertions.assertTrue(iterator.positionAfter(r - 1));
+        Assertions.assertEquals(r > l, iterator.positionAfter(l));
+        Assertions.assertEquals(r > l, iterator.positionAfter((l + r) >>> 1));
+        Assertions.assertEquals(l,  iterator.left());
+        Assertions.assertEquals(r,  iterator.right());
+        Assertions.assertEquals(r,  iterator.end());
+    }
+
     @Test
     void testKeyIndexIteratorInvalidIndicesThrows() {
         assertInvalidIndicesThrows(KeyIndexIterator::of);
