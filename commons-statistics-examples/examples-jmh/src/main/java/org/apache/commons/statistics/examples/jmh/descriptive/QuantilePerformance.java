@@ -1818,7 +1818,7 @@ public class QuantilePerformance {
             name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
             return i;
         }
-        return Partition.COMPRESSION;
+        return Partition.COMPRESSION_LEVEL;
     }
 
     /**
