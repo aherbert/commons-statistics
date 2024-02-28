@@ -566,6 +566,29 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionISBMIndexIterator(double[] values, int[] indices) {
+        assertPartition(values, indices,
+            new Partition(SP, QS, HS, HC).setKeyStrategy(KeyStrategy.INDEX_ITERATOR)::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMCompressedIndexIterator(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_ITERATOR)
+            .setCompression(1)::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMCompressedIndexIterator4(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_ITERATOR)
+            .setCompression(4)::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionIDPScanningKey(double[] values, int[] indices) {
         assertPartition(values, indices,
             new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionIDP);
