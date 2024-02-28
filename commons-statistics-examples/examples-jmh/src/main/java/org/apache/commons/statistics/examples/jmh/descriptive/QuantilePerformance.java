@@ -2133,12 +2133,12 @@ public class QuantilePerformance {
     /**
      * Benchmark the tracking of an interval of indices during a partition algorithm.
      *
-     * <p>This is similar to {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)}.
-     * It uses the {@link IndexInterval#splitLower(int, int[])} and
-     * {@link IndexInterval#splitUpper(int, int[])} methods. These require {@code k} to be
-     * in a half-open interval. Some modes of the {@link IndexSource} do not ensure that
-     * {@code left < k < right} for all split points so we have to check this before calling
-     * the split method.
+     * <p>This is similar to
+     * {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)}. It uses the
+     * {@link IndexInterval#split(int, int, int[])} method. This requires {@code k} to be
+     * in an open interval. Some modes of the {@link IndexSource} do not ensure that
+     * {@code left < k < right} for all split points so we have to check this before
+     * calling the split method (it is a fixed overhead for the benchmark).
      *
      * @param function Source of the interval.
      * @param source Source of the data.
@@ -2154,24 +2154,15 @@ public class QuantilePerformance {
         for (int i = 0; i < indices.length; i++) {
             final int[] x = indices[i];
             final int[] p = points[i];
-            // Note: A partition algorithm would only call 1 of splitLower or splitUpper
-            // depending on the direction the algorithm decided to branch. So we create
-            // the interval and call a single function for all points, then repeat.
-            IndexInterval interval = function.create(x);
+            // Note: A partition algorithm would only call split if there are indices
+            // above and below the split point.
+            final IndexInterval interval = function.create(x);
             final int left = interval.left();
-            for (final int k : p) {
-                // Ensure k is in the required bound
-                if (k > left) {
-                    sum += interval.splitLower(k, bound);
-                    sum += bound[0];
-                }
-            }
-            interval = function.create(x);
             final int right = interval.right();
             for (final int k : p) {
-                // Ensure k is in the required bound
-                if (k < right) {
-                    sum += interval.splitUpper(k, bound);
+                // Check k is in the open interval (left, right)
+                if (left < k && k < right) {
+                    sum += interval.split(k, k, bound);
                     sum += bound[0];
                 }
             }

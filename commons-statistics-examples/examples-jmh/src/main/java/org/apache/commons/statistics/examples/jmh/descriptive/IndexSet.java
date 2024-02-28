@@ -830,8 +830,8 @@ final class IndexSet implements PivotCache, IndexInterval {
         }
     }
 
-    // No overrides for splitLower and splitUpper.
-    // These require searching for previousIndex(k - 1) and nextIndex(k + 1).
+    // No override for split.
+    // This require searching for previousIndex(k - 1) and nextIndex(k + 1).
     // The only shared code is getLongIndex(x - left). Since input x is 2 apart
     // these will map to a different long with a probability of 1/32.
 

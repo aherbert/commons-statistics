@@ -88,36 +88,14 @@ final class BinarySearchKeyIndexInterval implements IndexInterval {
     }
 
     @Override
-    public int splitLower(int k, int[] upper) {
-        int i = Partition.searchLessOrEqual(keys, 0, nm1, k - 1);
-        final int lower = keys[i];
-        // Find the upper.
-        // Note: Should never be called when n == 1 as it requires left < k <= right.
-        // We know the keys are ascending and unique so check the neighbour.
-        if (keys[++i] > k) {
-            // Keys (i, i+1) are non-consecutive and k is between them.
-            upper[0] = keys[i];
-        } else {
-            // Either keys are consecutive, or k == right()
-            upper[0] = i < nm1 ? keys[++i] : right() + 1;
-        }
-        return lower;
-    }
-
-    @Override
-    public int splitUpper(int k, int[] lower) {
-        int i = Partition.searchGreaterOrEqual(keys, 0, nm1, k + 1);
-        final int upper = keys[i];
-        // Find the lower.
-        // Note: Should never be called when n == 1 as it requires left <= k < right.
-        // We know the keys are ascending and unique so check the neighbour.
-        if (keys[--i] < k) {
-            // Keys (i, i+1) are non-consecutive and k is between them.
-            lower[0] = keys[i];
-        } else {
-            // Either keys are consecutive, or k == left()
-            lower[0] = i > 0 ? keys[--i] : left() - 1;
-        }
-        return upper;
+    public int split(int ka, int kb, int[] upper) {
+        int i = Partition.searchGreaterOrEqual(keys, 0, nm1, kb + 1);
+        upper[0] = keys[i];
+        // Find the lower using a scan since a typical use case has ka == kb
+        // and a scan is faster than a second binary search.
+        do {
+            --i;
+        } while (keys[i] >= ka);
+        return keys[i];
     }
 }
