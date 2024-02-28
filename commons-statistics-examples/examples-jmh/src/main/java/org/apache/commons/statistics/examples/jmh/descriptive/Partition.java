@@ -134,7 +134,7 @@ final class Partition {
     /** Default recursion constant. */
     static final int RECURSION_CONSTANT = 0;
     /** Default compression. */
-    static final int COMPRESSION = 1;
+    static final int COMPRESSION_LEVEL = 1;
     /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
     private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
 
@@ -202,7 +202,7 @@ final class Partition {
      * The recursion is set using {@code m * x + c}. */
     private int recursionConstant = RECURSION_CONSTANT;
     /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
-    private int compression = COMPRESSION;
+    private int compression = COMPRESSION_LEVEL;
     /** Consumer for the recursion level reached during partitioning. Used to analyse
      * the distribution of the recursion for different input data. */
     private IntConsumer recursionConsumer = i -> { /* no-op */ };
