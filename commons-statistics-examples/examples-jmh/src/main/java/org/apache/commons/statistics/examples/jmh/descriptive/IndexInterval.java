@@ -73,6 +73,53 @@ interface IndexInterval {
     int nextIndex(int k);
 
     /**
+     * Returns the nearest free-index that occurs on or after the specified starting
+     * index. This is an index that is not within the interval {@code [left, right]}.
+     *
+     * <p>If {@code k < left} or {@code k > right} the result is undefined.
+     * A free index outside the supported interval have special meaning:
+     *
+     * <ul>
+     * <li>If the next free index is {@code > right} this indicates that the
+     * closed interval {@code [left, right]} is saturated.
+     * <li>If the next free index is {@code < left} this indicates that the
+     * identification of a free index is not supported. Implementations may return -1
+     * for this case.
+     * </ul>
+     *
+     * <p>The default implementation advances using {@link #nextIndex(int)} until
+     * there is a gap in the indices (i.e. a free index):
+     *
+     * <pre>{@code
+     * int n = k - 1;
+     * while (++n < right()) {
+     *     if (nextIndex(n) > n) {
+     *         // n is a free-index
+     *         return n;
+     *     }
+     * }
+     * return right() + 1;
+     * }</pre>
+     *
+     * <p>Implementations may support this behaviour with a more efficient implementation;
+     * or return -1.
+     *
+     * @param k Index to start checking from (inclusive).
+     * @return the next free index
+     */
+    default int nextFreeIndex(int k) {
+        // Implement using nextIndex. Assumes left <= k <= right.
+        final int r = right();
+        for (int n = k - 1; ++n < r;) {
+            if (nextIndex(n) > n) {
+                // next index is after n: n is a free index
+                return n;
+            }
+        }
+        return r + 1;
+    }
+
+    /**
      * Returns the nearest index that occurs after the specified split
      * index, and the nearest index that occurs before the specified split index.
      *
