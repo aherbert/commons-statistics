@@ -229,7 +229,7 @@ final class Partition {
         /** Sort unique keys and process using recursion with a {@link KeyIndexIterator}. */
         INDEX_ITERATOR,
         /** Process in input order using an {@link IndexIterator} of a {@link CompressedIndexSet}. */
-        COMPRESS_INDEX_ITERATOR;
+        COMPRESSED_INDEX_ITERATOR;
     }
 
     /**
@@ -3572,7 +3572,7 @@ final class Partition {
             final int unique = Sorting.sortIndices(k, n);
             final KeyIndexIterator keys = KeyIndexIterator.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.COMPRESS_INDEX_ITERATOR) {
+        } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_ITERATOR) {
             final IndexIterator keys = CompressedIndexSet.iterator(compression, k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else {
@@ -4002,18 +4002,17 @@ final class Partition {
     void introselect(SPEPartition part, double[] a, int left, int right,
         IndexIterator k, int ka, int kb, int maxDepth) {
         // Left side requires recursion; right side remains within this function
+        // When this function returns all indices in [left, right] must be processed.
         int l = left;
         int lo = ka;
         int hi = kb;
         final int[] upper = {0};
         while (true) {
-            // length - 1
-            final int n = right - l;
-
             if (maxDepth == 0) {
                 // Too much recursion.
                 // Advance the iterator to the end of the current range.
                 // Note: heapSelectRange handles hi > right.
+                // Single API method: advanceBeyond(right): return hi <= right
                 while (hi < right && k.next()) {
                     hi = k.right();
                 }
@@ -4022,25 +4021,34 @@ final class Partition {
                 return;
             }
 
-            // Collect ends with heapselect
+            // length - 1
+            final int n = right - l;
+
+            // If interval is close to one end then heapselect
             // |l|-----|lo|--------|hi|------|right|
             //  ---------d1----------
             //          --------------d2-----------
-            // Left end
-            if (hi - l < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                partitionMinK(a, left, right, hi, hi - l);
-                recursionConsumer.accept(maxDepth);
-                // Advance iterator
-                if (!k.next() || k.left() > right) {
-                    // No more keys, or keys beyond the current bounds
-                    return;
+            if (Math.min(hi - l, right - lo) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                if (hi - l < right - lo) {
+                    // Left end
+                    // Here we take a chance that the next indices are far enough away
+                    // that heapselect is worthwhile.
+                    partitionMinK(a, l, right, hi, hi - l);
+                    recursionConsumer.accept(maxDepth);
+                    // Advance iterator
+                    // Single API method: nextAndLeftWithin(right)
+                    if (!k.next() || k.left() > right) {
+                        // No more keys, or keys beyond the current bounds
+                        return;
+                    }
+                    l = hi + 1;
+                    lo = k.left();
+                    hi = Math.min(right, k.right());
+                    // Continue right (allows a second heap select for the right side)
+                    continue;
                 }
-                lo = k.left();
-                hi = Math.min(right, k.right());
-            }
-            // Right end
-            if (right - lo < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                partitionMaxK(a, left, right, lo, right - lo);
+                // Right end
+                partitionMaxK(a, l, right, lo, right - lo);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -4078,6 +4086,7 @@ final class Partition {
             if (lo < p0) {
                 introselect(part, a, l, p0 - 1, k, lo, Math.min(hi, p0 - 1), maxDepth);
                 // Advance iterator
+                // Single API method: fastForwardAndLeftWithin(p1, right)
                 if (!k.positionAfter(p1) || k.left() > right) {
                     // No more keys, or keys beyond the current bounds
                     return;
@@ -4086,8 +4095,13 @@ final class Partition {
                 hi = Math.min(right, k.right());
             }
             if (hi <= p1) {
-                // No right side
-                return;
+                // Advance iterator
+                if (!k.positionAfter(p1) || k.left() > right) {
+                    // No more keys, or keys beyond the current bounds
+                    return;
+                }
+                lo = k.left();
+                hi = Math.min(right, k.right());
             }
             // Continue right
             l = p1 + 1;
