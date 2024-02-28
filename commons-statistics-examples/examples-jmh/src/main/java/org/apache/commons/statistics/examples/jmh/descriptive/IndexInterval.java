@@ -107,6 +107,7 @@ interface IndexInterval {
      * @param k Index to start checking from (inclusive).
      * @return the next free index
      */
+    // TODO - is this useful ? An unsorted point has to be maintained at each split 
     default int nextFreeIndex(int k) {
         // Implement using nextIndex. Assumes left <= k <= right.
         final int r = right();
@@ -117,6 +118,20 @@ interface IndexInterval {
             }
         }
         return r + 1;
+    }
+
+    /**
+     * Test if the interval {@code [ka, kb]} is saturated (there are no free indices
+     * within the range).
+     *
+     * @param ka First index.
+     * @param kb Last index.
+     * @return true if saturated
+     */
+    // TODO - is this useful ? It could be supported using a compressed index set where
+    // compression is set relative to the data length.
+    default boolean saturated(int ka, int kb) {
+        return false;
     }
 
     /**
