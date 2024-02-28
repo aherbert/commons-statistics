@@ -4668,8 +4668,10 @@ final class Partition {
             return;
         }
         final IndexInterval keys =
-            //createIndexInterval(length, k, n);
-            IndexIntervals.create(k, n);
+            createIndexInterval(length, k, n);
+            //IndexIntervals.create(k, n)
+            //IndexSet.of(k, n);
+
         if (keys == null) {
             // Full sort recommended
             Arrays.sort(a, 0, length);
@@ -4716,44 +4718,44 @@ final class Partition {
     // package-private for benchmarking
     static void select(double[] a, int left, int right,
             IndexInterval keys, int k1, int kn, int maxDepth) {
+        // Inline code using the defaults
+
         // If partitioning splits the interval then recursion is used for left and/or
         // right sides and the middle remains within this function. If partitioning does
         // not split the interval then it remains within this function.
         int l = left;
         int r = right;
-        int ka = k1;
-        int kb = kn;
-        final int[] index = {0};
+        int ka1 = k1;
+        int kb1 = kn;
+        final int[] upper = {0, 0, 0};
         while (true) {
+            // It is possible to use heapselect when ka1 and kb1 are close to the same end
+            // |l|-----|ka1|--------|kb1|------|r|
+            //  ---------s2-----------
+            //          ----------s4-----------
+            if (maxDepth == 0 ||
+                Math.min(kb1 - l, r - ka1) < HEAPSELECT_CONSTANT) {
+                // Too much recursion, or ka1 and kb1 are both close to the same end
+                heapSelectRange(a, l, r, ka1, kb1);
+                return;
+            }
+
             // length - 1
             final int n = r - l;
 
-            // Use heapselect if too much recursion, or interval is close to the same end
-            // |l|-----|ka|--------|kb|------|r|
-            // |---------d1-----------|
-            //         |----------d2-----------|
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
-                //Math.min(kb - l, r - ka) < heapSelectK(n)) {
-                heapSelectRange(a, l, r, ka, kb);
-                return;
-            }
-
             if (n < MIN_QUICKSELECT_SIZE) {
                 // Full sort of small data
-                Sorting.sort(a, l, r);
                 //Sorting.sort(a, l, r, l > 0);
+                Sorting.sort(a, l, r);
                 return;
             }
 
-            maxDepth--;
-
-            // Dual-pivot partitioning. This is performed here to allow branching
-            // left/right immediately before processing the central region.
+            // Pick 2 pivots and partition
+//            int p0 = DUAL_PIVOTING_STRATEGY.pivotIndex(a, l, r, upper);
 
             // Pick 2 pivots from 5 approximately uniform through the range.
-            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much worse.
-            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
+            // worse. 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
             // Ensure the value is above zero to choose different points!
             final int step = 1 + (n >>> 3) + (n >>> 6);
             final int i3 = l + (n >>> 1);
@@ -4763,232 +4765,527 @@ final class Partition {
             final int i5 = i4 + step;
             Sorting.sort5(a, i1, i2, i3, i4, i5);
 
-            // Partition data using pivots P1 and P2 into less-than, greater-than or between.
-            // Pivot values P1 & P2 are placed at the end. k traverses the unknown region ???
-            // and values are moved if less-than (lt) or greater-than (gt):
-            //
-            // left        lt                k           gt        right
-            // |P1|  <P1   |   P1 <= & <= P2 |    ???    |    >P2   |P2|
-            //
-            // At the end pivots are swapped back to behind the lt and gt pointers.
-            //
-            // |  <P1        |P1|     P1<= & <= P2    |P2|      >P2    |
-            //
-            // Note: If P1 == P2 we do not switch to a single pivot method; performance
-            // remains good with the dual-pivot method.
+            // Possible switch to single pivot mode here
+            final int p0 = partitionDP(a, l, r, i2, i4, upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
 
-            final double p1 = a[i2];
-            final double p2 = a[i4];
+//            // JVM optimisation does not like this massive method
+//
+//            // Pick 2 pivots from 5 approximately uniform through the range.
+//            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
+//            // worse.
+//            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+//            // Ensure the value is above zero to choose different points!
+//            final int step = 1 + (n >>> 3) + (n >>> 6);
+//            final int i3 = l + (n >>> 1);
+//            final int i2 = i3 - step;
+//            final int i1 = i2 - step;
+//            final int i4 = i3 + step;
+//            final int i5 = i4 + step;
+//            Sorting.sort5(a, i1, i2, i3, i4, i5);
+//
+//            // Partition data using pivots P1 and P2 into less-than, greater-than or between.
+//            // Pivot values P1 & P2 are placed at the end. k traverses the unknown region ???
+//            // and values are moved if less-than (lt) or greater-than (gt):
+//            //
+//            // left lt k gt right
+//            // |P1| <P1 | P1 <= & <= P2 | ??? | >P2 |P2|
+//            //
+//            // At the end pivots are swapped back to behind the lt and gt pointers.
+//            //
+//            // | <P1 |P1| P1<= & <= P2 |P2| >P2 |
+//            //
+//            // Note: If P1 == P2 we do not switch to a single pivot method; performance
+//            // remains good with the dual-pivot method.
+//
+//            final double pivot1 = a[i2];
+//            final double pivot2 = a[i4];
+//
+//            // Swap ends to the pivot locations.
+//            a[i2] = a[l];
+//            a[i4] = a[r];
+//            a[l] = pivot1;
+//            a[r] = pivot2;
+//
+//            // pointers
+//            int less = l;
+//            int great = r;
+//
+//            // Fast-forward ascending / descending runs to reduce swaps.
+//            // Cannot overrun as end pivots (p1 <= p2) act as sentinels.
+//            do {
+//                ++less;
+//            } while (a[less] < pivot1);
+//            do {
+//                --great;
+//            } while (a[great] > pivot2);
+//
+//            // a[less - 1] < P1 : a[great + 1] > P2
+//            // unvisited in [less, great]
+//            SORTING: for (int k = less - 1; ++k <= great;) {
+//                final double v = a[k];
+//                if (v < pivot1) {
+//                    // swap(a, k, less++)
+//                    a[k] = a[less];
+//                    a[less] = v;
+//                    less++;
+//                } else if (v > pivot2) {
+//                    // while k < great and a[great] > v2:
+//                    // great--
+//                    while (a[great] > pivot2) {
+//                        if (great-- == k) {
+//                            // Done
+//                            break SORTING;
+//                        }
+//                    }
+//                    // swap(a, k, great--)
+//                    // if a[k] < v1:
+//                    // swap(a, k, less++)
+//                    final double w = a[great];
+//                    a[great] = v;
+//                    great--;
+//                    // delay a[k] = w
+//                    if (w < pivot1) {
+//                        a[k] = a[less];
+//                        a[less] = w;
+//                        less++;
+//                    } else {
+//                        a[k] = w;
+//                    }
+//                }
+//            }
+//
+//            // Change to inclusive ends and move the pivots to correct locations
+//            less--;
+//            great++;
+//            a[l] = a[less];
+//            a[less] = pivot1;
+//            a[r] = a[great];
+//            a[great] = pivot2;
+//
+//          // Once partitioned we possibly branch left, middle and right with multiple keys.
+//          // It is possible that the partition has split the keys
+//          // and the recursion proceeds with a reduced set in each region:
+//          //                    less                great
+//          // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
+//          //                kb   |        ka
+//
+////          // Before processing the middle check for entirely below or above
+////          if (kb <= less) {
+////              // Entirely on left side
+////              r = less - 1;
+////              kb = Math.min(kb, r);
+////              continue;
+////          }
+////          if (ka >= great) {
+////              // Entirely on right-side
+////              l = great + 1;
+////              ka = Math.max(ka, l);
+////              continue;
+////          }
+//
+//            // save outer pivots
+//            final int lt = less;
+//            final int gt = great;
+//
+////          // Recurse left side if required
+////          if (ka < less) {
+////              if (kb < less) {
+////                  // Entirely on left side
+////                  r = less - 1;
+////                  continue;
+////              }
+////              //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
+////              select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
+////              ka = index[0];
+////          }
+////          // Recurse right side if required
+////          if (kb > great) {
+////              if (ka > great) {
+////                  // Entirely on right-side
+////                  l = great + 1;
+////                  continue;
+////              }
+////              //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
+////              select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
+////              kb = index[0];
+////          }
+//
+//            // Continue with central region: (less, great)
+//            // less <= ka && kb <= great : omit overlap check here as it is rare for
+//            // kb <= less || great <= ka so we process possible equal elements first.
+//
+//            // Here we look for equal elements if the centre is more than 5/8 the length.
+//            // Occurs with ~7% frequency on random data and (far) more often
+//            // when duplicates are present. Pivots must be different!
+//            if ((great - less) > (n >>> 1) + (n >>> 3) && pivot1 != pivot2) {
+//
+//                // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
+//                // Since p1 != p2 these act as sentinels to prevent overrun.
+//                do {
+//                    ++less;
+//                } while (a[less] == pivot1);
+//                do {
+//                    --great;
+//                } while (a[great] == pivot2);
+//
+//                // This copies the logic in the sorting loop using == comparisons
+//                EQUAL: for (int k = less - 1; ++k <= great;) {
+//                    final double v = a[k];
+//                    if (v == pivot1) {
+//                        a[k] = a[less];
+//                        a[less] = v;
+//                        less++;
+//                    } else if (v == pivot2) {
+//                        while (a[great] == pivot2) {
+//                            if (great-- == k) {
+//                                break EQUAL;
+//                            }
+//                        }
+//                        final double w = a[great];
+//                        a[great] = v;
+//                        great--;
+//                        if (w == pivot1) {
+//                            a[k] = a[less];
+//                            a[less] = w;
+//                            less++;
+//                        } else {
+//                            a[k] = w;
+//                        }
+//                    }
+//                }
+//
+//                // Change to inclusive ends
+//                less--;
+//                great++;
+//            }
+//
+//            final int p0 = lt;
+//            final int p1 = less;
+//            final int p2 = great;
+//            final int p3 = gt;
 
-            // Swap ends to the pivot locations.
-            a[i2] = a[l];
-            a[i4] = a[r];
-            a[l] = p1;
-            a[r] = p2;
-
-            // pointers
-            int less = l;
-            int great = r;
-
-            // Fast-forward ascending / descending runs to reduce swaps.
-            // Cannot overrun as end pivots (p1 <= p2) act as sentinels.
-            do {
-                ++less;
-            } while (a[less] < p1);
-            do {
-                --great;
-            } while (a[great] > p2);
-
-            // a[less - 1] < P1 : a[great + 1] > P2
-            // unvisited in [less, great]
-            SORTING:
-            for (int k = less - 1; ++k <= great;) {
-                final double v = a[k];
-                if (v < p1) {
-                    // swap(a, k, less++)
-                    a[k] = a[less];
-                    a[less] = v;
-                    less++;
-                } else if (v > p2) {
-                    // while k < great and a[great] > v2:
-                    //   great--
-                    while (a[great] > p2) {
-                        if (great-- == k) {
-                            // Done
-                            break SORTING;
-                        }
-                    }
-                    // swap(a, k, great--)
-                    // if a[k] < v1:
-                    //   swap(a, k, less++)
-                    final double w = a[great];
-                    a[great] = v;
-                    great--;
-                    // delay a[k] = w
-                    if (w < p1) {
-                        a[k] = a[less];
-                        a[less] = w;
-                        less++;
-                    } else {
-                        a[k] = w;
-                    }
-                }
-            }
-
-            // Change to inclusive ends and move the pivots to correct locations
-            less--;
-            great++;
-            a[l] = a[less];
-            a[less] = p1;
-            a[r] = a[great];
-            a[great] = p2;
-
-            // Once partitioned we possibly branch left, middle and right with multiple keys.
+            // Recursion to max depth
+            // Note: Here we possibly branch left, middle and right with multiple keys.
             // It is possible that the partition has split the keys
-            // and the recursion proceeds with a reduced set in each region:
-            //                    less                great
-            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
-            //                kb   |        ka
-
-            // Before processing the middle check for entirely below or above
-            if (kb <= less) {
-                // Entirely on left side
-                r = less - 1;
-                kb = Math.min(kb, r);
-                continue;
+            // and the recursion proceeds with a reduced set in each region.
+            //                    p0 p1                p2 p3
+            // |l|--|ka1|--k----k--|P|------k--|kb1|----|P|----|r|
+            //                 kb1  |      ka1
+            // Search previous/next is bounded at ka1/kb1
+            maxDepth--;
+            // Recurse left side if required
+            if (ka1 < p0) {
+                if (kb1 <= p1) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    kb1 = Math.min(kb1, r);
+                    continue;
+                }
+                select(a, l, p0 - 1, keys, ka1, keys.split(p0, p1, upper), maxDepth);
+                ka1 = upper[0];
             }
-            if (ka >= great) {
-                // Entirely on right-side
-                l = great + 1;
-                ka = Math.max(ka, l);
-                continue;
+            // Recurse right side if required
+            if (kb1 > p3) {
+                if (ka1 >= p2) {
+                    // Entirely on right-side
+                    l = p3 + 1;
+                    ka1 = Math.max(ka1, l);
+                    continue;
+                }
+                final int lo = keys.split(p2, p3, upper);
+                select(a, p3 + 1, r, keys, upper[0], kb1, maxDepth);
+                kb1 = lo;
             }
+            // Check the interval overlaps the middle; and the middle exists.
+            //                    p0 p1                p2 p3
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:     ----kb1                    ka1----
+            if (kb1 <= p1 || p2 <= ka1 || p2 - p1 <= 2) {
+                // No middle
+                return;
+            }
+            l = p1 + 1;
+            r = p2 - 1;
+            ka1 = Math.max(ka1, l);
+            kb1 = Math.min(kb1, r);
+        }
 
-            // save outer pivots
-            final int lt = less;
-            final int gt = great;
-
+//        // If partitioning splits the interval then recursion is used for left and/or
+//        // right sides and the middle remains within this function. If partitioning does
+//        // not split the interval then it remains within this function.
+//        int l = left;
+//        int r = right;
+//        int ka = k1;
+//        int kb = kn;
+//        final int[] index = {0};
+//        while (true) {
+//            // length - 1
+//            final int n = r - l;
+//
+//            // Use heapselect if too much recursion, or interval is close to the same end
+//            // |l|-----|ka|--------|kb|------|r|
+//            // |---------d1-----------|
+//            //         |----------d2-----------|
+//            if (maxDepth == 0 ||
+//                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
+//                //Math.min(kb - l, r - ka) < heapSelectK(n)) {
+//                heapSelectRange(a, l, r, ka, kb);
+//                return;
+//            }
+//
+//            if (n < MIN_QUICKSELECT_SIZE) {
+//                // Full sort of small data
+//                Sorting.sort(a, l, r);
+//                //Sorting.sort(a, l, r, l > 0);
+//                return;
+//            }
+//
+//            maxDepth--;
+//
+//            // Dual-pivot partitioning. This is performed here to allow branching
+//            // left/right immediately before processing the central region.
+//
+//            // Pick 2 pivots from 5 approximately uniform through the range.
+//            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much worse.
+//            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+//            // Ensure the value is above zero to choose different points!
+//            final int step = 1 + (n >>> 3) + (n >>> 6);
+//            final int i3 = l + (n >>> 1);
+//            final int i2 = i3 - step;
+//            final int i1 = i2 - step;
+//            final int i4 = i3 + step;
+//            final int i5 = i4 + step;
+//            Sorting.sort5(a, i1, i2, i3, i4, i5);
+//
+//            // Partition data using pivots P1 and P2 into less-than, greater-than or between.
+//            // Pivot values P1 & P2 are placed at the end. k traverses the unknown region ???
+//            // and values are moved if less-than (lt) or greater-than (gt):
+//            //
+//            // left        lt                k           gt        right
+//            // |P1|  <P1   |   P1 <= & <= P2 |    ???    |    >P2   |P2|
+//            //
+//            // At the end pivots are swapped back to behind the lt and gt pointers.
+//            //
+//            // |  <P1        |P1|     P1<= & <= P2    |P2|      >P2    |
+//            //
+//            // Note: If P1 == P2 we do not switch to a single pivot method; performance
+//            // remains good with the dual-pivot method.
+//
+//            final double p1 = a[i2];
+//            final double p2 = a[i4];
+//
+//            // Swap ends to the pivot locations.
+//            a[i2] = a[l];
+//            a[i4] = a[r];
+//            a[l] = p1;
+//            a[r] = p2;
+//
+//            // pointers
+//            int less = l;
+//            int great = r;
+//
+//            // Fast-forward ascending / descending runs to reduce swaps.
+//            // Cannot overrun as end pivots (p1 <= p2) act as sentinels.
+//            do {
+//                ++less;
+//            } while (a[less] < p1);
+//            do {
+//                --great;
+//            } while (a[great] > p2);
+//
+//            // a[less - 1] < P1 : a[great + 1] > P2
+//            // unvisited in [less, great]
+//            SORTING:
+//            for (int k = less - 1; ++k <= great;) {
+//                final double v = a[k];
+//                if (v < p1) {
+//                    // swap(a, k, less++)
+//                    a[k] = a[less];
+//                    a[less] = v;
+//                    less++;
+//                } else if (v > p2) {
+//                    // while k < great and a[great] > v2:
+//                    //   great--
+//                    while (a[great] > p2) {
+//                        if (great-- == k) {
+//                            // Done
+//                            break SORTING;
+//                        }
+//                    }
+//                    // swap(a, k, great--)
+//                    // if a[k] < v1:
+//                    //   swap(a, k, less++)
+//                    final double w = a[great];
+//                    a[great] = v;
+//                    great--;
+//                    // delay a[k] = w
+//                    if (w < p1) {
+//                        a[k] = a[less];
+//                        a[less] = w;
+//                        less++;
+//                    } else {
+//                        a[k] = w;
+//                    }
+//                }
+//            }
+//
+//            // Change to inclusive ends and move the pivots to correct locations
+//            less--;
+//            great++;
+//            a[l] = a[less];
+//            a[less] = p1;
+//            a[r] = a[great];
+//            a[great] = p2;
+//
+//            // Once partitioned we possibly branch left, middle and right with multiple keys.
+//            // It is possible that the partition has split the keys
+//            // and the recursion proceeds with a reduced set in each region:
+//            //                    less                great
+//            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
+//            //                kb   |        ka
+//
+//            // Before processing the middle check for entirely below or above
+//            if (kb <= less) {
+//                // Entirely on left side
+//                r = less - 1;
+//                kb = Math.min(kb, r);
+//                continue;
+//            }
+//            if (ka >= great) {
+//                // Entirely on right-side
+//                l = great + 1;
+//                ka = Math.max(ka, l);
+//                continue;
+//            }
+//
+//            // save outer pivots
+//            final int lt = less;
+//            final int gt = great;
+//
+////            // Recurse left side if required
+////            if (ka < less) {
+////                if (kb < less) {
+////                    // Entirely on left side
+////                    r = less - 1;
+////                    continue;
+////                }
+////                //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
+////                select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
+////                ka = index[0];
+////            }
+////            // Recurse right side if required
+////            if (kb > great) {
+////                if (ka > great) {
+////                    // Entirely on right-side
+////                    l = great + 1;
+////                    continue;
+////                }
+////                //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
+////                select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
+////                kb = index[0];
+////            }
+//
+//            // Continue with central region: (less, great)
+//            // less <= ka && kb <= great : omit overlap check here as it is rare for
+//            // kb <= less || great <= ka so we process possible equal elements first.
+//
+//            // Here we look for equal elements if the centre is more than 5/8 the length.
+//            // Occurs with ~7% frequency on random data and (far) more often
+//            // when duplicates are present. Pivots must be different!
+//            if ((great - less) > (n >>> 1) + (n >>> 3) && p1 != p2) {
+//
+//                // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
+//                // Since p1 != p2 these act as sentinels to prevent overrun.
+//                do {
+//                    ++less;
+//                } while (a[less] == p1);
+//                do {
+//                    --great;
+//                } while (a[great] == p2);
+//
+//                // This copies the logic in the sorting loop using == comparisons
+//                EQUAL:
+//                for (int k = less - 1; ++k <= great;) {
+//                    final double v = a[k];
+//                    if (v == p1) {
+//                        a[k] = a[less];
+//                        a[less] = v;
+//                        less++;
+//                    } else if (v == p2) {
+//                        while (a[great] == p2) {
+//                            if (great-- == k) {
+//                                break EQUAL;
+//                            }
+//                        }
+//                        final double w = a[great];
+//                        a[great] = v;
+//                        great--;
+//                        if (w == p1) {
+//                            a[k] = a[less];
+//                            a[less] = w;
+//                            less++;
+//                        } else {
+//                            a[k] = w;
+//                        }
+//                    }
+//                }
+//
+//                // Change to inclusive ends
+//                less--;
+//                great++;
+//            }
+//
+//            // Once partitioned we possibly branch left, middle and right with multiple keys.
+//            // It is possible that the partition has split the keys
+//            // and the recursion proceeds with a reduced set in each region:
+//            //                    less                great
+//            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
+//            //                kb   |        ka
+//
 //            // Recurse left side if required
-//            if (ka < less) {
-//                if (kb < less) {
+//            if (ka < lt) {
+//                if (kb <= less) {
 //                    // Entirely on left side
-//                    r = less - 1;
+//                    r = lt - 1;
+//                    kb = Math.min(kb, r);
 //                    continue;
 //                }
-//                //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
-//                select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
+//                select(a, l, lt - 1, keys, ka, keys.split(lt, less, index), maxDepth);
 //                ka = index[0];
 //            }
 //            // Recurse right side if required
-//            if (kb > great) {
-//                if (ka > great) {
+//            if (kb > gt) {
+//                if (ka >= great) {
 //                    // Entirely on right-side
-//                    l = great + 1;
+//                    l = gt + 1;
+//                    ka = Math.max(ka, l);
 //                    continue;
 //                }
-//                //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
-//                select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
-//                kb = index[0];
+//                final int lo = keys.split(great, gt, index);
+//                select(a, gt + 1, r, keys, index[0], kb, maxDepth);
+//                kb = lo;
 //            }
-
-            // Continue with central region: (less, great)
-            // less <= ka && kb <= great : omit overlap check here as it is rare for
-            // kb <= less || great <= ka so we process possible equal elements first.
-
-            // Here we look for equal elements if the centre is more than 5/8 the length.
-            // Occurs with ~7% frequency on random data and (far) more often
-            // when duplicates are present. Pivots must be different!
-            if ((great - less) > (n >>> 1) + (n >>> 3) && p1 != p2) {
-
-                // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
-                // Since p1 != p2 these act as sentinels to prevent overrun.
-                do {
-                    ++less;
-                } while (a[less] == p1);
-                do {
-                    --great;
-                } while (a[great] == p2);
-
-                // This copies the logic in the sorting loop using == comparisons
-                EQUAL:
-                for (int k = less - 1; ++k <= great;) {
-                    final double v = a[k];
-                    if (v == p1) {
-                        a[k] = a[less];
-                        a[less] = v;
-                        less++;
-                    } else if (v == p2) {
-                        while (a[great] == p2) {
-                            if (great-- == k) {
-                                break EQUAL;
-                            }
-                        }
-                        final double w = a[great];
-                        a[great] = v;
-                        great--;
-                        if (w == p1) {
-                            a[k] = a[less];
-                            a[less] = w;
-                            less++;
-                        } else {
-                            a[k] = w;
-                        }
-                    }
-                }
-
-                // Change to inclusive ends
-                less--;
-                great++;
-            }
-
-            // Once partitioned we possibly branch left, middle and right with multiple keys.
-            // It is possible that the partition has split the keys
-            // and the recursion proceeds with a reduced set in each region:
-            //                    less                great
-            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
-            //                kb   |        ka
-
-            // Recurse left side if required
-            if (ka < lt) {
-                if (kb <= less) {
-                    // Entirely on left side
-                    r = lt - 1;
-                    kb = Math.min(kb, r);
-                    continue;
-                }
-                select(a, l, lt - 1, keys, ka, keys.split(lt, less, index), maxDepth);
-                ka = index[0];
-            }
-            // Recurse right side if required
-            if (kb > gt) {
-                if (ka >= great) {
-                    // Entirely on right-side
-                    l = gt + 1;
-                    ka = Math.max(ka, l);
-                    continue;
-                }
-                final int lo = keys.split(great, gt, index);
-                select(a, gt + 1, r, keys, index[0], kb, maxDepth);
-                kb = lo;
-            }
-
-            // Between pivots in (less, great)
-            // Check the interval overlaps the middle; and an unsorted middle exists.
-            //                         less         great
-            // |l|-----------------|  P1  |---------|   P2   |----|r|
-            // Eliminate:      ----------kb         ka------
-            if (kb <= less || great <= ka || great - less <= 2 || p1 == p2) {
-                return;
-            }
-            l = less + 1;
-            r = great - 1;
-            // Housekeeping on the interval bounds. Note that ka and kb are updated
-            // when the interval is split. This is only used if the P1 or P2
-            // regions contained equal values. It is done here after the central
-            // region is known to contain part of the interval.
-            ka = Math.max(ka, l);
-            kb = Math.min(kb, r);
-        }
+//
+//            // Between pivots in (less, great)
+//            // Check the interval overlaps the middle; and an unsorted middle exists.
+//            //                         less         great
+//            // |l|-----------------|  P1  |---------|   P2   |----|r|
+//            // Eliminate:      ----------kb         ka------
+//            if (kb <= less || great <= ka || great - less <= 2 || p1 == p2) {
+//                return;
+//            }
+//            l = less + 1;
+//            r = great - 1;
+//            // Housekeeping on the interval bounds. Note that ka and kb are updated
+//            // when the interval is split. This is only used if the P1 or P2
+//            // regions contained equal values. It is done here after the central
+//            // region is known to contain part of the interval.
+//            ka = Math.max(ka, l);
+//            kb = Math.min(kb, r);
+//        }
     }
 
     /**
@@ -6087,12 +6384,16 @@ final class Partition {
      * |   <P  | ==P1 |  <P1 && <P2    | ==P2 |   >P   |
      * }</pre>
      *
-     * <ul> <li>k0: lower pivot1 point <li>k1: upper pivot1 point (inclusive) <li>k2:
-     * lower pivot2 point <li>k3: upper pivot2 point (inclusive) </ul>
+     * <ul>
+     * <li>k0: lower pivot1 point
+     * <li>k1: upper pivot1 point (inclusive)
+     * <li>k2: lower pivot2 point
+     * <li>k3: upper pivot2 point (inclusive)
+     * </ul>
      *
      * <p>Bounds are set so {@code i < k0},  {@code i > k3} and {@code k1 < i < k2} are
      * unsorted. When the range {@code [k0, k3]} contains fully sorted elements the result
-     * is set to {@code k1 = k2 = k3}. This can occur if
+     * is set to {@code k1 = k3; k2 == k0}. This can occur if
      * {@code P1 == P2} or there are zero or 1 value between the pivots
      * {@code P1 < v < P2}. Any sort between {@code k1 + 1} and {@code k2 - 1} must handle
      * a negative length. Any select of an index interval {@code [ka, kb]} that identifies
@@ -6116,8 +6417,12 @@ final class Partition {
             // Set dual pivot range
             bounds[2] = bounds[0];
             // No unsorted internal region (set k1 = k2 = k3)
+            // Note: It is extra work for the caller to detect that this region can be skipped.
+            //bounds[1] = bounds[0];
+
+            // No unsorted internal region (set k1 = k3; k2 = k0)
             // Note: It is extra work for the caller to detect that this region and this can be skipped.
-            bounds[1] = bounds[0];
+            bounds[1] = lower;
             return lower;
         }
 
@@ -6286,7 +6591,11 @@ final class Partition {
             bounds[1] = great;
         } else {
             // No unsorted internal region (set k1 = k2 = k3)
-            bounds[0] = bounds[1] = bounds[2];
+            //bounds[0] = bounds[1] = bounds[2];
+
+            // No unsorted internal region (set k1 = k3; k2 = k0)
+            bounds[0] = bounds[2];
+            bounds[1] = lower;
         }
 
         return lower;
