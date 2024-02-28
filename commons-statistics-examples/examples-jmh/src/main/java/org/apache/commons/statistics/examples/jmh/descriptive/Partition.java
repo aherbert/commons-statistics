@@ -4499,6 +4499,55 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
+     * <p>Uses an introselect variant. The quickselect is a Dutch-National-Flag
+     * partition method; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param length Length of data.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionIDNF(double[] data, int length, int[] k, int n) {
+        introselect(Partition::partitionDNF3, data, length - 1, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>Uses an introselect variant. The quickselect is a Dutch-National-Flag
+     * partition method; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionIDNF(double[] data, int[] k, int n) {
+        introselect(Partition::partitionDNF3, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
      * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
      * is a heapselect.
