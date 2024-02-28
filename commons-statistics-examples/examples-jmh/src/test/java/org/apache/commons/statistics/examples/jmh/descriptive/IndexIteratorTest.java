@@ -24,8 +24,10 @@ import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -164,7 +166,7 @@ class IndexIteratorTest {
         if (compression == 0) {
             r = l;
             while (true) {
-                int n = set.nextSetBit(r + 1);
+                final int n = set.nextSetBit(r + 1);
                 if (n < 0 || r + separation < n) {
                     break;
                 }
@@ -191,7 +193,7 @@ class IndexIteratorTest {
             if (compression == 0) {
                 r = l;
                 while (true) {
-                    int n = set.nextSetBit(r + 1);
+                    final int n = set.nextSetBit(r + 1);
                     if (n < 0 || r + separation < n) {
                         break;
                     }
@@ -215,7 +217,7 @@ class IndexIteratorTest {
 
         for (final int jump : new int[] {1, 2, 3}) {
             iterator = constructor.apply(indices, indices.length);
-            IndexIterator iterator2 = constructor.apply(indices, indices.length);
+            final IndexIterator iterator2 = constructor.apply(indices, indices.length);
 
             for (int i = jump; i < indices.length; i += jump) {
                 final int k = indices[i];
@@ -238,7 +240,7 @@ class IndexIteratorTest {
                 if (compression == 0) {
                     r = set.nextSetBit(Math.min(k + 1, last));
                     while (true) {
-                        int n = set.nextSetBit(r + 1);
+                        final int n = set.nextSetBit(r + 1);
                         if (n < 0 || r + separation < n) {
                             break;
                         }
@@ -246,7 +248,7 @@ class IndexIteratorTest {
                     }
                     l = r;
                     while (true) {
-                        int n = set.previousSetBit(l - 1);
+                        final int n = set.previousSetBit(l - 1);
                         if (n < 0 || l - separation > n) {
                             break;
                         }
@@ -321,5 +323,49 @@ class IndexIteratorTest {
             });
         }
         return set;
+    }
+
+    /**
+     * Output the iterator intervals for the indices.
+     */
+    @ParameterizedTest
+    @MethodSource
+    @Disabled("This is not a test")
+    void testIntervals(int compression, int[] indices) {
+        IndexIterator iterator;
+        if (compression == 0) {
+            final int unique = Sorting.sortIndices(indices, indices.length);
+            iterator = KeyIndexIterator.of(indices, unique);
+        } else {
+            iterator = CompressedIndexSet.iterator(compression, indices, indices.length);
+        }
+        TestUtils.printf("Compression %d%n", compression);
+        do {
+            final int l = iterator.left();
+            final int r = iterator.right();
+            TestUtils.printf("%d %d : %d%n", l, r, r - l + 1);
+        } while (iterator.next());
+    }
+
+    static Stream<Arguments> testIntervals() {
+        final UniformRandomProvider rng = RandomSource.XO_RO_SHI_RO_128_PP.create();
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        int[] a;
+        // Unsaturated: mean spacing = 200
+        a = rng.ints(5, 0, 1000).toArray();
+        for (final int c : new int[] {0, 2, 5}) {
+            builder.accept(Arguments.of(c, a));
+        }
+        // Saturated: mean spacing = 10
+        a = rng.ints(100, 0, 1000).toArray();
+        for (final int c : new int[] {0, 2, 5}) {
+            builder.accept(Arguments.of(c, a));
+        }
+        // Big data: mean spacing = 100
+        a = rng.ints(1000, 0, 100000).toArray();
+        for (final int c : new int[] {5, 8}) {
+            builder.accept(Arguments.of(c, a));
+        }
+        return builder.build();
     }
 }
