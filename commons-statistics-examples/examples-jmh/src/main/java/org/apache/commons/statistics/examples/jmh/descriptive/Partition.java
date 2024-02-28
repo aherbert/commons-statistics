@@ -215,7 +215,7 @@ final class Partition {
         SEQUENTIAL,
         /** Process in input order using an {@link IndexSet} to cover the entire range. */
         INDEX_SET,
-        /** Process in input order using a CompressedIndexSet to cover the entire range. */
+        /** Process in input order using a {@link CompressedIndexSet} to cover the entire range. */
         COMPRESSED_INDEX_SET,
         /** Process in input order using a {@link PivotCache} to cover the minimum range. */
         PIVOT_CACHE,
@@ -225,7 +225,11 @@ final class Partition {
         /** Sort unique keys and process using recursion with a {@link ScanningKeyIndexInterval}. */
         SCANNING_KEY_INTERVAL,
         /** Sort unique keys and process using recursion with a {@link BinarySearchKeyIndexInterval}. */
-        SEARCH_KEY_INTERVAL;
+        SEARCH_KEY_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link KeyIndexIterator}. */
+        INDEX_ITERATOR,
+        /** Process in input order using an {@link IndexIterator} of a {@link CompressedIndexSet}. */
+        COMPRESS_INDEX_ITERATOR;
     }
 
     /**
@@ -3564,6 +3568,13 @@ final class Partition {
             // Note: Here we do not have to sort keys.
             final IndexSet keys = IndexSet.of(k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
+            final int unique = Sorting.sortIndices(k, n);
+            final KeyIndexIterator keys = KeyIndexIterator.of(k, unique);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
+        } else if (keyStrategy == KeyStrategy.COMPRESS_INDEX_ITERATOR) {
+            final IndexIterator keys = CompressedIndexSet.iterator(compression, k, n);
+            introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else {
             throw new IllegalStateException("Unsupported introselect: " + keyStrategy);
         }
@@ -3848,6 +3859,7 @@ final class Partition {
             ib1 = kb < p0 ? ib1 : searchLessOrEqual(k, ia, ib1, r);
         }
     }
+
     /**
      * Partition the array such that indices {@code k} correspond to their
      * correctly sorted value in the equivalent fully sorted array.
@@ -3947,6 +3959,139 @@ final class Partition {
             // Continue on the left side
             r = p0 - 1;
             kb1 = kb1 < p0 ? kb1 : k.previousIndex(p0 - 1);
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts an {@link IndexIterator} of indices {@code k}; for
+     * convenience the lower and upper indices of the current interval are passed as the
+     * first index {@code ka} and last index {@code kb} of the closed interval of indices
+     * to partition. These may be within the lower and upper indices if the interval was
+     * split during recursion: {@code lower <= ka <= kb <= upper}.
+     *
+     * <p>The data is recursively partitioned using left-most ordering. When the current
+     * interval has been partitioned the {@link IndexIterator} is used to advance to the
+     * next interval to partition.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Interval of indices to partition (ordered).
+     * @param ka First key.
+     * @param kb Last key.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    // package-private for benchmarking
+    void introselect(SPEPartition part, double[] a, int left, int right,
+        IndexIterator k, int ka, int kb, int maxDepth) {
+        // Left side requires recursion; right side remains within this function
+        int l = left;
+        int lo = ka;
+        int hi = kb;
+        final int[] upper = {0};
+        while (true) {
+            // length - 1
+            final int n = right - l;
+
+            if (maxDepth == 0) {
+                // Too much recursion.
+                // Advance the iterator to the end of the current range.
+                // Note: heapSelectRange handles hi > right.
+                while (hi < right && k.next()) {
+                    hi = k.right();
+                }
+                heapSelectRange(a, l, right, lo, hi);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // Collect ends with heapselect
+            // |l|-----|lo|--------|hi|------|right|
+            //  ---------d1----------
+            //          --------------d2-----------
+            // Left end
+            if (hi - l < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                partitionMinK(a, left, right, hi, hi - l);
+                recursionConsumer.accept(maxDepth);
+                // Advance iterator
+                if (!k.next() || k.left() > right) {
+                    // No more keys, or keys beyond the current bounds
+                    return;
+                }
+                lo = k.left();
+                hi = Math.min(right, k.right());
+            }
+            // Right end
+            if (right - lo < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                partitionMaxK(a, left, right, lo, right - lo);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // If interval is close to both ends then sort
+            // |l|-----|lo|--------|hi|------|right|
+            //  ---d1----
+            //                       ----d2--------
+            // (lo - l) + (right - hi) == (right - l) - (hi - lo)
+            if (n - (hi - lo) < minQuickSelectSize) {
+                // Handle small data. This is done as the JDK sort will
+                // use insertion sort for small data. For double data it
+                // will also pre-process the data for NaN and signed
+                // zeros which is an overhead to avoid.
+                if (n < minQuickSelectSize) {
+                    Sorting.sort(a, l, right, l > 0);
+                } else {
+                    // Note: This disregards the current level of recursion
+                    // but can exploit the JDK's more advanced sort algorithm.
+                    Arrays.sort(a, l, right + 1);
+                }
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // Here: l <= lo <= hi <= right
+            // Pick a pivot and partition
+            final int p0 = part.partition(a, l, right,
+                pivotingStrategy.pivotIndex(a, l, right),
+                upper);
+            final int p1 = upper[0];
+
+            maxDepth--;
+            // Recursion left
+            if (lo < p0) {
+                introselect(part, a, l, p0 - 1, k, lo, Math.min(hi, p0 - 1), maxDepth);
+                // Advance iterator
+                if (!k.positionAfter(p1) || k.left() > right) {
+                    // No more keys, or keys beyond the current bounds
+                    return;
+                }
+                lo = k.left();
+                hi = Math.min(right, k.right());
+            }
+            if (hi <= p1) {
+                // No right side
+                return;
+            }
+            // Continue right
+            l = p1 + 1;
+            lo = Math.max(lo, l);
         }
     }
 
