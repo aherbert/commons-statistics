@@ -107,7 +107,7 @@ interface IndexInterval {
      * @param k Index to start checking from (inclusive).
      * @return the next free index
      */
-    // TODO - is this useful ? An unsorted point has to be maintained at each split 
+    // TODO - is this useful ? An unsorted point has to be maintained at each split
     default int nextFreeIndex(int k) {
         // Implement using nextIndex. Assumes left <= k <= right.
         final int r = right();
@@ -207,5 +207,43 @@ interface IndexInterval {
     default int splitLower(int k, int[] upper) {
         upper[0] = k == right() ? k + 1 : nextIndex(k + 1);
         return previousIndex(k - 1);
+    }
+
+    /**
+     * Split the interval using two splitting indices. Returns the nearest index that occurs
+     * before the specified split index {@code ka}, and the nearest index that occurs after the
+     * specified split index {@code kb}.
+     *
+     * <p>Note: Requires {@code left < ka <= kb < right}, i.e. there exists a valid interval
+     * above and below the split indices.
+     *
+     * <pre>{@code
+     * l-----------ka-kb----------r
+     *   lower <--|
+     *                  |--> upper
+     *
+     * lower < ka
+     * upper > kb
+     * }</pre>
+     *
+     * <p>The default implementation uses:
+     *
+     * <pre>{@code
+     * upper = nextIndex(kb + 1);
+     * lower = previousIndex(ka - 1);
+     * }</pre>
+     *
+     * <p>Implementations may override this method if both indices can be obtained together.
+     *
+     * <p>If {@code k <= left} or {@code k > right} the result is undefined.
+     *
+     * @param ka Split index.
+     * @param kb Split index.
+     * @param upper Upper index.
+     * @return the lower index
+     */
+    default int split(int ka, int kb, int[] upper) {
+        upper[0] = nextIndex(kb + 1);
+        return previousIndex(ka - 1);
     }
 }
