@@ -589,6 +589,12 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionIDNF(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)::partitionIDNF);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionIDPScanningKey(double[] values, int[] indices) {
         assertPartition(values, indices,
             new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.SCANNING_KEY_INTERVAL)::partitionIDP);

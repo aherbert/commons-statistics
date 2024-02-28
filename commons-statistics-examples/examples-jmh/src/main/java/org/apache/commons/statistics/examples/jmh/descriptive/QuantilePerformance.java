@@ -1367,7 +1367,7 @@ public class QuantilePerformance {
             DP, DP5, DNF,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM, IDP, SELECT})
+            ISBM, IDNF, IDP, SELECT})
         private String name;
 
         /** The action. */
@@ -1402,6 +1402,13 @@ public class QuantilePerformance {
                     final Partition part = createPartition(name.substring(SORT.length()), IDP);
                     function = (data, indices) -> {
                         part.sortIDP(data);
+                        return extractIndices(data, indices);
+                    };
+                } else if (name.contains(IDNF + "3")) {
+                    // Only support IDNF3
+                    final Partition part = createPartition(name.substring(SORT.length()), IDNF + "3");
+                    function = (data, indices) -> {
+                        part.sortIDNF3(data);
                         return extractIndices(data, indices);
                     };
                 } else if (name.contains(JDK)) {
@@ -1496,6 +1503,12 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, ISBM);
                 function = (data, indices) -> {
                     part.partitionISBM(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(IDNF)) {
+                final Partition part = createPartition(name, IDNF);
+                function = (data, indices) -> {
+                    part.partitionIDNF(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(IDP)) {
