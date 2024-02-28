@@ -184,15 +184,9 @@ final class IndexIntervals {
         }
 
         @Override
-        public int splitLower(int k, int[] upper) {
-            upper[0] = k + 1;
-            return k - 1;
-        }
-
-        @Override
-        public int splitUpper(int k, int[] lower) {
-            lower[0] = k - 1;
-            return k + 1;
+        public int split(int ka, int kb, int[] upper) {
+            upper[0] = kb + 1;
+            return ka - 1;
         }
     }
 }
