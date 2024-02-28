@@ -3405,8 +3405,9 @@ final class Partition {
             final int p3 = upper[2];
 
             // Recurse middle and right sides
-            introsort(part, a, p1 + 1, p2 - 1, --maxDepth);
+            --maxDepth;
             introsort(part, a, p3 + 1, r, maxDepth);
+            introsort(part, a, p1 + 1, p2 - 1, maxDepth);
             // Continue on the left side
             r = p0 - 1;
         }
@@ -3902,6 +3903,7 @@ final class Partition {
         // can remain within this function call.
         int l = left;
         int r = right;
+        int ka1 = ka;
         int kb1 = kb;
         final int[] upper = {0};
         while (true) {
@@ -3909,13 +3911,13 @@ final class Partition {
             final int n = r - l;
 
             // It is possible to use heapselect when ka and kb1 are close to the same end
-            // |l|-----|ka|--------|kb1|------|r|
+            // |l|-----|ka1|--------|kb1|------|r|
             //  ---------s2----------
             //          ----------s4-----------
             if (maxDepth == 0 ||
-                Math.min(kb1 - l, r - ka) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                // Too much recursion, or ka and kb1 are both close to the same end
-                heapSelectRange(a, l, r, ka, kb1);
+                Math.min(kb1 - l, r - ka1) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                // Too much recursion, or ka1 and kb1 are both close to the same end
+                heapSelectRange(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -3937,28 +3939,30 @@ final class Partition {
             // Note: Here we possibly branch left and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set on either side.
-            //                   p0 p1
-            // |l|--|ka|--k----k--|P|------k--|kb1|------|r|
-            //                kb1  |      ka1
-            // Search previous/next is bounded at ka/kb1
+            //                    p0 p1
+            // |l|--|ka1|--k----k--|P|------k--|kb1|------|r|
+            //                 kb1  |      ka1
+            // Search previous/next is bounded at ka1/kb1
             maxDepth--;
-            // Recurse right side if required
-            if (kb1 > p1) {
-                if (ka > p1) {
-                    // Entirely on right side
-                    l = p1 + 1;
+            // Recurse left side if required
+            if (ka1 < p0) {
+                if (kb1 <= p1) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    kb1 = Math.min(kb1, r);
                     continue;
                 }
-                introselect(part, a, p1 + 1, r, k, k.nextIndex(p1 + 1), kb1, maxDepth);
+                introselect(part, a, l, p0 - 1, k, ka1, k.split(p0, p1, upper), maxDepth);
+                ka1 = upper[0];
             }
-            if (ka >= p0) {
-                // No left side
+            if (kb1 <= p1) {
+                // No right side
                 recursionConsumer.accept(maxDepth);
                 return;
             }
-            // Continue on the left side
-            r = p0 - 1;
-            kb1 = kb1 < p0 ? kb1 : k.previousIndex(p0 - 1);
+            // Continue on the right side
+            l = p1 + 1;
+            ka1 = Math.max(ka1, l);
         }
     }
 
@@ -4326,23 +4330,28 @@ final class Partition {
             //                 kb1  |      ka1
             // Search previous/next is bounded at ka1/kb1
             maxDepth--;
-            // Recurse right side if required
-            if (kb1 > p3) {
-                if (ka1 > p3) {
-                    // Entirely on right-side
-                    l = p3 + 1;
-                    continue;
-                }
-                introselect(part, a, p3 + 1, r, k, k.nextIndex(p3 + 1), kb1, maxDepth);
-            }
             // Recurse left side if required
             if (ka1 < p0) {
-                if (kb1 < p0) {
+                if (kb1 <= p1) {
                     // Entirely on left side
                     r = p0 - 1;
+                    kb1 = Math.min(kb1, r);
                     continue;
                 }
-                introselect(part, a, l, p0 - 1, k, ka1, k.previousIndex(p0 - 1), maxDepth);
+                introselect(part, a, l, p0 - 1, k, ka1, k.split(p0, p1, upper), maxDepth);
+                ka1 = upper[0];
+            }
+            // Recurse right side if required
+            if (kb1 > p3) {
+                if (ka1 >= p2) {
+                    // Entirely on right-side
+                    l = p3 + 1;
+                    ka1 = Math.max(ka1, l);
+                    continue;
+                }
+                final int lo = k.split(p2, p3, upper);
+                introselect(part, a, p3 + 1, r, k, upper[0], kb1, maxDepth);
+                kb1 = lo;
             }
             // Check the interval overlaps the middle; and the middle exists.
             //                    p0 p1                p2 p3
@@ -4355,8 +4364,8 @@ final class Partition {
             }
             l = p1 + 1;
             r = p2 - 1;
-            ka1 = ka1 >= l ? ka1 : k.nextIndex(l);
-            kb1 = kb1 <= r ? kb1 : k.previousIndex(r);
+            ka1 = Math.max(ka1, l);
+            kb1 = Math.min(kb1, r);
         }
     }
 
@@ -4658,7 +4667,9 @@ final class Partition {
             select(a, 0, length - 1, IndexIntervals.anyIndex(), ka, kb, maxDepth);
             return;
         }
-        final IndexInterval keys = createIndexInterval(length, k, n);
+        final IndexInterval keys =
+            //createIndexInterval(length, k, n);
+            IndexIntervals.create(k, n);
         if (keys == null) {
             // Full sort recommended
             Arrays.sort(a, 0, length);
@@ -4832,10 +4843,6 @@ final class Partition {
             a[r] = a[great];
             a[great] = p2;
 
-//            // save outer pivot
-//            final int lt = less;
-//            final int gt = great;
-
             // Once partitioned we possibly branch left, middle and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set in each region:
@@ -4843,28 +4850,46 @@ final class Partition {
             // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
             //                kb   |        ka
 
-            // Recurse left side if required
-            if (ka < less) {
-                if (kb < less) {
-                    // Entirely on left side
-                    r = less - 1;
-                    continue;
-                }
-                //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
-                select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
-                ka = index[0];
+            // Before processing the middle check for entirely below or above
+            if (kb <= less) {
+                // Entirely on left side
+                r = less - 1;
+                kb = Math.min(kb, r);
+                continue;
             }
-            // Recurse right side if required
-            if (kb > great) {
-                if (ka > great) {
-                    // Entirely on right-side
-                    l = great + 1;
-                    continue;
-                }
-                //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
-                select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
-                kb = index[0];
+            if (ka >= great) {
+                // Entirely on right-side
+                l = great + 1;
+                ka = Math.max(ka, l);
+                continue;
             }
+
+            // save outer pivots
+            final int lt = less;
+            final int gt = great;
+
+//            // Recurse left side if required
+//            if (ka < less) {
+//                if (kb < less) {
+//                    // Entirely on left side
+//                    r = less - 1;
+//                    continue;
+//                }
+//                //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
+//                select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
+//                ka = index[0];
+//            }
+//            // Recurse right side if required
+//            if (kb > great) {
+//                if (ka > great) {
+//                    // Entirely on right-side
+//                    l = great + 1;
+//                    continue;
+//                }
+//                //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
+//                select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
+//                kb = index[0];
+//            }
 
             // Continue with central region: (less, great)
             // less <= ka && kb <= great : omit overlap check here as it is rare for
@@ -4916,31 +4941,36 @@ final class Partition {
                 great++;
             }
 
-//            // Once partitioned we possibly branch left, middle and right with multiple keys.
-//            // It is possible that the partition has split the keys
-//            // and the recursion proceeds with a reduced set in each region:
-//            //                    less                great
-//            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
-//            //                kb   |        ka
-//
-//            // Recurse left side if required
-//            if (ka < lt) {
-//                if (kb < lt) {
-//                    // Entirely on left side
-//                    r = lt - 1;
-//                    continue;
-//                }
-//                select(a, l, lt - 1, keys, ka, keys.previousIndex(lt - 1), maxDepth);
-//            }
-//            // Recurse right side if required
-//            if (kb > gt) {
-//                if (ka > gt) {
-//                    // Entirely on right-side
-//                    l = gt + 1;
-//                    continue;
-//                }
-//                select(a, gt + 1, r, keys, keys.nextIndex(gt + 1), kb, maxDepth);
-//            }
+            // Once partitioned we possibly branch left, middle and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set in each region:
+            //                    less                great
+            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
+            //                kb   |        ka
+
+            // Recurse left side if required
+            if (ka < lt) {
+                if (kb <= less) {
+                    // Entirely on left side
+                    r = lt - 1;
+                    kb = Math.min(kb, r);
+                    continue;
+                }
+                select(a, l, lt - 1, keys, ka, keys.split(lt, less, index), maxDepth);
+                ka = index[0];
+            }
+            // Recurse right side if required
+            if (kb > gt) {
+                if (ka >= great) {
+                    // Entirely on right-side
+                    l = gt + 1;
+                    ka = Math.max(ka, l);
+                    continue;
+                }
+                final int lo = keys.split(great, gt, index);
+                select(a, gt + 1, r, keys, index[0], kb, maxDepth);
+                kb = lo;
+            }
 
             // Between pivots in (less, great)
             // Check the interval overlaps the middle; and an unsorted middle exists.
@@ -4956,12 +4986,8 @@ final class Partition {
             // when the interval is split. This is only used if the P1 or P2
             // regions contained equal values. It is done here after the central
             // region is known to contain part of the interval.
-            if (ka < l) {
-                ka = keys.nextIndex(l);
-            }
-            if (kb > r) {
-                kb = keys.previousIndex(r);
-            }
+            ka = Math.max(ka, l);
+            kb = Math.min(kb, r);
         }
     }
 
