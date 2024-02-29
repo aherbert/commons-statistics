@@ -777,13 +777,6 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
-    void testSortRangeSBM(double[] values) {
-        assertSort(values,
-            new Partition(SP, 3)::sortRangeSBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testSort"})
     void testSortSBM(double[] values) {
         assertSort(values,
             new Partition(SP, 3)::sortSBM);

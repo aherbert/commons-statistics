@@ -66,8 +66,6 @@ public class MedianPerformance {
     // Second generation partition functions
 
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect. */
-    private static final String RANGE_SBM = "RangeSBM";
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect. */
     private static final String SBM2 = "2SBM";
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
     private static final String KSBM = "KSBM";
@@ -166,8 +164,6 @@ public class MedianPerformance {
             } else if (name.startsWith(DP5)) {
                 function = withKthSelector(name, DP5)::evaluateDP5;
             // Second generation partition functions
-            } else if (name.startsWith(RANGE_SBM)) {
-                function = withPartition(name, RANGE_SBM)::evaluateRangeSBM;
             } else if (name.startsWith(SBM2)) {
                 function = withPartition(name, SBM2)::evaluateSBM2;
             } else if (name.startsWith(KSBM)) {

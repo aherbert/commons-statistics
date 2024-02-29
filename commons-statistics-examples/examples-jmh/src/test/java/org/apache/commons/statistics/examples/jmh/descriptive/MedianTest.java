@@ -79,12 +79,6 @@ class MedianTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testMedian"})
-    void testMedianRangeSBM(double[] values, double expected) {
-        Assertions.assertEquals(expected, Median.withDefaults().evaluateRangeSBM(values));
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testMedian"})
     void testMedianSBM2(double[] values, double expected) {
         Assertions.assertEquals(expected, Median.withDefaults().evaluateSBM2(values));
     }
