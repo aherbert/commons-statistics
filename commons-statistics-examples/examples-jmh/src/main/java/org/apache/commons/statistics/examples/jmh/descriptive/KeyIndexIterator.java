@@ -127,6 +127,11 @@ final class KeyIndexIterator implements IndexIterator {
             int k = r;
             while (--i >= 0 && keys[i] + 2 >= k) {
                 k = keys[i];
+                // indices <= index are not required
+                if (k <= index) {
+                    left = index + 1;
+                    return r > index;
+                }
             }
             left = k;
         }
