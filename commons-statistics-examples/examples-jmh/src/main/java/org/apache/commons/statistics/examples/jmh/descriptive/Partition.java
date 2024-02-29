@@ -2762,8 +2762,8 @@ final class Partition {
         // and the spread of indices.
 
         // We check for saturation by compressing each index by 16-to-1. Any indices
-        // separated by < 16 will be the same compressed index or adjacent compressed indices;
-        // any indices separated by [16, 32) may be compressed indices separated by 1 or 2.
+        // separated by < 16 will be the same compressed index or adjacent compressed indices.
+        // Any indices separated by [16, 32) may be compressed indices separated by 1 or 2.
         // If there are no gaps in the compressed indices then a full sort is recommended
         // as it is clear that all regions must be sorted. This heuristic avoids switching
         // to a full sort in all but the most obvious cases of saturation; however it may
@@ -3701,35 +3701,37 @@ final class Partition {
             }
 
             // length - 1
-            final int n = right - l;
+            int n = right - l;
 
-            // If interval is close to one end then heapselect
+            // If interval is close to one end then heapselect.
+            // Only heapselect left if there are no further indices in the range.
             // |l|-----|lo|--------|hi|------|right|
             //  ---------d1----------
             //          --------------d2-----------
             if (Math.min(hi - l, right - lo) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                if (hi - l < right - lo) {
+                if (hi - l > right - lo) {
+                    // Right end
+                    partitionMaxK(a, l, right, lo, right - lo);
+                    recursionConsumer.accept(maxDepth);
+                    return;
+                } else if (k.nextAfter(right)) {
                     // Left end
-                    // Here we take a chance that the next indices are far enough away
-                    // that heapselect is worthwhile.
+                    // Only if no further indices in the range.
+                    // If false this branch will continue to be triggered until
+                    // a partition is made to separate the next indices.
                     partitionMinK(a, l, right, hi, hi - l);
                     recursionConsumer.accept(maxDepth);
                     // Advance iterator
-                    // Single API method: nextAndLeftWithin(right)
-                    if (!k.next() || k.left() > right) {
+                    l = hi + 1;
+                    if (!k.positionAfter(hi) || Math.max(k.left(), l) > right) {
                         // No more keys, or keys beyond the current bounds
                         return;
                     }
-                    l = hi + 1;
-                    lo = k.left();
+                    lo = Math.max(k.left(), l);
                     hi = Math.min(right, k.right());
                     // Continue right (allows a second heap select for the right side)
                     continue;
                 }
-                // Right end
-                partitionMaxK(a, l, right, lo, right - lo);
-                recursionConsumer.accept(maxDepth);
-                return;
             }
 
             // If interval is close to both ends then sort
