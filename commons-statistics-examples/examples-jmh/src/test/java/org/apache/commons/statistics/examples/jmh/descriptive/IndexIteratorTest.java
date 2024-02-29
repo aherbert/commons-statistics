@@ -233,7 +233,12 @@ class IndexIteratorTest {
                 while (result && iterator2.right() <= k) {
                     result = iterator2.next();
                 }
-                Assertions.assertEquals(iterator2.left(), iterator.left(), () -> "left after " + k);
+                // Allowed to be clipped to k+1
+                if (iterator2.left() > k) {
+                    Assertions.assertEquals(iterator2.left(), iterator.left(), () -> "left after " + k);
+                } else {
+                    Assertions.assertTrue(iterator.left() <= k + 1, () -> "left after " + k);
+                }
                 Assertions.assertEquals(iterator2.right(), iterator.right(), () -> "right after " + k);
 
                 // Expected
@@ -268,7 +273,12 @@ class IndexIteratorTest {
                         }
                     }
                 }
-                Assertions.assertEquals(l, iterator.left(), "left");
+                // Allowed to be clipped to k+1
+                if (l > k) {
+                    Assertions.assertEquals(l, iterator.left(), "left");
+                } else {
+                    Assertions.assertTrue(iterator.left() <= k + 1, "left");
+                }
                 Assertions.assertEquals(r, iterator.right(), "right");
             }
             Assertions.assertFalse(iterator.positionAfter(last));
