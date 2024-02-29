@@ -4444,10 +4444,13 @@ final class Partition {
     // package-private for benchmarking
     static void select(double[] a, int left, int right,
             IndexInterval keys, int k1, int kn, int maxDepth) {
-        // Inline code using the defaults
+        // Inline code using the defaults.
+        // Changes branching from left/right/middle to left/middle/right.
+        // This allows branch prediction to track that after a split then the next section
+        // should execute (since a split is used when there are indices after a pivot).
 
-        // If partitioning splits the interval then recursion is used for left and/or
-        // right sides and the middle remains within this function. If partitioning does
+        // If partitioning splits the interval then recursion is used for the left-most side(s)
+        // and the right-most side remains within this function. If partitioning does
         // not split the interval then it remains within this function.
         int l = left;
         int r = right;
@@ -4498,10 +4501,9 @@ final class Partition {
             // Note: Here we possibly branch left, middle and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set in each region.
-            //                    p0 p1                p2 p3
+            //                    p0 p1              p2 p3
             // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
             //                 kb  |      ka
-            // Search previous/next is bounded at ka/kb
             maxDepth--;
             // Recurse left side if required
             if (ka < p0) {
@@ -4512,32 +4514,60 @@ final class Partition {
                     continue;
                 }
                 select(a, l, p0 - 1, keys, ka, keys.split(p0, p1, upper), maxDepth);
+                // Here we must process middle and possibly right
                 ka = upper[0];
             }
-            // Recurse right side if required
-            if (kb > p3) {
-                if (ka >= p2) {
-                    // Entirely on right-side
-                    l = p3 + 1;
-                    ka = Math.max(ka, l);
-                    continue;
-                }
-                final int lo = keys.split(p2, p3, upper);
-                select(a, p3 + 1, r, keys, upper[0], kb, maxDepth);
-                kb = lo;
-            }
+            // Recurse middle if required
             // Check the interval overlaps the middle; and the middle exists.
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
             // Eliminate:      ----kb                    ka----
-            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
-                // No middle
+            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
+                // Advance lower bound
+                l = p1 + 1;
+                ka = Math.max(ka, l);
+                if (kb <= p3) {
+                    // Entirely in middle
+                    r = p2 - 1;
+                    kb = Math.min(kb, r);
+                    continue;
+                }
+                select(a, l, p2 - 1, keys, ka, keys.split(p2, p3, upper), maxDepth);
+                // Here we must process right
+                ka = upper[0];
+            }
+            if (kb <= p3) {
+                // No right side
                 return;
             }
-            l = p1 + 1;
-            r = p2 - 1;
+            // Continue right
+            l = p3 + 1;
             ka = Math.max(ka, l);
-            kb = Math.min(kb, r);
+
+//            // Recurse right side if required
+//            if (kb > p3) {
+//                if (ka >= p2) {
+//                    // Entirely on right-side
+//                    l = p3 + 1;
+//                    ka = Math.max(ka, l);
+//                    continue;
+//                }
+//                final int lo = keys.split(p2, p3, upper);
+//                select(a, p3 + 1, r, keys, upper[0], kb, maxDepth);
+//                kb = lo;
+//            }
+//            // Check the interval overlaps the middle; and the middle exists.
+//            //                    p0 p1                p2 p3
+//            // |l|-----------------|P|------------------|P|----|r|
+//            // Eliminate:      ----kb                    ka----
+//            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
+//                // No middle
+//                return;
+//            }
+//            l = p1 + 1;
+//            r = p2 - 1;
+//            ka = Math.max(ka, l);
+//            kb = Math.min(kb, r);
         }
 
         // JVM does not like this massive method
