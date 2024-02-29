@@ -1003,7 +1003,7 @@ final class Partition {
          *
          * <p>Bounds are set so {@code i < k0},  {@code i > k3} and {@code k1 < i < k2} are
          * unsorted. When the range {@code [k0, k3]} contains fully sorted elements the result
-         * is set to {@code k1 = k2 = k3}. This can occur if
+         * is set to {@code k1 = k3; k2 == k0}. This can occur if
          * {@code P1 == P2} or there are zero or 1 value between the pivots
          * {@code P1 < v < P2}. Any sort between {@code k1 + 1} and {@code k2 - 1} must handle
          * a negative length. Any select of an index interval {@code [ka, kb]} that identifies
@@ -4774,18 +4774,18 @@ final class Partition {
         // not split the interval then it remains within this function.
         int l = left;
         int r = right;
-        int ka1 = k1;
-        int kb1 = kn;
+        int ka = k1;
+        int kb = kn;
         final int[] upper = {0, 0, 0};
         while (true) {
-            // It is possible to use heapselect when ka1 and kb1 are close to the same end
-            // |l|-----|ka1|--------|kb1|------|r|
-            //  ---------s2-----------
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
             //          ----------s4-----------
             if (maxDepth == 0 ||
-                Math.min(kb1 - l, r - ka1) < HEAPSELECT_CONSTANT) {
-                // Too much recursion, or ka1 and kb1 are both close to the same end
-                heapSelectRange(a, l, r, ka1, kb1);
+                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
+                // Too much recursion, or ka and kb are both close to the same end
+                heapSelectRange(a, l, r, ka, kb);
                 return;
             }
 
@@ -4798,9 +4798,6 @@ final class Partition {
                 Sorting.sort(a, l, r);
                 return;
             }
-
-            // Pick 2 pivots and partition
-//            int p0 = DUAL_PIVOTING_STRATEGY.pivotIndex(a, l, r, upper);
 
             // Pick 2 pivots from 5 approximately uniform through the range.
             // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
@@ -4815,252 +4812,58 @@ final class Partition {
             Sorting.sort5(a, i1, i2, i3, i4, i5);
 
             // Possible switch to single pivot mode here
-            final int p0 = partitionDP(a, l, r, i2, i4, upper);
+            final int p0 = partitionDP(a, l, r, i2, i4, upper, ka, kb);
             final int p1 = upper[0];
             final int p2 = upper[1];
             final int p3 = upper[2];
-
-//            // JVM optimisation does not like this massive method
-//
-//            // Pick 2 pivots from 5 approximately uniform through the range.
-//            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
-//            // worse.
-//            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
-//            // Ensure the value is above zero to choose different points!
-//            final int step = 1 + (n >>> 3) + (n >>> 6);
-//            final int i3 = l + (n >>> 1);
-//            final int i2 = i3 - step;
-//            final int i1 = i2 - step;
-//            final int i4 = i3 + step;
-//            final int i5 = i4 + step;
-//            Sorting.sort5(a, i1, i2, i3, i4, i5);
-//
-//            // Partition data using pivots P1 and P2 into less-than, greater-than or between.
-//            // Pivot values P1 & P2 are placed at the end. k traverses the unknown region ???
-//            // and values are moved if less-than (lt) or greater-than (gt):
-//            //
-//            // left lt k gt right
-//            // |P1| <P1 | P1 <= & <= P2 | ??? | >P2 |P2|
-//            //
-//            // At the end pivots are swapped back to behind the lt and gt pointers.
-//            //
-//            // | <P1 |P1| P1<= & <= P2 |P2| >P2 |
-//            //
-//            // Note: If P1 == P2 we do not switch to a single pivot method; performance
-//            // remains good with the dual-pivot method.
-//
-//            final double pivot1 = a[i2];
-//            final double pivot2 = a[i4];
-//
-//            // Swap ends to the pivot locations.
-//            a[i2] = a[l];
-//            a[i4] = a[r];
-//            a[l] = pivot1;
-//            a[r] = pivot2;
-//
-//            // pointers
-//            int less = l;
-//            int great = r;
-//
-//            // Fast-forward ascending / descending runs to reduce swaps.
-//            // Cannot overrun as end pivots (p1 <= p2) act as sentinels.
-//            do {
-//                ++less;
-//            } while (a[less] < pivot1);
-//            do {
-//                --great;
-//            } while (a[great] > pivot2);
-//
-//            // a[less - 1] < P1 : a[great + 1] > P2
-//            // unvisited in [less, great]
-//            SORTING: for (int k = less - 1; ++k <= great;) {
-//                final double v = a[k];
-//                if (v < pivot1) {
-//                    // swap(a, k, less++)
-//                    a[k] = a[less];
-//                    a[less] = v;
-//                    less++;
-//                } else if (v > pivot2) {
-//                    // while k < great and a[great] > v2:
-//                    // great--
-//                    while (a[great] > pivot2) {
-//                        if (great-- == k) {
-//                            // Done
-//                            break SORTING;
-//                        }
-//                    }
-//                    // swap(a, k, great--)
-//                    // if a[k] < v1:
-//                    // swap(a, k, less++)
-//                    final double w = a[great];
-//                    a[great] = v;
-//                    great--;
-//                    // delay a[k] = w
-//                    if (w < pivot1) {
-//                        a[k] = a[less];
-//                        a[less] = w;
-//                        less++;
-//                    } else {
-//                        a[k] = w;
-//                    }
-//                }
-//            }
-//
-//            // Change to inclusive ends and move the pivots to correct locations
-//            less--;
-//            great++;
-//            a[l] = a[less];
-//            a[less] = pivot1;
-//            a[r] = a[great];
-//            a[great] = pivot2;
-//
-//          // Once partitioned we possibly branch left, middle and right with multiple keys.
-//          // It is possible that the partition has split the keys
-//          // and the recursion proceeds with a reduced set in each region:
-//          //                    less                great
-//          // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
-//          //                kb   |        ka
-//
-////          // Before processing the middle check for entirely below or above
-////          if (kb <= less) {
-////              // Entirely on left side
-////              r = less - 1;
-////              kb = Math.min(kb, r);
-////              continue;
-////          }
-////          if (ka >= great) {
-////              // Entirely on right-side
-////              l = great + 1;
-////              ka = Math.max(ka, l);
-////              continue;
-////          }
-//
-//            // save outer pivots
-//            final int lt = less;
-//            final int gt = great;
-//
-////          // Recurse left side if required
-////          if (ka < less) {
-////              if (kb < less) {
-////                  // Entirely on left side
-////                  r = less - 1;
-////                  continue;
-////              }
-////              //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
-////              select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
-////              ka = index[0];
-////          }
-////          // Recurse right side if required
-////          if (kb > great) {
-////              if (ka > great) {
-////                  // Entirely on right-side
-////                  l = great + 1;
-////                  continue;
-////              }
-////              //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
-////              select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
-////              kb = index[0];
-////          }
-//
-//            // Continue with central region: (less, great)
-//            // less <= ka && kb <= great : omit overlap check here as it is rare for
-//            // kb <= less || great <= ka so we process possible equal elements first.
-//
-//            // Here we look for equal elements if the centre is more than 5/8 the length.
-//            // Occurs with ~7% frequency on random data and (far) more often
-//            // when duplicates are present. Pivots must be different!
-//            if ((great - less) > (n >>> 1) + (n >>> 3) && pivot1 != pivot2) {
-//
-//                // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
-//                // Since p1 != p2 these act as sentinels to prevent overrun.
-//                do {
-//                    ++less;
-//                } while (a[less] == pivot1);
-//                do {
-//                    --great;
-//                } while (a[great] == pivot2);
-//
-//                // This copies the logic in the sorting loop using == comparisons
-//                EQUAL: for (int k = less - 1; ++k <= great;) {
-//                    final double v = a[k];
-//                    if (v == pivot1) {
-//                        a[k] = a[less];
-//                        a[less] = v;
-//                        less++;
-//                    } else if (v == pivot2) {
-//                        while (a[great] == pivot2) {
-//                            if (great-- == k) {
-//                                break EQUAL;
-//                            }
-//                        }
-//                        final double w = a[great];
-//                        a[great] = v;
-//                        great--;
-//                        if (w == pivot1) {
-//                            a[k] = a[less];
-//                            a[less] = w;
-//                            less++;
-//                        } else {
-//                            a[k] = w;
-//                        }
-//                    }
-//                }
-//
-//                // Change to inclusive ends
-//                less--;
-//                great++;
-//            }
-//
-//            final int p0 = lt;
-//            final int p1 = less;
-//            final int p2 = great;
-//            final int p3 = gt;
 
             // Recursion to max depth
             // Note: Here we possibly branch left, middle and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set in each region.
             //                    p0 p1                p2 p3
-            // |l|--|ka1|--k----k--|P|------k--|kb1|----|P|----|r|
-            //                 kb1  |      ka1
-            // Search previous/next is bounded at ka1/kb1
+            // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
+            //                 kb  |      ka
+            // Search previous/next is bounded at ka/kb
             maxDepth--;
             // Recurse left side if required
-            if (ka1 < p0) {
-                if (kb1 <= p1) {
+            if (ka < p0) {
+                if (kb <= p1) {
                     // Entirely on left side
                     r = p0 - 1;
-                    kb1 = Math.min(kb1, r);
+                    kb = Math.min(kb, r);
                     continue;
                 }
-                select(a, l, p0 - 1, keys, ka1, keys.split(p0, p1, upper), maxDepth);
-                ka1 = upper[0];
+                select(a, l, p0 - 1, keys, ka, keys.split(p0, p1, upper), maxDepth);
+                ka = upper[0];
             }
             // Recurse right side if required
-            if (kb1 > p3) {
-                if (ka1 >= p2) {
+            if (kb > p3) {
+                if (ka >= p2) {
                     // Entirely on right-side
                     l = p3 + 1;
-                    ka1 = Math.max(ka1, l);
+                    ka = Math.max(ka, l);
                     continue;
                 }
                 final int lo = keys.split(p2, p3, upper);
-                select(a, p3 + 1, r, keys, upper[0], kb1, maxDepth);
-                kb1 = lo;
+                select(a, p3 + 1, r, keys, upper[0], kb, maxDepth);
+                kb = lo;
             }
             // Check the interval overlaps the middle; and the middle exists.
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:     ----kb1                    ka1----
-            if (kb1 <= p1 || p2 <= ka1 || p2 - p1 <= 2) {
+            // Eliminate:      ----kb                    ka----
+            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
                 // No middle
                 return;
             }
             l = p1 + 1;
             r = p2 - 1;
-            ka1 = Math.max(ka1, l);
-            kb1 = Math.min(kb1, r);
+            ka = Math.max(ka, l);
+            kb = Math.min(kb, r);
         }
+
+        // JVM does not like this massive method
 
 //        // If partitioning splits the interval then recursion is used for left and/or
 //        // right sides and the middle remains within this function. If partitioning does
@@ -6465,12 +6268,8 @@ final class Partition {
             final int lower = partitionDNF3(a, left, right, pivot1, bounds);
             // Set dual pivot range
             bounds[2] = bounds[0];
-            // No unsorted internal region (set k1 = k2 = k3)
-            // Note: It is extra work for the caller to detect that this region can be skipped.
-            //bounds[1] = bounds[0];
-
             // No unsorted internal region (set k1 = k3; k2 = k0)
-            // Note: It is extra work for the caller to detect that this region and this can be skipped.
+            // Note: It is extra work for the caller to detect that this region can be skipped.
             bounds[1] = lower;
             return lower;
         }
@@ -6639,9 +6438,252 @@ final class Partition {
             bounds[0] = less;
             bounds[1] = great;
         } else {
-            // No unsorted internal region (set k1 = k2 = k3)
-            //bounds[0] = bounds[1] = bounds[2];
+            // No unsorted internal region (set k1 = k3; k2 = k0)
+            bounds[0] = bounds[2];
+            bounds[1] = lower;
+        }
 
+        return lower;
+    }
+
+    /**
+     * Partition an array slice around 2 pivots. Partitioning exchanges array elements
+     * such that all elements smaller than pivot are before it and all elements larger
+     * than pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values. This does not respect the
+     * ordering of signed zeros.
+     *
+     * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
+     *
+     * <p>This method assumes {@code a[pivot1] <= a[pivot2]}.
+     * If {@code pivot1 == pivot2} this triggers a switch to a single-pivot method.
+     * It is assumed this indicates that choosing two pivots failed due to many equal
+     * values. In this case the single-pivot method uses a Dutch National Flag algorithm
+     * suitable for many equal values.
+     *
+     * <p>This method returns 4 points describing the pivot ranges of equal values.
+     *
+     * <pre>{@code
+     *         |k0  k1|                |k2  k3|
+     * |   <P  | ==P1 |  <P1 && <P2    | ==P2 |   >P   |
+     * }</pre>
+     *
+     * <ul>
+     * <li>k0: lower pivot1 point
+     * <li>k1: upper pivot1 point (inclusive)
+     * <li>k2: lower pivot2 point
+     * <li>k3: upper pivot2 point (inclusive)
+     * </ul>
+     *
+     * <p>Bounds are set so {@code i < k0},  {@code i > k3} and {@code k1 < i < k2} are
+     * unsorted. When the range {@code [k0, k3]} contains fully sorted elements the result
+     * is set to {@code k1 = k3; k2 == k0}. This can occur if
+     * {@code P1 == P2} or there are zero or 1 value between the pivots
+     * {@code P1 < v < P2}. Any sort between {@code k1 + 1} and {@code k2 - 1} must handle
+     * a negative length. Any select of an index interval {@code [ka, kb]} that identifies
+     * {@code k1 < kb || ka < k2} must also check {@code k2 - k1 > 1}.
+     *
+     * <p>This method is similar to {@link #partitionDP(double[], int, int, int, int, int[])}
+     * with the following changes:
+     * <ul>
+     * <li>The first {@code k1} and last {@code kn} indices of interest are passed. These
+     * are used to determine if the central region should be processed. Benchmarking
+     * fails to show this is noticeable.
+     * </ul>
+     *
+     * @param a Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param bounds Points [k1, k2, k3].
+     * @param pivot1 Pivot1 location.
+     * @param pivot2 Pivot2 location.
+     * @param k1 First key of interest.
+     * @param kn Last key of interest.
+     * @return Lower bound (inclusive) of the pivot range [k0].
+     */
+    static int partitionDP(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds,
+            int k1, int kn) {
+        // Allow caller to choose a single-pivot
+        if (pivot1 == pivot2) {
+            // Switch to a single pivot sort. This is used when there are
+            // estimated to be many equal values so use the fastest equal
+            // value single pivot method.
+            final int lower = partitionDNF3(a, left, right, pivot1, bounds);
+            // Set dual pivot range
+            bounds[2] = bounds[0];
+            // No unsorted internal region (set k1 = k3; k2 = k0)
+            // Note: It is extra work for the caller to detect that this region can be skipped.
+            bounds[1] = lower;
+            return lower;
+        }
+
+        // Dual-pivot quicksort method by Vladimir Yaroslavskiy.
+        //
+        // Partition data using pivots P1 and P2 into less-than, greater-than or between.
+        // Pivot values P1 & P2 are placed at the end. If P1 < P2, P2 acts as a sentinel.
+        // k traverses the unknown region ??? and values moved if less-than (lt) or
+        // greater-than (gt):
+        //
+        // left        lt                k           gt        right
+        // |P1|  <P1   |   P1 <= & <= P2 |    ???    |    >P2   |P2|
+        //
+        // <P1           (left, lt)
+        // P1<= & <= P2  [lt, k)
+        // >P2           (gt, right)
+        //
+        // At the end pivots are swapped back to behind the lt and gt pointers.
+        //
+        // |  <P1        |P1|     P1<= & <= P2    |P2|      >P2    |
+        //
+        // Adapted from Yaroslavskiy
+        // http://codeblab.com/wp-content/uploads/2009/09/DualPivotQuicksort.pdf
+        //
+        // Modified to allow partial sorting (partitioning):
+        // - Allow the caller to supply the pivot indices
+        // - Ignore insertion sort for tiny array (handled by calling code)
+        // - Ignore recursive calls for a full sort (handled by calling code)
+        // - Change to fast-forward over initial ascending / descending runs
+        // - Change to a single-pivot partition method if the pivots are equal
+        // - Change to fast-forward great when v > v2 and either break the sorting
+        //   loop, or move a[great] direct to the correct location.
+        // - Change to remove the 'div' parameter used to control the pivot selection
+        //   using the medians method (div initialises as 3 for 1/3 and 2/3 and increments
+        //   when the central region is too large).
+        // - Identify a large central region using ~5/8 of the length.
+
+        final double v1 = a[pivot1];
+        final double v2 = a[pivot2];
+
+        // Swap ends to the pivot locations.
+        a[pivot1] = a[left];
+        a[pivot2] = a[right];
+        a[left] = v1;
+        a[right] = v2;
+
+        // pointers
+        int less = left;
+        int great = right;
+
+        // Fast-forward ascending / descending runs to reduce swaps.
+        // Cannot overrun as end pivots (v1 <= v2) act as sentinels.
+        do {
+            ++less;
+        } while (a[less] < v1);
+        do {
+            --great;
+        } while (a[great] > v2);
+
+        // a[less - 1] < P1 : a[great + 1] > P2
+        // unvisited in [less, great]
+        SORTING:
+        for (int k = less - 1; ++k <= great;) {
+            final double v = a[k];
+            if (v < v1) {
+                // swap(a, k, less++)
+                a[k] = a[less];
+                a[less] = v;
+                less++;
+            } else if (v > v2) {
+                // while k < great and a[great] > v2:
+                //   great--
+                while (a[great] > v2) {
+                    if (great-- == k) {
+                        // Done
+                        break SORTING;
+                    }
+                }
+                // swap(a, k, great--)
+                // if a[k] < v1:
+                //   swap(a, k, less++)
+                final double w = a[great];
+                a[great] = v;
+                great--;
+                // delay a[k] = w
+                if (w < v1) {
+                    a[k] = a[less];
+                    a[less] = w;
+                    less++;
+                } else {
+                    a[k] = w;
+                }
+            }
+        }
+
+        // Change to inclusive ends : a[less] < P1 : a[great] > P2
+        less--;
+        great++;
+        // Move the pivots to correct locations
+        a[left] = a[less];
+        a[less] = v1;
+        a[right] = a[great];
+        a[great] = v2;
+
+        // Record the pivot locations
+        final int lower = less;
+        bounds[2] = great;
+
+        // equal elements
+        // Original paper: If middle partition is bigger than a threshold
+        // then check for equal elements.
+
+        // Note: This is extra work. When performing partitioning the region of interest
+        // may be entirely above or below the central region and this can be skipped.
+
+        // Here we look for equal elements if the centre is more than 5/8 the length.
+        // 5/8 = 1/2 + 1/8. Pivots must be different and the central region must be
+        // of interest.
+        if ((great - less) > ((right - left) >>> 1) + ((right - left) >>> 3) &&
+            v1 != v2 && kn > less && k1 < great) {
+
+            // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
+            // Since v1 != v2 these act as sentinels to prevent overrun.
+            do {
+                ++less;
+            } while (a[less] == v1);
+            do {
+                --great;
+            } while (a[great] == v2);
+
+            // This copies the logic in the sorting loop using == comparisons
+            EQUAL:
+            for (int k = less - 1; ++k <= great;) {
+                final double v = a[k];
+                if (v == v1) {
+                    a[k] = a[less];
+                    a[less] = v;
+                    less++;
+                } else if (v == v2) {
+                    while (a[great] == v2) {
+                        if (great-- == k) {
+                            // Done
+                            break EQUAL;
+                        }
+                    }
+                    final double w = a[great];
+                    a[great] = v;
+                    great--;
+                    if (w == v1) {
+                        a[k] = a[less];
+                        a[less] = w;
+                        less++;
+                    } else {
+                        a[k] = w;
+                    }
+                }
+            }
+
+            // Change to inclusive ends
+            less--;
+            great++;
+        }
+
+        // Between pivots in (less, great)
+        if (v1 != v2 && less < great - 1) {
+            // Record the pivot end points
+            bounds[0] = less;
+            bounds[1] = great;
+        } else {
             // No unsorted internal region (set k1 = k3; k2 = k0)
             bounds[0] = bounds[2];
             bounds[1] = lower;
