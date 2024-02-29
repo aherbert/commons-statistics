@@ -92,4 +92,21 @@ interface IndexIterator {
         }
         return true;
     }
+
+    /**
+     * Return true if the start of the next block of indices is after the specified {@code index}.
+     * A partition algorithm can use this to decide how to process the current block.
+     *
+     * <p>The default implementation is only true if there is no next index:
+     * <pre>{@code
+     * return right() >= end();
+     * }</pre>
+     *
+     * @param index Index.
+     * @return true if the next {@code left > index}, or there is no next left
+     */
+    // TODO: test this
+    default boolean nextAfter(int index) {
+        return right() >= end();
+    }
 }

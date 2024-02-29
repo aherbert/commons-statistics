@@ -132,4 +132,14 @@ final class KeyIndexIterator implements IndexIterator {
         }
         return r > index;
     }
+
+    @Override
+    public boolean nextAfter(int index) {
+        if (hi < nm1) {
+            // test if the next left is after the index
+            return keys[hi + 1] > index;
+        }
+        // no more indices
+        return true;
+    }
 }

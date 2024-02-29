@@ -94,6 +94,11 @@ final class IndexIterators {
         public boolean positionAfter(int index) {
             return k > index;
         }
+
+        @Override
+        public boolean nextAfter(int index) {
+            return true;
+        }
     }
 
     /**
@@ -137,6 +142,11 @@ final class IndexIterators {
         @Override
         public boolean positionAfter(int index) {
             return r > index;
+        }
+
+        @Override
+        public boolean nextAfter(int index) {
+            return true;
         }
     }
 }
