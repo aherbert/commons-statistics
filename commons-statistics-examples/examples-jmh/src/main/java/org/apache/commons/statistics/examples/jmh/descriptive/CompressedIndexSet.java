@@ -638,7 +638,8 @@ final class CompressedIndexSet implements IndexInterval {
                     } else {
                         r = end();
                     }
-                    l = previousClearBit(index) + 1;
+                    l = index + 1;
+                    //l = previousClearBit(index) + 1;
                 } else {
                     // (index+1) is clear.
                     // Advance to the next [left, right] pair
@@ -653,8 +654,8 @@ final class CompressedIndexSet implements IndexInterval {
                 return true;
             }
             // Advance to end. No next left. Not positioned after the target index.
-            r = end();
-            l = previousClearBit(r) + 1;
+            l = r = end();
+            //l = previousClearBit(r) + 1;
             return false;
         }
 
