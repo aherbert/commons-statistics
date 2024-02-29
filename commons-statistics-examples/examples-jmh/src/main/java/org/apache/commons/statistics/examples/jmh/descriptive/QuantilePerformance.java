@@ -770,7 +770,7 @@ public class QuantilePerformance {
      * Source of a {@link BinaryOperator} for a {@code double[]} and quantiles.
      */
     @State(Scope.Benchmark)
-    public static class DoubleFunctionSource {
+    public static class QuantileFunctionSource {
         /** Name of the source. */
         @Param({
             // Slow
@@ -1989,7 +1989,7 @@ public class QuantilePerformance {
      * @param bh Data sink.
      */
     @Benchmark
-    public void quantiles(DoubleFunctionSource function, DataSource source,
+    public void quantiles(QuantileFunctionSource function, DataSource source,
             QuantileSource quantiles, Blackhole bh) {
         final int size = source.size();
         final double[] p = quantiles.getData();
@@ -2008,7 +2008,7 @@ public class QuantilePerformance {
      * @param bh Data sink.
      */
     @Benchmark
-    public void quantileRange(DoubleFunctionSource function, DataSource source,
+    public void quantileRange(QuantileFunctionSource function, DataSource source,
             QuantileRangeSource quantiles, Blackhole bh) {
         final int size = source.size();
         final double[] p = quantiles.getData();
