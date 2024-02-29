@@ -557,7 +557,7 @@ final class CompressedIndexSet implements IndexInterval {
     /**
      * {@link IndexIterator} implementation.
      *
-     * <p>This iterator will can efficiently iterate over high-density indices
+     * <p>This iterator can efficiently iterate over high-density indices
      * if the compression level is set to create spacing equal to or above the expected
      * separation between indices.
      */
@@ -566,13 +566,21 @@ final class CompressedIndexSet implements IndexInterval {
         private int l;
         /** Iterator right. (r+1) is a clear bit. */
         private int r;
+        /** Next iterator left. Cached for look ahead functionality. */
+        private int nextL;
 
         /**
          * Create an instance.
          */
         Iterator() {
             l = CompressedIndexSet.this.left();
-            r = Math.min(end(), nextClearBit(l) - 1);
+            r = nextClearBit(l) - 1;
+            if (r < end()) {
+                nextL = nextIndex(r + 1);
+            } else {
+                // Entire range is saturated
+                r = end();
+            }
         }
 
         @Override
@@ -593,9 +601,14 @@ final class CompressedIndexSet implements IndexInterval {
         @Override
         public boolean next() {
             if (r < end()) {
-                // Here (r+1) is a clear bit
-                l = nextIndex(r + 1);
-                r = Math.min(end(), nextClearBit(l) - 1);
+                // Reuse the cached next left and advance
+                l = nextL;
+                r = nextClearBit(l) - 1;
+                if (r < end()) {
+                    nextL = nextIndex(r + 1);
+                } else {
+                    r = end();
+                }
                 return true;
             }
             return false;
@@ -604,26 +617,54 @@ final class CompressedIndexSet implements IndexInterval {
         @Override
         public boolean positionAfter(int index) {
             // Even though this can provide random access we only allow advancing
-            if (r <= index) {
-                if (index < end()) {
-                    if (get(index + 1)) {
-                        // (index+1) is set.
-                        // Find [left <= index+1 <= right]
-                        r = Math.min(end(), nextClearBit(index + 1) - 1);
-                        l = previousClearBit(index) + 1;
-                    } else {
-                        // (index+1) is clear.
-                        // Advance to the next [left, right] pair
-                        l = nextIndex(index + 1);
-                        r = Math.min(end(), nextClearBit(l) - 1);
-                    }
-                } else {
-                    // Advance to end
-                    r = end();
-                    l = previousClearBit(r) + 1;
-                }
+            if (r > index) {
+                return true;
             }
-            return r > index;
+            if (index < end()) {
+                // Note: Uses 3 scans as it maintains the next left.
+                // For low density indices scanning for next left will be expensive
+                // and it would be more efficient to only compute next left on demand.
+                // For high density indices the next left will be close to
+                // the new right and the cost is low.
+                // This iterator favours use on high density indices. A variant
+                // iterator could be created for comparison purposes.
+
+                if (get(index + 1)) {
+                    // (index+1) is set.
+                    // Find [left <= index+1 <= right]
+                    r = nextClearBit(index + 1) - 1;
+                    if (r < end()) {
+                        nextL = nextIndex(r + 1);
+                    } else {
+                        r = end();
+                    }
+                    l = previousClearBit(index) + 1;
+                } else {
+                    // (index+1) is clear.
+                    // Advance to the next [left, right] pair
+                    l = nextIndex(index + 1);
+                    r = nextClearBit(l) - 1;
+                    if (r < end()) {
+                        nextL = nextIndex(r + 1);
+                    } else {
+                        r = end();
+                    }
+                }
+                return true;
+            }
+            // Advance to end. No next left. Not positioned after the target index.
+            r = end();
+            l = previousClearBit(r) + 1;
+            return false;
+        }
+
+        @Override
+        public boolean nextAfter(int index) {
+            if (r < end()) {
+                return nextL > index;
+            }
+            // no more indices
+            return true;
         }
     }
 }
