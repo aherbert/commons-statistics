@@ -80,7 +80,7 @@ interface IndexIterator {
      * }
      * return false;
      * }</pre>
-     * 
+     *
      * <p>Implementations may choose to set {@code left = index + 1} if the iterator
      * range spans the {@code index}; all indices before {@code index} are no
      * longer available for iteration.
