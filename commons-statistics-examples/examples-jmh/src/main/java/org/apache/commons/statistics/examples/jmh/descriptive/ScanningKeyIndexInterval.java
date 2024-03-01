@@ -23,11 +23,11 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * <p>The scan is fast when the number of keys is small.
  */
-final class ScanningKeyIndexInterval implements IndexInterval {
+final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
     // Note:
     // Using 4 markers into the data allows this class to return the same
     // performance as using a binary search within the data when n < 1600.
-    // Benchmarked by searching once for next and previous from all points between k.
+    // Benchmarked by searching once for next and previous from median points between k.
 
     /** The ordered keys. */
     private final int[] keys;
@@ -163,5 +163,59 @@ final class ScanningKeyIndexInterval implements IndexInterval {
             ++i;
         } while (keys[i] < k);
         return i;
+    }
+
+    @Override
+    public int start() {
+        return 0;
+    }
+
+    @Override
+    public int end() {
+        return n - 1;
+    }
+
+    @Override
+    public int index(int i) {
+        return keys[i];
+    }
+
+    @Override
+    public int previous(int i, int k) {
+        // index(start) <= k < index(i)
+        int j = i;
+        do {
+            --j;
+        } while (keys[j] > k);
+        return j;
+    }
+
+    @Override
+    public int next(int i, int k) {
+        // index(i) < k <= index(end)
+        int j = i;
+        do {
+            ++j;
+        } while (keys[j] < k);
+        return j;
+    }
+
+    @Override
+    public int split(int lo, int hi, int ka, int kb, int[] upper) {
+        // index(lo) < ka <= kb < index(hi)
+
+        // We could test if ka/kb is above or below the
+        // median (keys[lo] + keys[hi]) >>> 1 to pick the side to search
+
+        int j = hi;
+        do {
+            --j;
+        } while (keys[j] > kb);
+        upper[0] = j + 1;
+        // Find the lower
+        while (keys[j] >= ka) {
+            --j;
+        };
+        return j;
     }
 }

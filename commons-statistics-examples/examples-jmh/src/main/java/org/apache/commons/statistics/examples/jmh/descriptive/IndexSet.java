@@ -41,7 +41,7 @@ import java.util.function.IntConsumer;
  *
  * @since 1.1
  */
-final class IndexSet implements PivotCache, IndexInterval {
+final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
@@ -776,6 +776,8 @@ final class IndexSet implements PivotCache, IndexInterval {
         return nextSetBitOrElse(k, p);
     }
 
+    // IndexInterval
+
     @Override
     public int previousIndex(int k) {
         // Re-implement previousSetBitOrElse without index checks
@@ -834,6 +836,34 @@ final class IndexSet implements PivotCache, IndexInterval {
     // This require searching for previousIndex(k - 1) and nextIndex(k + 1).
     // The only shared code is getLongIndex(x - left). Since input x is 2 apart
     // these will map to a different long with a probability of 1/32.
+
+    // IndexInterval2
+    // This is exactly the same as IndexInterval as the pointers i are the same as the keys k
+
+    @Override
+    public int start() {
+        return left();
+    }
+
+    @Override
+    public int end() {
+        return right();
+    }
+
+    @Override
+    public int index(int i) {
+        return i;
+    }
+
+    @Override
+    public int previous(int i, int k) {
+        return previousIndex(k);
+    }
+
+    @Override
+    public int next(int i, int k) {
+        return nextIndex(k);
+    }
 
     /**
      * Return a {@link ScanningPivotCache} implementation re-using the same internal storage.

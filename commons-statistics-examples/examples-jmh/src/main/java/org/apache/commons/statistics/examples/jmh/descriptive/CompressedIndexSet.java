@@ -60,7 +60,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-final class CompressedIndexSet implements IndexInterval {
+final class CompressedIndexSet implements IndexInterval, IndexInterval2 {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
@@ -440,6 +440,34 @@ final class CompressedIndexSet implements IndexInterval {
             //}
             bits = data[++i];
         }
+    }
+
+    // IndexInterval2
+    // This is exactly the same as IndexInterval as the pointers i are the same as the keys k
+
+    @Override
+    public int start() {
+        return left();
+    }
+
+    @Override
+    public int end() {
+        return right();
+    }
+
+    @Override
+    public int index(int i) {
+        return i;
+    }
+
+    @Override
+    public int previous(int i, int k) {
+        return previousIndex(k);
+    }
+
+    @Override
+    public int next(int i, int k) {
+        return nextIndex(k);
     }
 
     /**

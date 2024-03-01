@@ -38,9 +38,24 @@ final class IndexIntervals {
     /**
      * Returns an interval that covers all indices ({@code [0, MAX_VALUE)}).
      *
+     * <p>When used with a partition algorithm with will cause a full sort
+     * of the range between the bounds {@code [ka, kb]}.
+     *
      * @return the interval
      */
     static IndexInterval anyIndex() {
+        return AnyIndex.INSTANCE;
+    }
+
+    /**
+     * Returns an interval that covers all indices ({@code [0, MAX_VALUE)}).
+     *
+     * <p>When used with a partition algorithm with will cause a full sort
+     * of the range between the bounds {@code [ka, kb]}.
+     *
+     * @return the interval
+     */
+    static IndexInterval2 anyIndex2() {
         return AnyIndex.INSTANCE;
     }
 
@@ -159,7 +174,7 @@ final class IndexIntervals {
     /**
      * {@link IndexInterval} for range {@code [0, MAX_VALUE)}.
      */
-    private static final class AnyIndex implements IndexInterval {
+    private static final class AnyIndex implements IndexInterval, IndexInterval2 {
         /** Singleton instance. */
         static final AnyIndex INSTANCE = new AnyIndex();
 
@@ -185,6 +200,40 @@ final class IndexIntervals {
 
         @Override
         public int split(int ka, int kb, int[] upper) {
+            upper[0] = kb + 1;
+            return ka - 1;
+        }
+
+        // IndexInterval2
+        // This is exactly the same as IndexInterval as the pointers i are the same as the keys k
+
+        @Override
+        public int start() {
+            return 0;
+        }
+
+        @Override
+        public int end() {
+            return Integer.MAX_VALUE - 1;
+        }
+
+        @Override
+        public int index(int i) {
+            return i;
+        }
+
+        @Override
+        public int previous(int i, int k) {
+            return k;
+        }
+
+        @Override
+        public int next(int i, int k) {
+            return k;
+        }
+
+        @Override
+        public int split(int i1, int i2, int ka, int kb, int[] upper) {
             upper[0] = kb + 1;
             return ka - 1;
         }

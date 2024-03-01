@@ -21,7 +21,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * An {@link IndexInterval} backed by an array of ordered keys. The interval is searched using
  * a binary search.
  */
-final class BinarySearchKeyIndexInterval implements IndexInterval {
+final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval2 {
     /** The ordered keys for descending search. */
     private final int[] keys;
     /** The original number of keys - 1. This is more convenient to store for the use cases. */
@@ -97,5 +97,49 @@ final class BinarySearchKeyIndexInterval implements IndexInterval {
             --i;
         } while (keys[i] >= ka);
         return keys[i];
+    }
+
+    @Override
+    public int start() {
+        return 0;
+    }
+
+    @Override
+    public int end() {
+        return nm1;
+    }
+
+    @Override
+    public int index(int i) {
+        return keys[i];
+    }
+
+    @Override
+    public int previous(int i, int k) {
+        // index(start) <= k < index(i)
+        return Partition.searchLessOrEqual(keys, 0, i, k);
+    }
+
+    @Override
+    public int next(int i, int k) {
+        // index(i) < k <= index(end)
+        return Partition.searchGreaterOrEqual(keys, i, nm1, k);
+    }
+
+    @Override
+    public int split(int lo, int hi, int ka, int kb, int[] upper) {
+        // index(lo) < ka <= kb < index(hi)
+
+        // We could test if ka/kb is above or below the
+        // median (keys[lo] + keys[hi]) >>> 1 to pick the side to search
+
+        int i = Partition.searchGreaterOrEqual(keys, lo, hi, kb + 1);
+        upper[0] = i;
+        // Find the lower using a scan since a typical use case has ka == kb
+        // and a scan is faster than a second binary search.
+        do {
+            --i;
+        } while (keys[i] >= ka);
+        return i;
     }
 }
