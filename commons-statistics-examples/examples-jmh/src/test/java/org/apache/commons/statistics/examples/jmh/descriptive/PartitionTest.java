@@ -632,6 +632,21 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionIDPIndexIterator(double[] values, int[] indices) {
+        assertPartition(values, indices,
+            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.INDEX_ITERATOR)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPCompressedIndexIterator(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
+            .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_ITERATOR)
+            .setCompression(1)::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
     }
