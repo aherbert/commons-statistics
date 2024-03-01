@@ -3318,12 +3318,12 @@ final class Partition {
             final int p1 = upper[0];
 
             maxDepth--;
-            if (k > p1) {
-                // The element is in the right partition
-                l = p1 + 1;
-            } else if (k < p0) {
+            if (k < p0) {
                 // The element is in the left partition
                 r = p0 - 1;
+            } else if (k > p1) {
+                // The element is in the right partition
+                l = p1 + 1;
             } else {
                 // The range contains the element we wanted
                 return r;
@@ -3366,26 +3366,27 @@ final class Partition {
         // can remain within this function call.
         int l = left;
         int r = right;
+        int ka1 = ka;
         int kb1 = kb;
         final int[] upper = {0};
         while (true) {
             // length - 1
             final int n = r - l;
 
-            // It is possible to use heapselect when ka and kb1 are close to the ends
-            // |l|-----|ka|--------|kb1|------|r|
+            // It is possible to use heapselect when ka1 and kb1 are close to the ends
+            // |l|-----|ka1|--------|kb1|------|r|
             //  ---s1----
-            //                      -----s3----
-            //  ---------s2----------
+            //                       -----s3----
+            //  ---------s2-----------
             //          ----------s4-----------
-            final int s1 = ka - l;
+            final int s1 = ka1 - l;
             final int s2 = kb1 - l;
             final int s3 = r - kb1;
-            final int s4 = r - ka;
+            final int s4 = r - ka1;
             if (maxDepth == 0 ||
                 Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                // Too much recursion, or ka and kb1 are both close to the ends
-                heapSelect(a, l, r, ka, kb1);
+                // Too much recursion, or ka1 and kb1 are both close to the ends
+                heapSelect(a, l, r, ka1, kb1);
                 return;
             }
 
@@ -3403,25 +3404,27 @@ final class Partition {
 
             // Recursion to max depth
             // Note: Here we possibly branch left and right with multiple keys.
-            // of ka and kb1. It is possible that the partition has split the pair
+            // It is possible that the partition has split the pair
             // and the recursion proceeds with a single point.
             maxDepth--;
-            // Recurse right side if required
-            if (kb1 > p1) {
-                if (ka > p1) {
-                    // Entirely on right side
-                    l = p1 + 1;
+            // Recurse left side if required
+            if (ka1 < p0) {
+                if (kb1 <= p1) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    kb1 = r < kb1 ? ka1 : kb1;
                     continue;
                 }
-                introselect(part, a, p1 + 1, r, kb1, kb1, maxDepth);
+                introselect(part, a, l, p0 - 1, ka1, ka1, maxDepth);
             }
-            if (ka >= p0) {
-                // No left side
+            if (kb1 <= p1) {
+                // No right side
+                recursionConsumer.accept(maxDepth);
                 return;
             }
-            // Continue on the left side
-            r = p0 - 1;
-            kb1 = kb1 < p0 ? kb1 : ka;
+            // Continue on the right side
+            l = p1 + 1;
+            ka1 = ka1 < l ? kb1 : ka1;
         }
     }
 
@@ -3468,6 +3471,7 @@ final class Partition {
         // can remain within this function call.
         int l = left;
         int r = right;
+        int ia1 = ia;
         int ib1 = ib;
         final int[] upper = {0};
         while (true) {
@@ -3476,8 +3480,8 @@ final class Partition {
             // This is the major difference between this implementation
             // and an implementation using an IndexInterval (which does not
             // have a fast way to determine if there are any keys within the range).
-            if (ib1 - ia <= 1) {
-                introselect(part, a, l, r, k[ia], k[ib1], maxDepth);
+            if (ib1 - ia1 <= 1) {
+                introselect(part, a, l, r, k[ia1], k[ib1], maxDepth);
                 return;
             }
 
@@ -3488,7 +3492,7 @@ final class Partition {
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            final int ka = k[ia];
+            int ka = k[ia1];
             final int kb = k[ib1];
             if (maxDepth == 0 ||
                 Math.min(kb - l, r - ka) < ((n >>> heapSelectShift) + heapSelectConstant)) {
@@ -3515,25 +3519,34 @@ final class Partition {
             // and the recursion proceeds with a reduced set on either side.
             //                   p0 p1
             // |l|--|ka|--k----k--|P|------k--|kb|------|r|
-            //       ia       iba  |      ia1  ib1
-            // Search less/greater is bounded at ia/ib1
+            //       ia1       iba  |      ia1  ib1
+            // Search less/greater is bounded at ia1/ib1
             maxDepth--;
-            // Recurse right side if required
-            if (kb > p1) {
-                if (ka > p1) {
-                    // Entirely on right side
-                    l = p1 + 1;
+            // Recurse left side if required
+            if (ka < p0) {
+                if (kb <= p1) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    if (r < kb) {
+                        ib1 = searchLessOrEqual(k, ia1, ib1, r);
+                    }
                     continue;
                 }
-                introselect(part, a, p1 + 1, r, k, searchGreaterOrEqual(k, ia, ib1, p1 + 1), ib1, maxDepth);
+                // Require a split here
+                introselect(part, a, l, p0 - 1, k, ia1, searchLessOrEqual(k, ia1, ib1, p0 - 1), maxDepth);
+                ia1 = searchGreaterOrEqual(k, ia1, ib1, l);
+                ka = k[ia1];
             }
-            if (ka >= p0) {
-                // No left side
+            if (kb <= p1) {
+                // No right side
+                recursionConsumer.accept(maxDepth);
                 return;
             }
-            // Continue on the left side
-            r = p0 - 1;
-            ib1 = kb < p0 ? ib1 : searchLessOrEqual(k, ia, ib1, r);
+            // Continue on the right side
+            l = p1 + 1;
+            if (ka < l) {
+                ia1 = searchGreaterOrEqual(k, ia1, ib1, l);
+            }
         }
     }
 
