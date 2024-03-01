@@ -67,7 +67,7 @@ interface IndexInterval2 {
     /**
      * Returns a pointer to the nearest index that occurs on or before the specified starting index.
      *
-     * <p>If {@code i < start} or {@code i > end} the result is undefined.
+     * <p>Assumes {@code index(start) <= k < index(i)}.
      *
      * @param i Pointer.
      * @param k Index to start checking from (inclusive).
@@ -79,7 +79,7 @@ interface IndexInterval2 {
      * Returns a pointer to the nearest index that occurs on or after the specified starting
      * index.
      *
-     * <p>If {@code i < start} or {@code i > end} the result is undefined.
+     * <p>Assumes {@code index(i) < k <= index(end)}.
      *
      * @param i Pointer.
      * @param k Index to start checking from (inclusive).
@@ -93,39 +93,39 @@ interface IndexInterval2 {
      * pointer to the nearest index that occurs after the specified split index
      * {@code kb}.
      *
-     * <p>Note: Requires {@code index(i1) < ka <= kb < index(i2)}, i.e. there exists a
+     * <p>Requires {@code index(lo) < ka <= kb < index(hi)}, i.e. there exists a
      * valid interval above and below the split indices.
      *
      * <pre>{@code
-     * i1-----------ka-kb----------i2
+     * lo-----------ka-kb----------hi
      *      lower <--|
-     *                  |--> upper
+     *                 |--> upper
      *
-     * lower < ka
-     * upper > kb
+     * index(lower) < ka
+     * index(upper) > kb
      * }</pre>
      *
      * <p>The default implementation uses:
      *
      * <pre>{@code
-     * upper = next(i2, kb + 1);
-     * lower = previous(i1, ka - 1);
+     * upper = next(hi, kb + 1);
+     * lower = previous(lo, ka - 1);
      * }</pre>
      *
      * <p>Implementations may override this method if both pointers can be obtained
      * together.
      *
-     * <p>If {@code i1 < start} or {@code i2 > end} the result is undefined.
+     * <p>If {@code lo < start} or {@code hi > end} the result is undefined.
      *
-     * @param i1 Lower pointer.
-     * @param i2 Upper pointer.
+     * @param lo Lower pointer.
+     * @param hi Upper pointer.
      * @param ka Split index.
      * @param kb Split index.
      * @param upper Upper pointer.
      * @return the lower pointer
      */
-    default int split(int i1, int i2, int ka, int kb, int[] upper) {
-        upper[0] = next(i2, kb + 1);
-        return previous(i1, ka - 1);
+    default int split(int lo, int hi, int ka, int kb, int[] upper) {
+        upper[0] = next(hi, kb + 1);
+        return previous(lo, ka - 1);
     }
 }
