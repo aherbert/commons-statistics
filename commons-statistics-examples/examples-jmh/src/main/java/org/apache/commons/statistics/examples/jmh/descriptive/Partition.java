@@ -3419,7 +3419,6 @@ final class Partition {
             }
             if (kb1 <= p1) {
                 // No right side
-                recursionConsumer.accept(maxDepth);
                 return;
             }
             // Continue on the right side
@@ -4736,7 +4735,9 @@ final class Partition {
             if (ka < p2 && kb > p1 && p2 - p1 > 1) {
                 // Advance lower bound
                 l = p1 + 1;
-                ka = Math.max(ka, l);
+                if (ka < l) {
+                    ka = keys.nextIndex(l);
+                }
                 if (kb <= p3) {
                     // Entirely in middle
                     r = p2 - 1;
