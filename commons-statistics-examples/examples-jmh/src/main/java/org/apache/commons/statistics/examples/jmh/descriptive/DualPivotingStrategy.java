@@ -194,7 +194,7 @@ enum DualPivotingStrategy {
     SORT_5B_SP {
         @Override
         int pivotIndex(double[] data, int left, int right, int[] pivot2) {
-            int pivot1 = SORT_5B.pivotIndex(data, left, right, pivot2);
+            final int pivot1 = SORT_5B.pivotIndex(data, left, right, pivot2);
             if (data[pivot1] == data[pivot2[0]]) {
                 // Here 3 of 5 middle values are the same.
                 // Present single-pivot pivot methods would not

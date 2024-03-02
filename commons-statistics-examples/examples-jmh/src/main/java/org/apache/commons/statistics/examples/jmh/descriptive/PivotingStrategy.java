@@ -166,13 +166,13 @@ enum PivotingStrategy {
             // 1/6 = 5/30 ~ 1/8 + 1/32 + 1/64 : 0.1666 ~ 0.1719
             // Ensure the value is above zero to choose different points!
             // This is safe if len >= 4.
-            int len = right - left;
+            final int len = right - left;
             final int sixth = 1 + (len >>> 3) + (len >>> 5) + (len >>> 6);
-            int p3 = left + (len >>> 1);
-            int p2 = p3 - sixth;
-            int p1 = p2 - sixth;
-            int p4 = p3 + sixth;
-            int p5 = p4 + sixth;
+            final int p3 = left + (len >>> 1);
+            final int p2 = p3 - sixth;
+            final int p1 = p2 - sixth;
+            final int p4 = p3 + sixth;
+            final int p5 = p4 + sixth;
             Sorting.sort5(data, p1, p2, p3, p4, p5);
             return p3;
         }

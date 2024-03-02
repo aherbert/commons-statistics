@@ -693,7 +693,7 @@ class SortingTest {
         final int[] x = values.clone();
         final int[] expected = Arrays.stream(values).limit(n)
             .distinct().sorted().toArray();
-        int unique = fun.sort(x, n);
+        final int unique = fun.sort(x, n);
         Assertions.assertEquals(expected.length, unique, "Incorrect unique length");
         for (int i = 0; i < expected.length; i++) {
             final int index = i;
@@ -738,7 +738,7 @@ class SortingTest {
         // Some random indices with duplicates
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
         for (final int size : new int[] {5, 10, 30}) {
-            int maxIndex = size >>> 1;
+            final int maxIndex = size >>> 1;
             for (int i = 0; i < 5; i++) {
                 builder.add(Arguments.of(rng.ints(size, 0, maxIndex).toArray(), -1));
             }
