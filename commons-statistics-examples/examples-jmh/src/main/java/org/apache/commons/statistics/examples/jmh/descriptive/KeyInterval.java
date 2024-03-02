@@ -18,43 +18,82 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * An {@link IndexInterval} backed by an array of ordered keys. The interval is searched using
- * a linear scan of the data. The scan start point is chosen from reference points within the data.
- *
- * <p>The scan is fast when the number of keys is small.
+ * An {@link Interval} backed by an array of ordered keys.
  */
 final class KeyInterval implements Interval {
-    /** The ordered keys for descending search. */
+    /** The ordered keys. */
     private final int[] keys;
     /** Index of the left key. */
     private int l;
     /** Index of the right key. */
     private int r;
+    /** Left key. Always equal to keys[l]. This is cached here to avoid cache misses
+     * when splitting an interval as the keys may no longer be in cache memory.
+     * This is true for a large keys[] array for the lower side of the split (the
+     * search has ended near the splitting index), and for the upper side of the split
+     * which may be used a long time after the split (since the partition algorithm
+     * uses left-most precedence when processing data). */
+    private int leftKey;
 
     /**
-     * Create an instance with the provided keys.
+     * Create an instance with the provided {@code indices}.
      *
      * @param indices Indices.
      * @param n Number of indices.
      */
-    KeyInterval(int[] indices, int n) {
-        this(indices, 0, n - 1);
+    private KeyInterval(int[] indices, int n) {
+        this(indices, 0, n - 1, indices[0]);
     }
 
     /**
      * @param indices Indices.
-     * @param left Index of left key.
-     * @param right Index of right key.
+     * @param l Index of left key.
+     * @param r Index of right key.
+     * @param leftKey Left key (must be equal to indices[l]).
      */
-    private KeyInterval(int[] indices, int left, int right) {
+    private KeyInterval(int[] indices, int l, int r, int leftKey) {
         keys = indices;
-        l = left;
-        r = right;
+        this.l = l;
+        this.r = r;
+        this.leftKey = leftKey;
+    }
+
+    /**
+     * Initialise an instance with the {@code indices}. The indices are used in place.
+     *
+     * @param indices Indices.
+     * @param n Number of indices.
+     * @return the interval
+     * @throws IllegalArgumentException if the indices are not unique and ordered;
+     * or {@code n <= 0}
+     */
+    static KeyInterval of(int[] indices, int n) {
+        // Check the indices are uniquely ordered
+        if (n <= 0) {
+            throw new IllegalArgumentException("No indices to define the range");
+        }
+        int p = indices[0];
+        for (int i = 0; ++i < n;) {
+            final int c = indices[i];
+            if (c <= p) {
+                throw new IllegalArgumentException("Indices are not unique and ordered");
+            }
+            p = c;
+        }
+        if (indices[0] < 0) {
+            throw new IllegalArgumentException("Unsupported min value: " + indices[0]);
+        }
+        if (indices[n - 1] == Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Unsupported max value: " + Integer.MAX_VALUE);
+        }
+        return new KeyInterval(indices, n);
     }
 
     @Override
     public int left() {
-        return keys[l];
+        // Cache key. Useful when the left is used a long time after a split
+        // and keys may not be in cache memory.
+        return leftKey;
     }
 
     @Override
@@ -70,8 +109,8 @@ final class KeyInterval implements Interval {
         do {
             ++i;
         } while (keys[i] <= k);
-        l = i;
-        return left();
+        setLeft(i);
+        return leftKey;
     }
 
     @Override
@@ -90,19 +129,32 @@ final class KeyInterval implements Interval {
     public Interval split(int ka, int kb) {
         // left < ka <= kb < right
 
-        // We could test if ka/kb is above or below the
-        // median (keys[l] + keys[r]) >>> 1 to pick the side to search
-
         // Update the current left bound, save the old one
         final int lower = l;
+        final int lowerKey = leftKey;
+
+        // Find the new left bound for the upper interval
+        // TODO:
+        // Switch to a linear scan if (r - l) < threshold.
         int i = Partition.searchGreaterOrEqual(keys, l, r, kb + 1);
-        l = i;
+        setLeft(i);
 
         // Find the new right bound for the lower interval using a scan since a
         // typical use case has ka == kb and this is faster than a second binary search.
         do {
             --i;
         } while (keys[i] >= ka);
-        return new KeyInterval(keys, lower, i);
+        return new KeyInterval(keys, lower, i, lowerKey);
+    }
+
+    /**
+     * Sets the left index and update the cache of the left key.
+     *
+     * @param i Left index.
+     */
+    private void setLeft(int i) {
+        l = i;
+        // Cache the key value
+        leftKey = keys[i];
     }
 }

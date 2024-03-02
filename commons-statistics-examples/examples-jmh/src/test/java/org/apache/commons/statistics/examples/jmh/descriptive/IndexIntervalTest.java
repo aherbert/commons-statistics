@@ -17,6 +17,7 @@
 
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
+import java.util.BitSet;
 import java.util.function.BiFunction;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -215,8 +216,11 @@ class IndexIntervalTest {
         builder.accept(new int[] {4, 78, 79, 999});
         builder.accept(new int[] {4, 5, 6, 7, 8});
         for (final int size : new int[] {10, 50, 500}) {
+            final BitSet set = new BitSet(size);
             for (final int n : new int[] {2, 5, 10}) {
-                final int[] a = rng.ints(n, 0, size).distinct().sorted().toArray();
+                set.clear();
+                rng.ints(n, 0, size).forEach(set::set);
+                final int[] a = set.stream().toArray();
                 builder.accept(a.clone());
                 // Force use of index 0 and max index
                 a[0] = 0;
