@@ -942,6 +942,16 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
     }
 
     /**
+     * Return a {@link Interval} implementation to support the range
+     * {@code [left, right]} re-using the same internal storage.
+     *
+     * @return the interval
+     */
+    Interval interval() {
+        return new IndexSetInterval(left, right);
+    }
+
+    /**
      * Check the range is valid.
      *
      * @param left Lower bound (inclusive).
@@ -972,10 +982,10 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
      * <p>Creation of this class typically invalidates the use of the outer class.
      * Creation will zero the underlying storage and the range may be different.
      */
-    class IndexPivotCache implements ScanningPivotCache {
+    private class IndexPivotCache implements ScanningPivotCache {
         /** Left bound of the support. */
         private int left;
-        /** Left bound of the support. */
+        /** Right bound of the support. */
         private final int right;
         /** The upstream pivot closest to the left bound of the support.
          * Provides a lower search bound for the range [left, right]. */
@@ -1114,6 +1124,58 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
                 // fromIndex > right
                 upperPivot = Math.min(fromIndex, upperPivot);
             }
+        }
+    }
+
+    /**
+     * Implementation of the {@link Interval} using the {@link IndexSet}.
+     *
+     * <p>This class is bound to the enclosing {@link IndexSet} instance to provide
+     * the functionality to search indexes.
+     */
+    private class IndexSetInterval implements Interval {
+        /** Left bound of the interval. */
+        private int left;
+        /** Right bound of the interval. */
+        private int right;
+
+        /**
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         */
+        IndexSetInterval(int left, int right) {
+            this.left = left;
+            this.right = right;
+        }
+
+        @Override
+        public int left() {
+            return left;
+        }
+
+        @Override
+        public int right() {
+            return right;
+        }
+
+        @Override
+        public int updateLeft(int k) {
+            // Assume left <= k < right
+            return left = nextIndex(k + 1);
+        }
+
+        @Override
+        public int updateRight(int k) {
+            // Assume left < k <= right
+            return right = previousIndex(k - 1);
+        }
+
+        @Override
+        public Interval split(int ka, int kb) {
+            // Assume left < ka <= kb < right
+            final int lower = left;
+            left = nextIndex(kb + 1);
+            return new IndexSetInterval(lower, previousIndex(ka - 1));
         }
     }
 }

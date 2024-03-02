@@ -229,7 +229,11 @@ final class Partition {
         /** Sort unique keys and process using recursion with a {@link KeyIndexIterator}. */
         INDEX_ITERATOR,
         /** Process in input order using an {@link IndexIterator} of a {@link CompressedIndexSet}. */
-        COMPRESSED_INDEX_ITERATOR;
+        COMPRESSED_INDEX_ITERATOR,
+        /** Process using recursion with an {@link IndexSet}-based {@link Interval}. */
+        INDEX_SET_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link KeyInterval}. */
+        KEY_INTERVAL;
     }
 
     /**
