@@ -49,6 +49,22 @@ class IndexIntervalTest {
     }
 
     @Test
+    void testAnyIndex2() {
+        final IndexInterval2 interval = IndexIntervals.anyIndex2();
+        // Full range of valid indices.
+        // Note Integer.MAX_VALUE is not a valid array index.
+        Assertions.assertEquals(0, interval.start());
+        Assertions.assertEquals(Integer.MAX_VALUE - 1, interval.end());
+        final int[] index = {0};
+        for (final int i : new int[] {0, 1, 2, 42, 678268, Integer.MAX_VALUE - 1}) {
+            Assertions.assertEquals(i, interval.previous(i, i));
+            Assertions.assertEquals(i, interval.next(i, i));
+            Assertions.assertEquals(i - 1, interval.split(-1, Integer.MAX_VALUE, i, i, index));
+            Assertions.assertEquals(i + 1, index[0]);
+        }
+    }
+
+    @Test
     void testScanningKeyIndexIntervalInvalidIndicesThrows() {
         assertInvalidIndicesThrows(ScanningKeyIndexInterval::of);
         // Invalid indices: not in [0, Integer.MAX_VALUE)

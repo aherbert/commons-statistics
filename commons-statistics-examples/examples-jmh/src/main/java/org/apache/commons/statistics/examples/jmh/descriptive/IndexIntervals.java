@@ -60,6 +60,24 @@ final class IndexIntervals {
     }
 
     /**
+     * Returns an interval that covers all indices {@code [left, right]}.
+     * This method will sort the input bound to ensure {@code left <= right}.
+     *
+     * <p>When used with a partition algorithm with will cause a full sort
+     * of the range between the bounds {@code [left, right]}.
+     *
+     * @param left Left bound (inclusive).
+     * @param right Right bound (inclusive).
+     * @return the interval
+     */
+    static Interval interval(int left, int right) {
+        // Sort the bound
+        final int l = left < right ? left : right;
+        final int r = left < right ? right : left;
+        return new RangeInterval(l, r);
+    }
+
+    /**
      * Returns an interval that covers the specified indices {@code k}.
      *
      * @param k Indices.
@@ -236,6 +254,55 @@ final class IndexIntervals {
         public int split(int i1, int i2, int ka, int kb, int[] upper) {
             upper[0] = kb + 1;
             return ka - 1;
+        }
+    }
+
+    /**
+     * {@link Interval} for range {@code [left, right]}.
+     */
+    private static final class RangeInterval implements Interval {
+        /** Left bound of the interval. */
+        private int left;
+        /** Right bound of the interval. */
+        private int right;
+
+        /**
+         * @param left Left bound.
+         * @param right Right bound.
+         */
+        RangeInterval(int left, int right) {
+            this.left = left;
+            this.right = right;
+        }
+
+        @Override
+        public int left() {
+            return left;
+        }
+
+        @Override
+        public int right() {
+            return right;
+        }
+
+        @Override
+        public int updateLeft(int k) {
+            // Assume left <= k < right
+            return left = k + 1;
+        }
+
+        @Override
+        public int updateRight(int k) {
+            // Assume left < k <= right
+            return right = k - 1;
+        }
+
+        @Override
+        public Interval split(int ka, int kb) {
+            // Assume left < ka <= kb < right
+            final int lower = left;
+            left = kb + 1;
+            return new RangeInterval(lower, ka - 1);
         }
     }
 }
