@@ -76,6 +76,11 @@ class QuantilePerformanceTest {
         assertEnumParameter(Partition.KEY_STRATEGY, QuantilePerformance::getKeyStrategy);
     }
 
+    @Test
+    void testGetPairedKeyStrategy() {
+        assertEnumParameter(Partition.PAIRED_KEY_STRATEGY, QuantilePerformance::getPairedKeyStrategy);
+    }
+
     private static void assertIntParameter(int defaultValue, String pattern, ToIntFunction<String[]> fun) {
         final String[] s = {"nothing"};
         Assertions.assertEquals(defaultValue, fun.applyAsInt(s));
