@@ -2163,7 +2163,7 @@ public class QuantilePerformance {
         final int[][] points = source.getPoints();
         // Ensure we have something to consume during the benchmark
         long sum = 0;
-        int[] bound = {0};
+        final int[] bound = {0};
         for (int i = 0; i < indices.length; i++) {
             final int[] x = indices[i];
             final int[] p = points[i];

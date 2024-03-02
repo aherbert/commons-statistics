@@ -52,7 +52,7 @@ final class PivotCaches {
             return new PointPivotCache(k);
         }
         // Remove sign bit
-        int ka = k & Integer.MAX_VALUE;
+        final int ka = k & Integer.MAX_VALUE;
         return new RangePivotCache(ka, ka + 1);
     }
 
