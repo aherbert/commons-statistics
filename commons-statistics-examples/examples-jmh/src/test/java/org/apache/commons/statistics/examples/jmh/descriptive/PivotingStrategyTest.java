@@ -161,7 +161,7 @@ class PivotingStrategyTest {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final double[] a = new double[5];
         // Permutations is 5! = 120
-        int shift = 42;
+        final int shift = 42;
         for (int i = 0; i < 5; i++) {
             a[0] = i + shift;
             for (int j = 0; j < 5; j++) {

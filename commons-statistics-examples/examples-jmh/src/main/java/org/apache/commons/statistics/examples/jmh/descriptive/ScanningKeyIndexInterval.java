@@ -71,7 +71,7 @@ final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
         }
         int p = indices[0];
         for (int i = 0; ++i < n;) {
-            int c = indices[i];
+            final int c = indices[i];
             if (c <= p) {
                 throw new IllegalArgumentException("Indices are not unique and ordered");
             }
@@ -215,7 +215,7 @@ final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
         // Find the lower
         while (keys[j] >= ka) {
             --j;
-        };
+        }
         return j;
     }
 }

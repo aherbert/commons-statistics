@@ -3722,7 +3722,7 @@ final class Partition {
             }
 
             // length - 1
-            int n = right - l;
+            final int n = right - l;
 
             // If interval is close to one end then heapselect.
             // Only heapselect left if there are no further indices in the range.
@@ -4126,7 +4126,7 @@ final class Partition {
         // right sides and the middle remains within this function. If partitioning does
         // not split the interval then it remains within this function.
         int l = left;
-        int r = right;
+        final int r = right;
         int lo = ka;
         int hi = kb;
         final int[] upper = {0, 0, 0};
@@ -4145,7 +4145,7 @@ final class Partition {
             }
 
             // length - 1
-            int n = right - l;
+            final int n = right - l;
 
             // If interval is close to one end then heapselect.
             // Only heapselect left if there are no further indices in the range.

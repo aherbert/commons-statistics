@@ -199,7 +199,7 @@ class MedianTest {
         // TODO - remove this. It is here to check the CM implementation
         final org.apache.commons.math3.stat.descriptive.rank.Median m =
             new org.apache.commons.math3.stat.descriptive.rank.Median();
-        double[] x = new double[50];
+        final double[] x = new double[50];
         Arrays.fill(x, 123.45);
         Assertions.assertEquals(x[0], m.evaluate(x));
     }

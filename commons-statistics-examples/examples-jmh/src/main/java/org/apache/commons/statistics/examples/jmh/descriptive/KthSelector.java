@@ -1067,7 +1067,7 @@ class KthSelector {
 
         // Move the minimum of less-equal or less-than
         int move = Math.min(p - l, j - p);
-        int lower = j - (p - l);
+        final int lower = j - (p - l);
         for (int k = l; move-- > 0; k++) {
             data[k] = data[--j];
             data[j] = v;
@@ -1690,12 +1690,12 @@ class KthSelector {
         // - Change to a single-pivot partition method if the pivots are equal
 
         final int right = end - 1;
-        int len = right - left;
+        final int len = right - left;
 
         // Find pivots:
 
         // Original method: Guess medians using 1/3 and 2/3 of range
-        int third = len / div;
+        final int third = len / div;
         int m1 = left + third;
         int m2 = right - third;
         if (m1 <= left) {
@@ -1718,8 +1718,8 @@ class KthSelector {
         // TODO - benchmark this.
         // Single pivot sort
         if (pivot1 == pivot2) {
-            int lower = partitionSBM(a, left, end, m1, bounds);
-            int upper = bounds[0];
+            final int lower = partitionSBM(a, left, end, m1, bounds);
+            final int upper = bounds[0];
             // Set dual pivot range
             bounds[0] = lower;
             bounds[3] = upper - 1;
@@ -1784,7 +1784,7 @@ class KthSelector {
             }
         }
         // swaps
-        int dist = great - less;
+        final int dist = great - less;
         // Original paper: If middle partition (dist) is less than 13
         // then increase 'div' by 1. This means that the two outer partitions
         // contained most of the data and choosing medians should take
@@ -2072,7 +2072,7 @@ class KthSelector {
         // TODO - comment method
 
         final int right = end - 1;
-        int len = right - left;
+        final int len = right - left;
 
         // Find pivots:
 
@@ -2080,12 +2080,12 @@ class KthSelector {
         // Here we sort 5 points and choose 2 and 4 as the pivots: 1/6, 1/3, 1/2, 2/3, 5/6
         // 1/6 ~ 1/8 + 1/32. Ensure the value is above zero to choose different points!
         // This is safe is len >= 4.
-        int sixth = 1 + (len >>> 3) + (len >>> 5);
-        int p3 = left + (len >>> 1);
-        int p2 = p3 - sixth;
-        int p1 = p2 - sixth;
-        int p4 = p3 + sixth;
-        int p5 = p4 + sixth;
+        final int sixth = 1 + (len >>> 3) + (len >>> 5);
+        final int p3 = left + (len >>> 1);
+        final int p2 = p3 - sixth;
+        final int p1 = p2 - sixth;
+        final int p4 = p3 + sixth;
+        final int p5 = p4 + sixth;
         Sorting.sort5(a, p1, p2, p3, p4, p5);
 
         // For testing
@@ -2101,8 +2101,8 @@ class KthSelector {
         if (pivot1 == pivot2) {
             // pivots == median !
             // Switch to a single pivot sort around the estimated median
-            int lower = partitionSBM(a, left, end, p3, bounds);
-            int upper = bounds[0];
+            final int lower = partitionSBM(a, left, end, p3, bounds);
+            final int upper = bounds[0];
             // Set dual pivot range
             bounds[0] = lower;
             bounds[3] = upper - 1;

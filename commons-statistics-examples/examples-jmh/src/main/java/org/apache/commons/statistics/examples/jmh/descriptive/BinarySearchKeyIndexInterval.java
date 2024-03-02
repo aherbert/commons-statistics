@@ -54,7 +54,7 @@ final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval
         }
         int p = indices[0];
         for (int i = 0; ++i < n;) {
-            int c = indices[i];
+            final int c = indices[i];
             if (c <= p) {
                 throw new IllegalArgumentException("Indices are not unique and ordered");
             }

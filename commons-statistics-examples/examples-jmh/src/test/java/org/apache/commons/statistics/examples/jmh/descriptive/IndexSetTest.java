@@ -214,7 +214,7 @@ class IndexSetTest {
         Assertions.assertArrayEquals(e, a);
 
         int[] original = indices.clone();
-        int len = set.toArray(indices);
+        final int len = set.toArray(indices);
         int[] x = Arrays.copyOf(indices, len);
         Assertions.assertArrayEquals(e, x);
         // Check rest of the array is untouched
@@ -368,7 +368,7 @@ class IndexSetTest {
         final Stream.Builder<int[]> builder = Stream.builder();
         for (int i = 0; i < 64; i++) {
             builder.accept(new int[] {i});
-            for (int j = 0; i < 64; i++) {
+            for (final int j = 0; i < 64; i++) {
                 builder.accept(new int[] {i, j});
             }
         }
