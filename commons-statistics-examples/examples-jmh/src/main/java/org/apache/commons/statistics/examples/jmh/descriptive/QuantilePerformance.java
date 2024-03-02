@@ -39,6 +39,7 @@ import org.apache.commons.rng.sampling.distribution.DiscreteUniformSampler;
 import org.apache.commons.rng.sampling.distribution.SharedStateDiscreteSampler;
 import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -1698,6 +1699,7 @@ public class QuantilePerformance {
         final int heapSelectConstant = getHeapSelectConstant(s);
         final int heapSelectMaskShift = getHeapSelectMaskShift(s);
         final KeyStrategy keyStartegy = getKeyStrategy(s);
+        final PairedKeyStrategy pairedKeyStartegy = getPairedKeyStrategy(s);
         final double recursionMultiple = getRecursionMultiple(s);
         final int recursionConstant = getRecursionConstant(s);
         final int compressionLevel = getCompressionLevel(s);
@@ -1713,6 +1715,7 @@ public class QuantilePerformance {
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(keyStartegy);
+        p.setPairedKeyStrategy(pairedKeyStartegy);
         p.setRecursionMultiple(recursionMultiple);
         p.setRecursionConstant(recursionConstant);
         p.setCompression(compressionLevel);
@@ -1897,26 +1900,56 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the sequential strategy for the recursive partition algorithm.
+     * Gets the multiple key strategy for the recursive partition algorithm.
      *
      * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the sequential strategy
+     * @return the key strategy
      */
     static KeyStrategy getKeyStrategy(String[] name) {
         return getKeyStrategyOrElse(name, Partition.KEY_STRATEGY);
     }
 
     /**
-     * Gets the sequential strategy for the recursive partition algorithm.
+     * Gets the multiple key strategy for the recursive partition algorithm.
      *
      * @param name Algorithm name (updated in-place to remove the parameter).
      * @param defaultValue Default value.
-     * @return the sequential strategy
+     * @return the key strategy
      */
     static KeyStrategy getKeyStrategyOrElse(String[] name, KeyStrategy defaultValue) {
         int len = 0;
         KeyStrategy result = defaultValue;
         for (final KeyStrategy s : KeyStrategy.values()) {
+            if (name[0].contains(s.name()) && s.name().length() > len) {
+                result = s;
+                len = s.name().length();
+            }
+        }
+        name[0] = name[0].replace(result.toString(), "");
+        return result;
+    }
+
+    /**
+     * Gets the 1 or 2 key strategy for the recursive partition algorithm.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @return the paired key strategy
+     */
+    static PairedKeyStrategy getPairedKeyStrategy(String[] name) {
+        return getPairedKeyStrategyOrElse(name, Partition.PAIRED_KEY_STRATEGY);
+    }
+
+    /**
+     * Gets the 1 or 2 key strategy for the recursive partition algorithm.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @param defaultValue Default value.
+     * @return the paired key strategy
+     */
+    static PairedKeyStrategy getPairedKeyStrategyOrElse(String[] name, PairedKeyStrategy defaultValue) {
+        int len = 0;
+        PairedKeyStrategy result = defaultValue;
+        for (final PairedKeyStrategy s : PairedKeyStrategy.values()) {
             if (name[0].contains(s.name()) && s.name().length() > len) {
                 result = s;
                 len = s.name().length();

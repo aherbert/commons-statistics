@@ -129,6 +129,8 @@ final class Partition {
     static final int HEAPSELECT_MASK_SHIFT = 31;
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
+    /** Default 1 or 2 key strategy. */
+    static final PairedKeyStrategy PAIRED_KEY_STRATEGY = PairedKeyStrategy.INDEX_INTERVAL;
     /** Default recursion multiple. */
     static final double RECURSION_MULTIPLE = 2;
     /** Default recursion constant. */
@@ -194,6 +196,8 @@ final class Partition {
 
     /** Setting to indicate strategy for processing of multiple keys. */
     private KeyStrategy keyStrategy = KEY_STRATEGY;
+    /** Setting to indicate strategy for processing of 1 or 2 keys. */
+    private PairedKeyStrategy pairedKeyStrategy = PAIRED_KEY_STRATEGY;
 
     /** Multiplication factor {@code m} applied to the length based recursion factor {@code x}.
      * The recursion is set using {@code m * x + c}. */
@@ -213,9 +217,11 @@ final class Partition {
     enum KeyStrategy {
         /** Sort unique keys, collate ranges and process in ascending order. */
         SEQUENTIAL,
-        /** Process in input order using an {@link IndexSet} to cover the entire range. */
+        /** Process in input order using an {@link IndexSet} to cover the entire range.
+         * Introselect implementations will use an {@link IndexInterval}. */
         INDEX_SET,
-        /** Process in input order using a {@link CompressedIndexSet} to cover the entire range. */
+        /** Process in input order using a {@link CompressedIndexSet} to cover the entire range.
+         * Introselect implementations will use an {@link IndexInterval}. */
         COMPRESSED_INDEX_SET,
         /** Process in input order using a {@link PivotCache} to cover the minimum range. */
         PIVOT_CACHE,
@@ -223,9 +229,9 @@ final class Partition {
          * for each sub-partition. */
         ORDERED_KEYS,
         /** Sort unique keys and process using recursion with a {@link ScanningKeyIndexInterval}. */
-        SCANNING_KEY_INTERVAL,
+        SCANNING_KEY_INDEX_INTERVAL,
         /** Sort unique keys and process using recursion with a {@link BinarySearchKeyIndexInterval}. */
-        SEARCH_KEY_INTERVAL,
+        SEARCH_KEY_INDEX_INTERVAL,
         /** Sort unique keys and process using recursion with a {@link KeyIndexIterator}. */
         INDEX_ITERATOR,
         /** Process in input order using an {@link IndexIterator} of a {@link CompressedIndexSet}. */
@@ -234,6 +240,19 @@ final class Partition {
         INDEX_SET_INTERVAL,
         /** Sort unique keys and process using recursion with a {@link KeyInterval}. */
         KEY_INTERVAL;
+    }
+
+    /**
+     * Define the strategy for processing 1 or 2 keys.
+     */
+    enum PairedKeyStrategy {
+        /** Use a dedicated single key method that returns information about (k+1). */
+        PAIRED_KEYS,
+        /** Use a method that accepts two keys. */
+        TWO_KEYS,
+        /** Use an {@link IndexInterval} covering the keys. This will reuse a multi-key
+         * strategy with keys that are a very small range. */
+        INDEX_INTERVAL;
     }
 
     /**
@@ -1119,6 +1138,17 @@ final class Partition {
      */
     Partition setKeyStrategy(KeyStrategy v) {
         this.keyStrategy = v;
+        return this;
+    }
+
+    /**
+     * Sets the paired key strategy.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setPairedKeyStrategy(PairedKeyStrategy v) {
+        this.pairedKeyStrategy = v;
         return this;
     }
 
@@ -3179,42 +3209,44 @@ final class Partition {
     private void introselect(SPEPartition part, double[] a, int right, int[] k, int n) {
         final int maxDepth = createMaxDepthSinglePivot(right + 1);
         // Handle cases without multiple keys
-
-        // Dedicated method without using an interval.
-        // The n == 2 case can handle keys near opposite ends without
-        // a partition step.
-//        if (n == 1) {
-//            introselect(part, a, 0, right, k[0], k[0], maxDepth);
-//            return;
-//        }
-//        if (n == 2) {
-//            final int ka = Math.min(k[0], k[1]);
-//            final int kb = Math.max(k[0], k[1]);
-//            introselect(part, a, 0, right, ka, kb, maxDepth);
-//            return;
-//        }
-
-//      // Dedicated method for a single key
-//      if (n == 1) {
-//          introselect(part, a, 0, right, k[0], maxDepth);
-//          return;
-//      }
-//      // Special case for partition around adjacent indices (for interpolation)
-//      if (n == 2 && k[0] + 1 == k[1]) {
-//          final int p = introselect(part, a, 0, right, k[0], maxDepth);
-//          if (p > k[1]) {
-//              partitionMinIgnoreZeros(a, k[1], p);
-//          }
-//          return;
-//      }
-
         if (n == 1) {
-            introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
+                // Dedicated method for a single key
+                introselect(part, a, 0, right, k[0], maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
+                // Dedicated method for two keys using the same key
+                introselect(part, a, 0, right, k[0], k[0], maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+                // Reuse the IndexInterval method using the same key
+                introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+            } else {
+                throw new IllegalStateException("Unsupported introselect1: " + pairedKeyStrategy);
+            }
             return;
         }
         // Special case for partition around adjacent indices (for interpolation)
         if (n == 2 && k[0] + 1 == k[1]) {
-            introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
+                // Dedicated method for a single key, returns information about k+1
+                final int p = introselect(part, a, 0, right, k[0], maxDepth);
+                // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
+                // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
+                if (p > k[1]) {
+                    partitionMinIgnoreZeros(a, k[1], p);
+                }
+            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
+                // Dedicated method for two keys
+                // Note: This can handle keys that are not adjacent
+                // e.g. keys near opposite ends without a partition step.
+                final int ka = Math.min(k[0], k[1]);
+                final int kb = Math.max(k[0], k[1]);
+                introselect(part, a, 0, right, ka, kb, maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+                // Reuse the IndexInterval method using a range of two keys
+                introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+            } else {
+                throw new IllegalStateException("Unsupported introselect2: " + pairedKeyStrategy);
+            }
             return;
         }
 
@@ -3233,11 +3265,11 @@ final class Partition {
         if (keyStrategy == KeyStrategy.ORDERED_KEYS) {
             final int unique = Sorting.sortIndices(k, n);
             introselect(part, a, 0, right, k, 0, unique - 1, maxDepth);
-        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INDEX_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INDEX_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
@@ -3247,7 +3279,7 @@ final class Partition {
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.
-            final IndexSet keys = IndexSet.of(k, n);
+            final IndexInterval keys = IndexSet.of(k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
@@ -3276,9 +3308,9 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
-     * <p>Returns the last known pivot location adjacent to {@code k}
-     * If {@code p <= k} the range [p, min{k+2, data.length}) is sorted.
-     * If {@code p > k} then p is a pivot.
+     * <p>Returns information {@code p} on whether {@code k+1} is sorted.
+     * If {@code p <= k} then {@code k+1} is sorted.
+     * If {@code p > k} then {@code p+1} is a pivot.
      *
      * @param part Partition function.
      * @param a Values.
@@ -3286,7 +3318,7 @@ final class Partition {
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
      * @param k Index.
      * @param maxDepth Maximum depth for recursion.
-     * @return the bound index
+     * @return the index {@code p}
      */
     private int introselect(SPEPartition part, double[] a, int left, int right,
         int k, int maxDepth) {
@@ -3304,14 +3336,16 @@ final class Partition {
             final int s1 = k - l;
             final int s3 = r - k;
             if (maxDepth == 0 || Math.min(s1, s3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                // Too much recursion, or k is close the the end
+                // Too much recursion, or k is close to the end
                 heapSelect(a, l, r, k, k);
+                // Last known unsorted value >= k
                 return r;
             }
 
             if (n < minQuickSelectSize) {
                 // Full sort of small data
                 Sorting.sort(a, l, r, l > 0);
+                // Since r+1 is a pivot, then k+1 is sorted
                 return l;
             }
 
@@ -3329,8 +3363,10 @@ final class Partition {
                 // The element is in the right partition
                 l = p1 + 1;
             } else {
-                // The range contains the element we wanted
-                return r;
+                // The range contains the element we wanted.
+                // Signal if k+1 is sorted.
+                // This can be true if the pivot was a range [p0, p1]
+                return k < p1 ? k : r;
             }
         }
     }
@@ -3897,13 +3933,47 @@ final class Partition {
     private void introselect(DPPartition part, double[] a, int right, int[] k, int n) {
         final int maxDepth = createMaxDepthDualPivot(right + 1);
         // Handle cases without multiple keys
+        // TODO - add these implementations and then add them to the tests.
         if (n == 1) {
-            introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+//            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
+//                // Dedicated method for a single key
+//                introselect(part, a, 0, right, k[0], maxDepth);
+//            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
+//                // Dedicated method for two keys using the same key
+//                introselect(part, a, 0, right, k[0], k[0], maxDepth);
+//            } else 
+            if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+                // Reuse the IndexInterval method using the same key
+                introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+            } else {
+                throw new IllegalStateException("Unsupported dual-pivot introselect1: " + pairedKeyStrategy);
+            }
             return;
         }
         // Special case for partition around adjacent indices (for interpolation)
         if (n == 2 && k[0] + 1 == k[1]) {
-            introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+//            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
+//                // Dedicated method for a single key, returns information about k+1
+//                final int p = introselect(part, a, 0, right, k[0], maxDepth);
+//                // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
+//                // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
+//                if (p > k[1]) {
+//                    partitionMinIgnoreZeros(a, k[1], p);
+//                }
+//            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
+//                // Dedicated method for two keys
+//                // Note: This can handle keys that are not adjacent
+//                // e.g. keys near opposite ends without a partition step.
+//                final int ka = Math.min(k[0], k[1]);
+//                final int kb = Math.max(k[0], k[1]);
+//                introselect(part, a, 0, right, ka, kb, maxDepth);
+//            } else
+            if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+                // Reuse the IndexInterval method using a range of two keys
+                introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
+            } else {
+                throw new IllegalStateException("Unsupported dual-pivot introselect2: " + pairedKeyStrategy);
+            }
             return;
         }
 
@@ -3919,11 +3989,11 @@ final class Partition {
         // Note: Sorting to unique keys is an overhead. This can be eliminated
         // by requesting the caller passes sorted keys (or quantiles in order).
 
-        if (keyStrategy == KeyStrategy.SCANNING_KEY_INTERVAL) {
+        if (keyStrategy == KeyStrategy.SCANNING_KEY_INDEX_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INDEX_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
