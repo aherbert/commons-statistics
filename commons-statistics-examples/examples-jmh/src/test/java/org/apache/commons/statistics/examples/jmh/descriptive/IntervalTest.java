@@ -189,7 +189,9 @@ class IntervalTest {
         }
         // Scan for the lower index
         int lo = hi;
-        while (indices[--lo] >= m);
+        do {
+            --lo;
+        } while (indices[lo] >= m);
 
         final int left = interval.left();
         final int right = interval.right();
