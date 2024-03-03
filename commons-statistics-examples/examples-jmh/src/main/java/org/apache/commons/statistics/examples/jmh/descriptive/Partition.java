@@ -139,6 +139,8 @@ final class Partition {
     static final int COMPRESSION_LEVEL = 1;
     /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
     private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
+    /** Message for an unsupported introselect configuration. */
+    private static final String UNSUPPORTED_INTROSELECT = "Unsupported introselect: ";
 
     /** Transformer factory for double data with the behaviour of a JDK sort.
      * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
@@ -3220,7 +3222,7 @@ final class Partition {
                 // Reuse the IndexInterval method using the same key
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
             } else {
-                throw new IllegalStateException("Unsupported introselect1: " + pairedKeyStrategy);
+                throw new IllegalStateException(UNSUPPORTED_INTROSELECT + pairedKeyStrategy);
             }
             return;
         }
@@ -3245,7 +3247,7 @@ final class Partition {
                 // Reuse the IndexInterval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
             } else {
-                throw new IllegalStateException("Unsupported introselect2: " + pairedKeyStrategy);
+                throw new IllegalStateException(UNSUPPORTED_INTROSELECT + pairedKeyStrategy);
             }
             return;
         }
@@ -3289,7 +3291,7 @@ final class Partition {
             final IndexIterator keys = CompressedIndexSet.iterator(compression, k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else {
-            throw new IllegalStateException("Unsupported introselect: " + keyStrategy);
+            throw new IllegalStateException(UNSUPPORTED_INTROSELECT + keyStrategy);
         }
     }
 
@@ -3456,6 +3458,7 @@ final class Partition {
                     continue;
                 }
                 introselect(part, a, l, p0 - 1, ka1, ka1, maxDepth);
+                ka1 = kb1;
             }
             if (kb1 <= p1) {
                 // No right side
@@ -3933,46 +3936,43 @@ final class Partition {
     private void introselect(DPPartition part, double[] a, int right, int[] k, int n) {
         final int maxDepth = createMaxDepthDualPivot(right + 1);
         // Handle cases without multiple keys
-        // TODO - add these implementations and then add them to the tests.
         if (n == 1) {
-//            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
-//                // Dedicated method for a single key
-//                introselect(part, a, 0, right, k[0], maxDepth);
-//            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
-//                // Dedicated method for two keys using the same key
-//                introselect(part, a, 0, right, k[0], k[0], maxDepth);
-//            } else 
-            if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
+                // Dedicated method for a single key
+                introselect(part, a, 0, right, k[0], maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
+                // Dedicated method for two keys using the same key
+                introselect(part, a, 0, right, k[0], k[0], maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
                 // Reuse the IndexInterval method using the same key
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
             } else {
-                throw new IllegalStateException("Unsupported dual-pivot introselect1: " + pairedKeyStrategy);
+                throw new IllegalStateException(UNSUPPORTED_INTROSELECT + pairedKeyStrategy);
             }
             return;
         }
         // Special case for partition around adjacent indices (for interpolation)
         if (n == 2 && k[0] + 1 == k[1]) {
-//            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
-//                // Dedicated method for a single key, returns information about k+1
-//                final int p = introselect(part, a, 0, right, k[0], maxDepth);
-//                // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
-//                // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
-//                if (p > k[1]) {
-//                    partitionMinIgnoreZeros(a, k[1], p);
-//                }
-//            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
-//                // Dedicated method for two keys
-//                // Note: This can handle keys that are not adjacent
-//                // e.g. keys near opposite ends without a partition step.
-//                final int ka = Math.min(k[0], k[1]);
-//                final int kb = Math.max(k[0], k[1]);
-//                introselect(part, a, 0, right, ka, kb, maxDepth);
-//            } else
-            if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+            if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
+                // Dedicated method for a single key, returns information about k+1
+                final int p = introselect(part, a, 0, right, k[0], maxDepth);
+                // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
+                // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
+                if (p > k[1]) {
+                    partitionMinIgnoreZeros(a, k[1], p);
+                }
+            } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
+                // Dedicated method for two keys
+                // Note: This can handle keys that are not adjacent
+                // e.g. keys near opposite ends without a partition step.
+                final int ka = Math.min(k[0], k[1]);
+                final int kb = Math.max(k[0], k[1]);
+                introselect(part, a, 0, right, ka, kb, maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
                 // Reuse the IndexInterval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
             } else {
-                throw new IllegalStateException("Unsupported dual-pivot introselect2: " + pairedKeyStrategy);
+                throw new IllegalStateException(UNSUPPORTED_INTROSELECT + pairedKeyStrategy);
             }
             return;
         }
@@ -3989,7 +3989,11 @@ final class Partition {
         // Note: Sorting to unique keys is an overhead. This can be eliminated
         // by requesting the caller passes sorted keys (or quantiles in order).
 
-        if (keyStrategy == KeyStrategy.SCANNING_KEY_INDEX_INTERVAL) {
+        if (keyStrategy == KeyStrategy.ORDERED_KEYS) {
+            // DP does not offer ORDERED_KEYS implementation but we include the branch
+            // for completeness.
+            throw new IllegalStateException(UNSUPPORTED_INTROSELECT + keyStrategy);
+        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INDEX_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
             final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
@@ -4013,7 +4017,216 @@ final class Partition {
             final IndexIterator keys = CompressedIndexSet.iterator(compression, k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else {
-            throw new IllegalStateException("Unsupported dual-pivot introselect: " + keyStrategy);
+            throw new IllegalStateException(UNSUPPORTED_INTROSELECT + keyStrategy);
+        }
+    }
+
+    /**
+     * Partition the array such that index {@code k} corresponds to its
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * <p>Returns information {@code p} on whether {@code k+1} is sorted.
+     * If {@code p <= k} then {@code k+1} is sorted.
+     * If {@code p > k} then {@code p+1} is a pivot.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Index.
+     * @param maxDepth Maximum depth for recursion.
+     * @return the index {@code p}
+     */
+    private int introselect(DPPartition part, double[] a, int left, int right,
+        int k, int maxDepth) {
+        int l = left;
+        int r = right;
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // length - 1
+            final int n = r - l;
+
+            // It is possible to use heapselect when k is close to the end
+            // |l|-----|k|---------|k|--------|r|
+            //  ---s1----
+            //                      -----s3----
+            final int s1 = k - l;
+            final int s3 = r - k;
+            if (maxDepth == 0 || Math.min(s1, s3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                // Too much recursion, or k is close to the end
+                heapSelect(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            if (n < minQuickSelectSize) {
+                // Full sort of small data
+                Sorting.sort(a, l, r, l > 0);
+                // Since r+1 is a pivot, then k+1 is sorted
+                return l;
+            }
+
+            // Pick 2 pivots and partition
+            int p0 = dualPivotingStrategy.pivotIndex(a, l, r, upper);
+            p0 = part.partition(a, l, r, p0, upper[0], upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            maxDepth--;
+            if (k < p0) {
+                // The element is in the left partition
+                r = p0 - 1;
+                continue;
+            } else if (k > p3) {
+                // The element is in the right partition
+                l = p3 + 1;
+                continue;
+            }
+            // Check the interval overlaps the middle; and the middle exists.
+            //                    p0 p1                p2 p3
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:     ----kb1                    ka1----
+            if (k <= p1 || p2 <= k || p2 - p1 <= 2) {
+                // Signal if k+1 is sorted.
+                // This can be true if the pivots were ranges [p0, p1] or [p2, p3]
+                // This check will match *most* sorted k for the 3 eliminated cases.
+                // It will not identify p2 - p1 <= 2 when k == p1. In this case
+                // k+1 is sorted and a min-select for k+1 is a fast scan up to r.
+                return k != p1 && k < p3 ? k : r;
+            }
+            // Continue in the middle partition
+            l = p1 + 1;
+            r = p2 - 1;
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code ka} and {@code kb} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>Note: Requires {@code ka <= kb}. The use of two indices is to support processing
+     * of pairs of indices {@code (k, k+1)}. However the indices are treated independently
+     * and partitioned by recursion. They may be equal, neighbours or well separated.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka Index.
+     * @param kb Index.
+     * @param maxDepth Maximum depth for recursion.
+     */
+    private void introselect(DPPartition part, double[] a, int left, int right,
+        int ka, int kb, int maxDepth) {
+        // Only one side requires recursion. The other side
+        // can remain within this function call.
+        int l = left;
+        int r = right;
+        int ka1 = ka;
+        int kb1 = kb;
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // length - 1
+            final int n = r - l;
+
+            // It is possible to use heapselect when ka1 and kb1 are close to the ends
+            // |l|-----|ka1|--------|kb1|------|r|
+            //  ---s1----
+            //                       -----s3----
+            //  ---------s2-----------
+            //          ----------s4-----------
+            final int s1 = ka1 - l;
+            final int s2 = kb1 - l;
+            final int s3 = r - kb1;
+            final int s4 = r - ka1;
+            if (maxDepth == 0 ||
+                Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                // Too much recursion, or ka1 and kb1 are both close to the ends
+                heapSelect(a, l, r, ka1, kb1);
+                return;
+            }
+
+            if (n < minQuickSelectSize) {
+                // Full sort of small data
+                Sorting.sort(a, l, r, l > 0);
+                return;
+            }
+
+            // Pick 2 pivots and partition
+            int p0 = dualPivotingStrategy.pivotIndex(a, l, r, upper);
+            p0 = part.partition(a, l, r, p0, upper[0], upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            // Recursion to max depth
+            // Note: Here we possibly branch left and right with multiple keys.
+            // It is possible that the partition has split the pair
+            // and the recursion proceeds with a single point.
+            maxDepth--;
+            // Recurse left side if required
+            if (ka1 < p0) {
+                if (kb1 <= p1) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    kb1 = r < kb1 ? ka1 : kb1;
+                    continue;
+                }
+                introselect(part, a, l, p0 - 1, ka1, ka1, maxDepth);
+                // Here we must process middle and possibly right
+                ka1 = kb1;
+            }
+            // Recurse middle if required
+            // Check the interval overlaps the middle; and the middle exists.
+            //                    p0 p1                p2 p3
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:      ----kb1                    ka1----
+            if (ka1 < p2 && kb1 > p1 && p2 - p1 > 1) {
+                // Advance lower bound
+                l = p1 + 1;
+                ka1 = ka1 < l ? kb1 : ka1;
+                if (kb1 <= p3) {
+                    // Entirely in middle
+                    r = p2 - 1;
+                    kb1 = r < kb1 ? ka1 : kb1;
+                    continue;
+                }
+                introselect(part, a, l, p2 - 1, ka1, ka1, maxDepth);
+                // Here we must process right
+                ka1 = kb1;
+            }
+            if (kb1 <= p3) {
+                // No right side
+                return;
+            }
+            // Continue right
+            l = p3 + 1;
+            ka1 = ka1 < l ? kb1 : ka1;
         }
     }
 

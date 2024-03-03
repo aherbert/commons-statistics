@@ -520,7 +520,7 @@ class PartitionTest {
     }
 
     // Introselect versions use heap select configuration.
-    // We test the different PairedKeyStrategy options alongside KeyStrategy options. 
+    // We test the different PairedKeyStrategy options alongside KeyStrategy options.
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
@@ -536,7 +536,7 @@ class PartitionTest {
     void testPartitionISBMScanningKey(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC)
             .setKeyStrategy(KeyStrategy.SCANNING_KEY_INDEX_INTERVAL)
-            .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
             ::partitionISBM);
     }
 
@@ -545,15 +545,17 @@ class PartitionTest {
     void testPartitionISBMSearchKey(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC)
             .setKeyStrategy(KeyStrategy.SEARCH_KEY_INDEX_INTERVAL)
-            .setPairedKeyStrategy(PairedKeyStrategy.INDEX_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
             ::partitionISBM);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(SP, QS, HS, HC).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionISBM);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
+            .setKeyStrategy(KeyStrategy.INDEX_SET)
+            .setPairedKeyStrategy(PairedKeyStrategy.INDEX_INTERVAL)
+            ::partitionISBM);
     }
 
     @ParameterizedTest
@@ -604,22 +606,28 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPScanningKey(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.SCANNING_KEY_INDEX_INTERVAL)::partitionIDP);
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
+            .setKeyStrategy(KeyStrategy.SCANNING_KEY_INDEX_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            ::partitionIDP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPSearchKey(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.SEARCH_KEY_INDEX_INTERVAL)::partitionIDP);
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
+            .setKeyStrategy(KeyStrategy.SEARCH_KEY_INDEX_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
+            ::partitionIDP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionIDP);
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
+            .setKeyStrategy(KeyStrategy.INDEX_SET)
+            .setPairedKeyStrategy(PairedKeyStrategy.INDEX_INTERVAL)
+            ::partitionIDP);
     }
 
     @ParameterizedTest
