@@ -114,17 +114,41 @@ final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval
         return keys[i];
     }
 
+    // Use case for previous/next is when left/right is within
+    // a partition pivot [p0, p1]. Most likely case is p0 == p1
+    // and a scan is faster.
+
     @Override
     public int previous(int i, int k) {
         // index(start) <= k < index(i)
-        return Partition.searchLessOrEqual(keys, 0, i, k);
+        int j = i;
+        do {
+            --j;
+        } while (keys[j] > k);
+        return j;
     }
 
     @Override
     public int next(int i, int k) {
         // index(i) < k <= index(end)
-        return Partition.searchGreaterOrEqual(keys, i, nm1, k);
+        int j = i;
+        do {
+            ++j;
+        } while (keys[j] < k);
+        return j;
     }
+
+//    @Override
+//    public int previous(int i, int k) {
+//        // index(start) <= k < index(i)
+//        return Partition.searchLessOrEqual(keys, 0, i, k);
+//    }
+//
+//    @Override
+//    public int next(int i, int k) {
+//        // index(i) < k <= index(end)
+//        return Partition.searchGreaterOrEqual(keys, i, nm1, k);
+//    }
 
     @Override
     public int split(int lo, int hi, int ka, int kb, int[] upper) {
@@ -133,13 +157,13 @@ final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval
         // We could test if ka/kb is above or below the
         // median (keys[lo] + keys[hi]) >>> 1 to pick the side to search
 
-        int i = Partition.searchGreaterOrEqual(keys, lo, hi, kb + 1);
-        upper[0] = i;
+        int j = Partition.searchGreaterOrEqual(keys, lo, hi, kb + 1);
+        upper[0] = j;
         // Find the lower using a scan since a typical use case has ka == kb
         // and a scan is faster than a second binary search.
         do {
-            --i;
-        } while (keys[i] >= ka);
-        return i;
+            --j;
+        } while (keys[j] >= ka);
+        return j;
     }
 }
