@@ -885,7 +885,7 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
      *
      * <p>The cache allows incrementing the {@code left} support using
      * {@link ScanningPivotCache#moveLeft(int)}. Any calls to decrement the {@code left} support
-     * at any time will result in an {@link IllegalStateException}; this prevents reseting
+     * at any time will result in an {@link UnsupportedOperationException}; this prevents reseting
      * to within the original support used to create the cache. If the {@code left} is
      * moved beyond the {@code right} then the move is rejected.
      *
@@ -1026,7 +1026,7 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
                 return false;
             }
             if (newLeft < left) {
-                throw new IllegalStateException(
+                throw new UnsupportedOperationException(
                     String.format("New left is outside current support: %d < %d", newLeft, left));
             }
             // Here [left <= newLeft <= right]
