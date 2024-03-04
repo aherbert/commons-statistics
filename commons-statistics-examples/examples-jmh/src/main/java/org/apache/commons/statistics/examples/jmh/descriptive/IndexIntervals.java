@@ -295,19 +295,19 @@ final class IndexIntervals {
         @Override
         public int updateLeft(int k) {
             // Assume left <= k < right
-            throw new IllegalStateException("updateLeft should not be called");
+            throw new UnsupportedOperationException("updateLeft should not be called");
         }
 
         @Override
         public int updateRight(int k) {
             // Assume left < k <= right
-            throw new IllegalStateException("updateRight should not be called");
+            throw new UnsupportedOperationException("updateRight should not be called");
         }
 
         @Override
         public Interval split(int ka, int kb) {
             // Assume left < ka <= kb < right
-            throw new IllegalStateException("split should not be called");
+            throw new UnsupportedOperationException("split should not be called");
         }
     }
 
