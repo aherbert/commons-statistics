@@ -18,12 +18,12 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * An {@link IndexInterval} backed by an array of ordered keys. The interval is searched using
+ * An {@link SearchableInterval} backed by an array of ordered keys. The interval is searched using
  * a linear scan of the data. The scan start point is chosen from reference points within the data.
  *
  * <p>The scan is fast when the number of keys is small.
  */
-final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
+final class ScanningKeyInterval implements SearchableInterval, SearchableInterval2 {
     // Note:
     // Using 4 markers into the data allows this class to return the same
     // performance as using a binary search within the data when n < 1600.
@@ -46,7 +46,7 @@ final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
      * @param indices Indices.
      * @param n Number of indices.
      */
-    ScanningKeyIndexInterval(int[] indices, int n) {
+    ScanningKeyInterval(int[] indices, int n) {
         keys = indices;
         this.n = n;
         // Divide into quarters for fast-forward
@@ -64,7 +64,7 @@ final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
      * @throws IllegalArgumentException if the indices are not unique and ordered; or not
      * in the range {@code [0, 2^31-1)}; or {@code n <= 0}
      */
-    static ScanningKeyIndexInterval of(int[] indices, int n) {
+    static ScanningKeyInterval of(int[] indices, int n) {
         // Check the indices are uniquely ordered
         if (n <= 0) {
             throw new IllegalArgumentException("No indices to define the range");
@@ -83,7 +83,7 @@ final class ScanningKeyIndexInterval implements IndexInterval, IndexInterval2 {
         if (indices[n - 1] == Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Unsupported max value: " + Integer.MAX_VALUE);
         }
-        return new ScanningKeyIndexInterval(indices, n);
+        return new ScanningKeyInterval(indices, n);
     }
 
     @Override

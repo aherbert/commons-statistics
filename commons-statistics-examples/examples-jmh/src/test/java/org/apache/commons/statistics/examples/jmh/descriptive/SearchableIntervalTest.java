@@ -30,12 +30,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Test for {@link IndexInterval} implementations.
+ * Test for {@link SearchableInterval} implementations.
  */
-class IndexIntervalTest {
+class SearchableIntervalTest {
     @Test
     void testAnyIndex() {
-        final IndexInterval interval = IndexIntervals.anyIndex();
+        final SearchableInterval interval = IndexIntervals.anyIndex();
         // Full range of valid indices.
         // Note Integer.MAX_VALUE is not a valid array index.
         Assertions.assertEquals(0, interval.left());
@@ -51,7 +51,7 @@ class IndexIntervalTest {
 
     @Test
     void testAnyIndex2() {
-        final IndexInterval2 interval = IndexIntervals.anyIndex2();
+        final SearchableInterval2 interval = IndexIntervals.anyIndex2();
         // Full range of valid indices.
         // Note Integer.MAX_VALUE is not a valid array index.
         Assertions.assertEquals(0, interval.start());
@@ -66,21 +66,21 @@ class IndexIntervalTest {
     }
 
     @Test
-    void testScanningKeyIndexIntervalInvalidIndicesThrows() {
-        assertInvalidIndicesThrows(ScanningKeyIndexInterval::of);
+    void testScanningKeySearchableIntervalInvalidIndicesThrows() {
+        assertInvalidIndicesThrows(ScanningKeyInterval::of);
         // Invalid indices: not in [0, Integer.MAX_VALUE)
         Assertions.assertThrows(IllegalArgumentException.class,
-            () -> ScanningKeyIndexInterval.of(new int[] {-1, 2, 3}, 3));
+            () -> ScanningKeyInterval.of(new int[] {-1, 2, 3}, 3));
         Assertions.assertThrows(IllegalArgumentException.class,
-            () -> ScanningKeyIndexInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
+            () -> ScanningKeyInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
     }
 
     @Test
-    void testBinarySearchKeyIndexIntervalInvalidIndicesThrows() {
-        assertInvalidIndicesThrows(BinarySearchKeyIndexInterval::of);
+    void testBinarySearchKeySearchableIntervalInvalidIndicesThrows() {
+        assertInvalidIndicesThrows(BinarySearchKeyInterval::of);
     }
 
-    private static void assertInvalidIndicesThrows(BiFunction<int[], Integer, IndexInterval> constructor) {
+    private static void assertInvalidIndicesThrows(BiFunction<int[], Integer, SearchableInterval> constructor) {
         // Size zero
         Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[0], 0));
         Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[10], 0));
@@ -94,14 +94,14 @@ class IndexIntervalTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPreviousNextIndex"})
-    void testPreviousNextScanningKeyIndexInterval(int[] indices) {
-        assertPreviousNextIndex(ScanningKeyIndexInterval.of(indices, indices.length), indices);
+    void testPreviousNextScanningKeySearchableInterval(int[] indices) {
+        assertPreviousNextIndex(ScanningKeyInterval.of(indices, indices.length), indices);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPreviousNextIndex"})
-    void testPreviousNextBinarySearchKeyIndexInterval(int[] indices) {
-        assertPreviousNextIndex(BinarySearchKeyIndexInterval.of(indices, indices.length), indices);
+    void testPreviousNextBinarySearchKeySearchableInterval(int[] indices) {
+        assertPreviousNextIndex(BinarySearchKeyInterval.of(indices, indices.length), indices);
     }
 
     @ParameterizedTest
@@ -114,7 +114,7 @@ class IndexIntervalTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPreviousNextIndex"})
-    void testPreviousNextIndexInterval(int[] indices) {
+    void testPreviousNextSearchableInterval(int[] indices) {
         assertPreviousNextIndex(IndexIntervals.create(indices, indices.length), indices);
     }
 
@@ -127,7 +127,7 @@ class IndexIntervalTest {
         // The test is adjusted as the compressed index set does not store all indices.
         // So we scan previous and next instead and check we do not miss the index.
         for (final int c : new int[] {1, 2, 3}) {
-            final IndexInterval interval = CompressedIndexSet.of(c, indices, indices.length);
+            final SearchableInterval interval = CompressedIndexSet.of(c, indices, indices.length);
             final int nm1 = indices.length - 1;
             Assertions.assertEquals(indices[0], interval.left());
             Assertions.assertEquals(indices[nm1], interval.right());
@@ -177,7 +177,7 @@ class IndexIntervalTest {
         }
     }
 
-    private static void assertPreviousNextIndex(IndexInterval interval, int[] indices) {
+    private static void assertPreviousNextIndex(SearchableInterval interval, int[] indices) {
         final int nm1 = indices.length - 1;
         Assertions.assertEquals(indices[0], interval.left());
         Assertions.assertEquals(indices[nm1], interval.right());
@@ -232,12 +232,12 @@ class IndexIntervalTest {
     }
 
     @Test
-    void testIndexIntervalCreate() {
-        // The above tests verify the IndexInterval implementations all work.
+    void testSearchableIntervalCreate() {
+        // The above tests verify the SearchableInterval implementations all work.
         // Hit all paths in the key analysis performed to create an interval.
 
         // Small number of keys; no analysis
-        Assertions.assertEquals(ScanningKeyIndexInterval.class,
+        Assertions.assertEquals(ScanningKeyInterval.class,
             IndexIntervals.create(new int[] {1}, 1).getClass());
 
         // >10 keys for key analysis
@@ -246,7 +246,7 @@ class IndexIntervalTest {
         Assertions.assertEquals(IndexSet.class,
             IndexIntervals.create(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 11).getClass());
         // Keys over a huge range
-        Assertions.assertEquals(ScanningKeyIndexInterval.class,
+        Assertions.assertEquals(ScanningKeyInterval.class,
             IndexIntervals.create(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, Integer.MAX_VALUE - 1}, 11).getClass());
 
         // Small number of keys over a moderate range
@@ -255,7 +255,7 @@ class IndexIntervalTest {
             IndexIntervals.create(k.clone(), k.length).getClass());
         // Same keys over a huge range
         k[k.length - 1] = Integer.MAX_VALUE - 1;
-        Assertions.assertEquals(ScanningKeyIndexInterval.class,
+        Assertions.assertEquals(ScanningKeyInterval.class,
             IndexIntervals.create(k, k.length).getClass());
 
         // Moderate number of keys over a moderate range
@@ -264,7 +264,7 @@ class IndexIntervalTest {
             IndexIntervals.create(k.clone(), k.length).getClass());
         // Same keys over a huge range - switch to binary search on the keys
         k[k.length - 1] = Integer.MAX_VALUE - 1;
-        Assertions.assertEquals(BinarySearchKeyIndexInterval.class,
+        Assertions.assertEquals(BinarySearchKeyInterval.class,
             IndexIntervals.create(k, k.length).getClass());
     }
 }

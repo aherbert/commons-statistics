@@ -18,9 +18,9 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * An {@link Interval} backed by an array of ordered keys.
+ * An {@link UpdatingInterval} backed by an array of ordered keys.
  */
-final class KeyInterval implements Interval {
+final class KeyUpdatingInterval implements UpdatingInterval {
     /** Size to use a scan of the keys when splitting instead of binary search. */
     private static final int SCAN_SIZE = 32;
 
@@ -44,7 +44,7 @@ final class KeyInterval implements Interval {
      * @param indices Indices.
      * @param n Number of indices.
      */
-    private KeyInterval(int[] indices, int n) {
+    private KeyUpdatingInterval(int[] indices, int n) {
         this(indices, 0, n - 1, indices[0]);
     }
 
@@ -54,7 +54,7 @@ final class KeyInterval implements Interval {
      * @param r Index of right key.
      * @param leftKey Left key (must be equal to indices[l]).
      */
-    private KeyInterval(int[] indices, int l, int r, int leftKey) {
+    private KeyUpdatingInterval(int[] indices, int l, int r, int leftKey) {
         keys = indices;
         this.l = l;
         this.r = r;
@@ -70,7 +70,7 @@ final class KeyInterval implements Interval {
      * @throws IllegalArgumentException if the indices are not unique and ordered;
      * or {@code n <= 0}
      */
-    static KeyInterval of(int[] indices, int n) {
+    static KeyUpdatingInterval of(int[] indices, int n) {
         // Check the indices are uniquely ordered
         if (n <= 0) {
             throw new IllegalArgumentException("No indices to define the range");
@@ -89,7 +89,7 @@ final class KeyInterval implements Interval {
         if (indices[n - 1] == Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Unsupported max value: " + Integer.MAX_VALUE);
         }
-        return new KeyInterval(indices, n);
+        return new KeyUpdatingInterval(indices, n);
     }
 
     @Override
@@ -129,7 +129,7 @@ final class KeyInterval implements Interval {
     }
 
     @Override
-    public Interval split(int ka, int kb) {
+    public UpdatingInterval split(int ka, int kb) {
         // left < ka <= kb < right
 
         // Update the current left bound, save the old one
@@ -155,7 +155,7 @@ final class KeyInterval implements Interval {
         while (keys[i] >= ka) {
             --i;
         }
-        return new KeyInterval(keys, lower, i, lowerKey);
+        return new KeyUpdatingInterval(keys, lower, i, lowerKey);
     }
 
     /**
