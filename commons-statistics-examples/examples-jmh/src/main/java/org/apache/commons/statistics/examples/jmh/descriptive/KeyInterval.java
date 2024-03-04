@@ -21,6 +21,9 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * An {@link Interval} backed by an array of ordered keys.
  */
 final class KeyInterval implements Interval {
+    /** Size to use a scan of the keys when splitting instead of binary search. */
+    private static final int SCAN_SIZE = 32;
+
     /** The ordered keys. */
     private final int[] keys;
     /** Index of the left key. */
@@ -133,17 +136,25 @@ final class KeyInterval implements Interval {
         final int lower = l;
         final int lowerKey = leftKey;
 
-        // Find the new left bound for the upper interval
-        // TODO:
-        // Switch to a linear scan if (r - l) < threshold.
-        int i = Partition.searchGreaterOrEqual(keys, l, r, kb + 1);
-        setLeft(i);
+        // Find the new left bound for the upper interval.
+        // Switch to a linear scan if (r - l) is small.
+        int i;
+        if (r - l < SCAN_SIZE) {
+            i = r;
+            do {
+                --i;
+            } while (keys[i] > kb);
+        } else {
+            // Binary search
+            i = Partition.searchLessOrEqual(keys, l, r, kb);
+        }
+        setLeft(i + 1);
 
         // Find the new right bound for the lower interval using a scan since a
         // typical use case has ka == kb and this is faster than a second binary search.
-        do {
+        while (keys[i] >= ka) {
             --i;
-        } while (keys[i] >= ka);
+        }
         return new KeyInterval(keys, lower, i, lowerKey);
     }
 
