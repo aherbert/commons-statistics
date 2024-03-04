@@ -49,7 +49,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * <p>When scanning in either direction, if the search index is inside a compressed index
  * the search index is returned.
  *
- * <p>Note: Search for the {@link IndexInterval} interface outside the supported bounds
+ * <p>Note: Search for the {@link SearchableInterval} interface outside the supported bounds
  * {@code [left, right]} is not supported and will result in an {@link IndexOutOfBoundsException}.
  *
  * <p>See the BloomFilter code in Commons Collections for use of long[] data to store
@@ -67,7 +67,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-final class CompressedIndexSet2 implements IndexInterval {
+final class CompressedIndexSet2 implements SearchableInterval {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
@@ -101,7 +101,7 @@ final class CompressedIndexSet2 implements IndexInterval {
      * Create an instance to store indices within the range {@code [left, right]}.
      * The instance is initially empty.
      *
-     * <p>Warning: To use this object as an {@link IndexInterval} the left and right
+     * <p>Warning: To use this object as an {@link SearchableInterval} the left and right
      * indices should be added to the set.
      *
      * @param left Lower bound (inclusive).
@@ -121,7 +121,7 @@ final class CompressedIndexSet2 implements IndexInterval {
      * range required to store the minimum and maximum index at the specified
      * {@code compression} level.
      *
-     * <p>This object can be used as an {@link IndexInterval} as the left and right
+     * <p>This object can be used as an {@link SearchableInterval} as the left and right
      * indices will be set.
      *
      * @param indices Indices.

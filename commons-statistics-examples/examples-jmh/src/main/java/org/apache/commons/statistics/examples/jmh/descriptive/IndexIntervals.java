@@ -17,7 +17,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * Support for creating {@link IndexInterval} implementations.
+ * Support for creating {@link SearchableInterval} implementations.
  *
  * @since 1.1
  */
@@ -25,8 +25,8 @@ final class IndexIntervals {
     /** Size to perform key analysis. This avoids key analysis for a small number of keys. */
     private static final int KEY_ANALYSIS_SIZE = 10;
 
-    /** Size to use a {@link BinarySearchKeyIndexInterval}. Note that the
-     * {@link ScanningKeyIndexInterval} uses points within the range to fast-forward
+    /** Size to use a {@link BinarySearchKeyInterval}. Note that the
+     * {@link ScanningKeyInterval} uses points within the range to fast-forward
      * scanning which improves performanse significantly for a few hundred indices.
      * Performance is similar when indices are in the thousands. Binary search is
      * much faster when there are multiple thousands of indices. */
@@ -43,7 +43,7 @@ final class IndexIntervals {
      *
      * @return the interval
      */
-    static IndexInterval anyIndex() {
+    static SearchableInterval anyIndex() {
         return AnyIndex.INSTANCE;
     }
 
@@ -55,7 +55,7 @@ final class IndexIntervals {
      *
      * @return the interval
      */
-    static IndexInterval2 anyIndex2() {
+    static SearchableInterval2 anyIndex2() {
         return AnyIndex.INSTANCE;
     }
 
@@ -66,7 +66,7 @@ final class IndexIntervals {
      * @param k Index.
      * @return the interval
      */
-    static Interval interval(int k) {
+    static UpdatingInterval interval(int k) {
         return new PointInterval(k);
     }
 
@@ -81,7 +81,7 @@ final class IndexIntervals {
      * @param right Right bound (inclusive).
      * @return the interval
      */
-    static Interval interval(int left, int right) {
+    static UpdatingInterval interval(int left, int right) {
         // Sort the bound
         final int l = left < right ? left : right;
         final int r = left < right ? right : left;
@@ -95,7 +95,7 @@ final class IndexIntervals {
      * @param n Count of indices (must be strictly positive).
      * @return the interval
      */
-    static IndexInterval create(int[] k, int n) {
+    static SearchableInterval create(int[] k, int n) {
         // Note: A typical use case is to have a few indices. Thus the heuristics
         // in this method should be very fast when n is small. Here we skip them
         // completely when the number of keys is tiny.
@@ -174,7 +174,7 @@ final class IndexIntervals {
             // would be used when data size is in the millions.
             if (n > BINARY_SEARCH_SIZE) {
                 final int unique = Sorting.sortIndices2(k, n);
-                return BinarySearchKeyIndexInterval.of(k, unique);
+                return BinarySearchKeyInterval.of(k, unique);
             }
 
             // Fall-though to the ScanningKeyIndexInterval...
@@ -185,7 +185,7 @@ final class IndexIntervals {
         // Use a special method to sort unique indices (detects already sorted indices).
         final int unique = Sorting.sortIndices2(k, n);
 
-        return ScanningKeyIndexInterval.of(k, unique);
+        return ScanningKeyInterval.of(k, unique);
     }
 
     /**
@@ -201,9 +201,9 @@ final class IndexIntervals {
     }
 
     /**
-     * {@link IndexInterval} for range {@code [0, MAX_VALUE)}.
+     * {@link SearchableInterval} for range {@code [0, MAX_VALUE)}.
      */
-    private static final class AnyIndex implements IndexInterval, IndexInterval2 {
+    private static final class AnyIndex implements SearchableInterval, SearchableInterval2 {
         /** Singleton instance. */
         static final AnyIndex INSTANCE = new AnyIndex();
 
@@ -269,11 +269,11 @@ final class IndexIntervals {
     }
 
     /**
-     * {@link Interval} for a single {@code index}.
+     * {@link UpdatingInterval} for a single {@code index}.
      */
-    private static final class PointInterval implements Interval {
+    private static final class PointInterval implements UpdatingInterval {
         /** Left/right bound of the interval. */
-        private int index;
+        private final int index;
 
         /**
          * @param k Left/right bound.
@@ -305,16 +305,16 @@ final class IndexIntervals {
         }
 
         @Override
-        public Interval split(int ka, int kb) {
+        public UpdatingInterval split(int ka, int kb) {
             // Assume left < ka <= kb < right
             throw new UnsupportedOperationException("split should not be called");
         }
     }
 
     /**
-     * {@link Interval} for range {@code [left, right]}.
+     * {@link UpdatingInterval} for range {@code [left, right]}.
      */
-    private static final class RangeInterval implements Interval {
+    private static final class RangeInterval implements UpdatingInterval {
         /** Left bound of the interval. */
         private int left;
         /** Right bound of the interval. */
@@ -354,7 +354,7 @@ final class IndexIntervals {
         }
 
         @Override
-        public Interval split(int ka, int kb) {
+        public UpdatingInterval split(int ka, int kb) {
             // Assume left < ka <= kb < right
             final int lower = left;
             left = kb + 1;

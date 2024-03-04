@@ -18,10 +18,10 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * An {@link IndexInterval} backed by an array of ordered keys. The interval is searched using
+ * An {@link SearchableInterval} backed by an array of ordered keys. The interval is searched using
  * a binary search.
  */
-final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval2 {
+final class BinarySearchKeyInterval implements SearchableInterval, SearchableInterval2 {
     /** The ordered keys for descending search. */
     private final int[] keys;
     /** The original number of keys - 1. This is more convenient to store for the use cases. */
@@ -33,7 +33,7 @@ final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval
      * @param indices Indices.
      * @param n Number of indices.
      */
-    BinarySearchKeyIndexInterval(int[] indices, int n) {
+    BinarySearchKeyInterval(int[] indices, int n) {
         nm1 = n - 1;
         keys = indices;
     }
@@ -47,7 +47,7 @@ final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval
      * @throws IllegalArgumentException if the indices are not unique and ordered;
      * or {@code n <= 0}
      */
-    static BinarySearchKeyIndexInterval of(int[] indices, int n) {
+    static BinarySearchKeyInterval of(int[] indices, int n) {
         // Check the indices are uniquely ordered
         if (n <= 0) {
             throw new IllegalArgumentException("No indices to define the range");
@@ -60,7 +60,7 @@ final class BinarySearchKeyIndexInterval implements IndexInterval, IndexInterval
             }
             p = c;
         }
-        return new BinarySearchKeyIndexInterval(indices, n);
+        return new BinarySearchKeyInterval(indices, n);
     }
 
     @Override
