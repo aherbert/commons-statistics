@@ -215,9 +215,9 @@ class IndexIntervalTest {
         builder.accept(new int[] {4, 78, 999});
         builder.accept(new int[] {4, 78, 79, 999});
         builder.accept(new int[] {4, 5, 6, 7, 8});
-        for (final int size : new int[] {10, 50, 500}) {
+        for (final int size : new int[] {25, 100, 400}) {
             final BitSet set = new BitSet(size);
-            for (final int n : new int[] {2, 5, 10}) {
+            for (final int n : new int[] {2, size / 8, size / 4, size / 2}) {
                 set.clear();
                 rng.ints(n, 0, size).forEach(set::set);
                 final int[] a = set.stream().toArray();
