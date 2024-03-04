@@ -1312,7 +1312,7 @@ public class QuantilePerformance {
     @State(Scope.Benchmark)
     public static class Sort5FunctionSource {
         /** Name of the source. */
-        @Param({"sort5", "sort5b",
+        @Param({"sort5", "sort5a", "sort5b",
             //"sort", "sort5head"
             })
         private String name;
@@ -1341,6 +1341,11 @@ public class QuantilePerformance {
                 function = x -> {
                     final int s = x.length >> 2;
                     Sorting.sort5(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
+                };
+            } else if ("sort5a".equals(name)) {
+                function = x -> {
+                    final int s = x.length >> 2;
+                    Sorting.sort5a(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
                 };
             } else if ("sort5b".equals(name)) {
                 function = x -> {

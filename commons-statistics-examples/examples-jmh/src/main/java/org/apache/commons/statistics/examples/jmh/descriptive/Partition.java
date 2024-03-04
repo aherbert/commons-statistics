@@ -6922,7 +6922,14 @@ final class Partition {
         final int i1 = i2 - step;
         final int i4 = i3 + step;
         final int i5 = i4 + step;
-        Sorting.sort5(a, i1, i2, i3, i4, i5);
+
+        // Sort the 5 points. This includes a detection for already sorted data.
+        if (Sorting.sort5a(a, i1, i2, i3, i4, i5) && Sorting.isAscending(a, left, right)) {
+            // k1 = k3; k2 == k0
+            bounds[0] = bounds[2] = right;
+            bounds[1] = left;
+            return left;
+        }
 
         // Possible switch to single pivot partition here ...
 //        if (pivot1 == pivot2) {
