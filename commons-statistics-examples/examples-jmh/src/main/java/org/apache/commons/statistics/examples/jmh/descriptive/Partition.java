@@ -132,7 +132,7 @@ final class Partition {
     /** Default 1 or 2 key strategy. */
     static final PairedKeyStrategy PAIRED_KEY_STRATEGY = PairedKeyStrategy.SEARCHABLE_INTERVAL;
     /** Default recursion multiple. */
-    static final double RECURSION_MULTIPLE = 2;
+    static final int RECURSION_MULTIPLE = 2;
     /** Default recursion constant. */
     static final int RECURSION_CONSTANT = 0;
     /** Default compression. */
@@ -2780,7 +2780,7 @@ final class Partition {
      * @param n Count of indices (must be strictly positive).
      * @return the index interval (or {@code null} to recommend a full sort)
      */
-    static SearchableInterval createIndexInterval(int size, int[] k, int n) {
+    static SearchableInterval createSearchableInterval(int size, int[] k, int n) {
         if (size < MIN_QUICKSELECT_SIZE) {
             // Sort tiny data
             return null;
@@ -2828,7 +2828,111 @@ final class Partition {
         }
 
         // This occurs when the indices cannot saturate the range.
-        return IndexIntervals.create(k, n);
+        return IndexIntervals.createSearchableInterval(k, n);
+    }
+
+    /**
+     * Creates the {@link UpdatingInterval} for the partition of data of the specified
+     * {@code size}.
+     *
+     * <p>This method assesses the saturation of the indices given the {@code size} and
+     * returns a suitable {@link UpdatingInterval} for partitioning.
+     *
+     * <p>Returns {@code null} if the indices {@code k} saturate the {@code size}; this
+     * occurs when partitioning will require visiting all regions of the data. In this
+     * case a full sort of the data is recommended.
+     *
+     * <p>The heuristics used within this method may not always return the optimal
+     * {@link UpdatingInterval}. The method aims to avoid poor decisions, and recommend a
+     * full sort when it is obvious that there are too many indices to efficiently
+     * partition.
+     *
+     * <p>Partitioning
+     *
+     * <p>The partition algorithm should correctly sort all target indices between the
+     * minimum ({@code k1}) and maximum ({@code kn}) index. During partitioning a sorted
+     * point (@code pivot}) may cut the current interval. The partition algorithm then
+     * requires updating the range of interest on either side of the cut point:
+     *
+     * <pre>{@code
+     *           pivot
+     *             |
+     *        k1--------k2---------k3---- ... ---------kn    initial interval
+     *         <--| find previous
+     *    find next |-->
+     *        k1        k2---------k3---- ... ---------kn    divided intervals
+     * }</pre>
+     *
+     * <p>If a {@code pivot} is found in the interval then the smallest region of data
+     * that was most recently partitioned was the length between the two flanking k. This
+     * involves a full scan (and partitioning) over the data of length (k2 - k1). If the
+     * {@link UpdatingInterval} uses a BitSet-type structure it will require a scan over 1/64
+     * of this length of data to find the next and previous index from a {@code pivot}
+     * point. In practice the interval may be partitioned over a much larger length, e.g.
+     * (kn - k1). Thus the length of time for the partition algorithm is expected to be at
+     * least 64x the length of time for the BitSet-type scan. The disadvantage of the
+     * BitSet-type structure is memory consumption. For a small number of keys a structure
+     * that searches the set of keys is fast enough. However this requires that the
+     * keys are unique and ordered.
+     *
+     * <p>This method will return an ordered interval of indices when {@code n} is small.
+     * When {@code n} is large then a BitSet-type structure is returned. The maximum
+     * memory consumption is approximately {@code size / 8} bytes.
+     *
+     * @param size Length of the data to partition.
+     * @param k Indices.
+     * @param n Count of indices (must be strictly positive).
+     * @return the index interval (or {@code null} to recommend a full sort)
+     */
+    static UpdatingInterval createUpdatingInterval(int size, int[] k, int n) {
+        if (size < MIN_QUICKSELECT_SIZE) {
+            // Sort tiny data
+            return null;
+        }
+
+        // The partition algorithm performs a full sort of data when any sub-length
+        // is below 32. If keys are separated by at most 32 throughout the range
+        // then the data is suitable for a full sort. However benchmarking shows that
+        // partitioning with many indices performs close to the speed of a full sort
+        // using the same quicksort algorithm; even when keys should be saturated,
+        // e.g. 5000 random indices in length 10000. Thus switching to a full sort is
+        // not performed until it is obvious the indices saturate the range.
+        // Note that this method cannot know about any structure in the data.
+        // Data that is structured (runs of continuous ascending/descending
+        // data) will benefit from the additional algorithms within the JDK sort function
+        // such as merge sort. The JDK sort function also supports parallel execution
+        // which can outperform single-threaded partitioning depending on parallelism
+        // and the spread of indices.
+
+        // We check for saturation by compressing each index by 16-to-1. Any indices
+        // separated by < 16 will be the same compressed index or adjacent compressed indices.
+        // Any indices separated by [16, 32) may be compressed indices separated by 1 or 2.
+        // If there are no gaps in the compressed indices then a full sort is recommended
+        // as it is clear that all regions must be sorted. This heuristic avoids switching
+        // to a full sort in all but the most obvious cases of saturation; however it may
+        // choose to partition when a full sort would be faster.
+
+        // Set the limit on the number of indices that have to be sorted.
+        // Subtracting the quickselect size pads the min/max range of indices
+        // at the ends.
+        final int limit = size - MIN_QUICKSELECT_SIZE;
+
+        // Use a shift with a long to avoid overflow (of an excessive number of keys !!!).
+        // It is not expected to partition more than a few hundred keys.
+        if (((long) n << LOG2_HALF_QUICKSELECT_SIZE) > limit) {
+            // Keys could cover the entire data.
+            final IndexSet keys = IndexSet.of(k, n);
+            // Quick check if the range is smaller than the limit.
+            if ((keys.right() - keys.left()) < limit) {
+                return keys.interval();
+            }
+            // Special cardinality count using 16-to-1 compression
+            final int c = keys.cardinality16();
+            return c < limit ? keys.interval() : null;
+        }
+
+        // This occurs when the indices cannot saturate the range.
+        return IndexIntervals.createUpdatingInterval(k, n);
     }
 
     /**
@@ -3731,10 +3835,6 @@ final class Partition {
      * range of indices to partition. The {@link UpdatingInterval} can be narrowed or split as
      * partitioning divides the range.
      *
-     * <pre>{@code
-     * left <= ka <= kb <= right
-     * }</pre>
-     *
      * <p>Uses an introselect variant. The quickselect is provided as an argument; the
      * fall-back on poor convergence of the quickselect is a heapselect.
      *
@@ -4513,10 +4613,6 @@ final class Partition {
      * range of indices to partition. The {@link UpdatingInterval} can be narrowed or split as
      * partitioning divides the range.
      *
-     * <pre>{@code
-     * left <= ka <= kb <= right
-     * }</pre>
-     *
      * <p>Uses an introselect variant. The dual pivot quickselect is provided as an argument;
      * the fall-back on poor convergence of the quickselect is a heapselect.
      *
@@ -4629,39 +4725,6 @@ final class Partition {
             if (ka < l) {
                 ka = k.updateLeft(l);
             }
-
-//            // Recurse right side if required
-//            if (kb > p3) {
-//                if (ka >= p2) {
-//                    // Entirely on right-side
-//                    l = p3 + 1;
-//                    if (ka < l) {
-//                        ka = k.updateLeft(l);
-//                    }
-//                    continue;
-//                }
-//                final Interval i = k.split(p2, p3);
-//                introselect(part, a, p3 + 1, r, k, maxDepth);
-//                k = i;
-//                kb = k.left();
-//            }
-//            // Check the interval overlaps the middle; and the middle exists.
-//            //                    p0 p1                p2 p3
-//            // |l|-----------------|P|------------------|P|----|r|
-//            // Eliminate:      ----kb                    ka----
-//            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
-//                // No middle
-//                recursionConsumer.accept(maxDepth);
-//                return;
-//            }
-//            l = p1 + 1;
-//            r = p2 - 1;
-//            if (ka < l) {
-//                ka = k.updateLeft(l);
-//            }
-//            if (r < kb) {
-//                kb = k.updateRight(r);
-//            }
         }
     }
 
@@ -5173,11 +5236,35 @@ final class Partition {
             return;
         }
         // Ideal dual pivot recursion will take log3(n) steps as data is
-        // divided into length (n/3) at each iteration; add contingency.
-        final int maxDepth = (int) Math.floor(log3(length) * RECURSION_MULTIPLE) + RECURSION_CONSTANT;
+        // divided into length (n/3) at each iteration; add contingency
+        // by doubling this value.
+        int maxDepth = twiceLog3(length);
+
+//        // Handle cases without multiple keys
+//        if (n == 1) {
+//            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
+//            return;
+//        }
+//        // Special case for partition around adjacent indices (for interpolation).
+//        // If the keys are not separated then they are effectively a single key.
+//        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
+//            final int ka = Math.min(k[0], k[1]);
+//            final int kb = Math.max(k[0], k[1]);
+//            select(a, 0, length - 1, IndexIntervals.interval(ka, kb), maxDepth);
+//            return;
+//        }
+//        final UpdatingInterval keys = createUpdatingInterval(length, k, n);
+//
+//        if (keys == null) {
+//            // Full sort recommended
+//            Arrays.sort(a, 0, length);
+//        } else {
+//            select(a, 0, length - 1, keys, maxDepth);
+//        }
+
         // Handle cases without multiple keys
         if (n == 1) {
-            select(a, 0, length - 1, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
+            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
             return;
         }
         // Special case for partition around adjacent indices (for interpolation).
@@ -5185,19 +5272,20 @@ final class Partition {
         if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
             final int ka = Math.min(k[0], k[1]);
             final int kb = Math.max(k[0], k[1]);
-            select(a, 0, length - 1, IndexIntervals.anyIndex(), ka, kb, maxDepth);
+            select(a, 0, length - 1, IndexIntervals.interval(ka, kb), maxDepth);
             return;
         }
-        final SearchableInterval keys =
-            createIndexInterval(length, k, n);
-            //IndexIntervals.create(k, n)
-            //IndexSet.of(k, n);
+
+        // Key analysis ???
+        final UpdatingInterval keys =
+            createUpdatingInterval(length, k, n);
+            //IndexIntervals.createUpdatingInterval(k, n);
 
         if (keys == null) {
             // Full sort recommended
             Arrays.sort(a, 0, length);
         } else {
-            select(a, 0, length - 1, keys, keys.left(), keys.right(), maxDepth);
+            select(a, 0, length - 1, keys, maxDepth);
         }
     }
 
@@ -5211,7 +5299,8 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link SearchableInterval} of {@code keyd} and the
+     *
+     * <p>This function accepts a {@link SearchableInterval} of indices {@code k} and the
      * first index {@code k1} and last index {@code kn} that define the range of indices
      * to partition. The {@link SearchableInterval} is used to search for keys in {@code [k1, kn]}
      * to create {@code [k1, kb]} and {@code [ka, kn]} if partitioning splits the range.
@@ -5231,14 +5320,14 @@ final class Partition {
      * @param a Values.
      * @param left Lower bound of data (inclusive, assumed to be strictly positive).
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param keys Interval of indices to partition (ordered).
+     * @param k Interval of indices to partition (ordered).
      * @param k1 First key.
      * @param kn Last key.
      * @param maxDepth Maximum depth for recursion.
      */
     // package-private for benchmarking
     static void select(double[] a, int left, int right,
-            SearchableInterval keys, int k1, int kn, int maxDepth) {
+        SearchableInterval k, int k1, int kn, int maxDepth) {
         // Inline code using the defaults.
         // Changes branching from left/right/middle to left/middle/right.
         // This allows branch prediction to track that after a split then the next section
@@ -5306,11 +5395,11 @@ final class Partition {
                     // Entirely on left side
                     r = p0 - 1;
                     if (r < kb) {
-                        kb = keys.previousIndex(r);
+                        kb = k.previousIndex(r);
                     }
                     continue;
                 }
-                select(a, l, p0 - 1, keys, ka, keys.split(p0, p1, upper), maxDepth);
+                select(a, l, p0 - 1, k, ka, k.split(p0, p1, upper), maxDepth);
                 // Here we must process middle and possibly right
                 ka = upper[0];
             }
@@ -5323,17 +5412,17 @@ final class Partition {
                 // Advance lower bound
                 l = p1 + 1;
                 if (ka < l) {
-                    ka = keys.nextIndex(l);
+                    ka = k.nextIndex(l);
                 }
                 if (kb <= p3) {
                     // Entirely in middle
                     r = p2 - 1;
                     if (r < kb) {
-                        kb = keys.previousIndex(r);
+                        kb = k.previousIndex(r);
                     }
                     continue;
                 }
-                select(a, l, p2 - 1, keys, ka, keys.split(p2, p3, upper), maxDepth);
+                select(a, l, p2 - 1, k, ka, k.split(p2, p3, upper), maxDepth);
                 // Here we must process right
                 ka = upper[0];
             }
@@ -5344,310 +5433,149 @@ final class Partition {
             // Continue right
             l = p3 + 1;
             if (ka < l) {
-                ka = keys.nextIndex(l);
+                ka = k.nextIndex(l);
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts a {@link UpdatingInterval} of indices {@code k} that define the
+     * range of indices to partition. The {@link UpdatingInterval} can be narrowed or split as
+     * partitioning divides the range.
+     *
+     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
+     * partition method by Vladimir Yaroslavskiy;  the fall-back on poor convergence of
+     * the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Interval of indices to partition (ordered).
+     * @param maxDepth Maximum depth for recursion.
+     */
+    // package-private for benchmarking
+    static void select(double[] a, int left, int right, UpdatingInterval k, int maxDepth) {
+        // Inline code using the defaults.
+        // Changes branching from left/right/middle to left/middle/right.
+        // This allows branch prediction to track that after a split then the next section
+        // should execute (since a split is used when there are indices after a pivot).
+
+        // If partitioning splits the interval then recursion is used for the left-most side(s)
+        // and the right-most side remains within this function. If partitioning does
+        // not split the interval then it remains within this function.
+        int l = left;
+        int r = right;
+        int ka = k.left();
+        int kb = k.right();
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (maxDepth == 0 ||
+                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
+                // Too much recursion, or ka and kb are both close to the same end
+                heapSelectRange(a, l, r, ka, kb);
+                return;
             }
 
-//            // Recurse right side if required
-//            if (kb > p3) {
-//                if (ka >= p2) {
-//                    // Entirely on right-side
-//                    l = p3 + 1;
-//                    ka = Math.max(ka, l);
-//                    continue;
-//                }
-//                final int lo = keys.split(p2, p3, upper);
-//                select(a, p3 + 1, r, keys, upper[0], kb, maxDepth);
-//                kb = lo;
-//            }
-//            // Check the interval overlaps the middle; and the middle exists.
-//            //                    p0 p1                p2 p3
-//            // |l|-----------------|P|------------------|P|----|r|
-//            // Eliminate:      ----kb                    ka----
-//            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
-//                // No middle
-//                return;
-//            }
-//            l = p1 + 1;
-//            r = p2 - 1;
-//            ka = Math.max(ka, l);
-//            kb = Math.min(kb, r);
+            // length - 1
+            final int n = r - l;
+
+            if (n < MIN_QUICKSELECT_SIZE) {
+                // Full sort of small data
+                //Sorting.sort(a, l, r, l > 0);
+                Sorting.sort(a, l, r);
+                return;
+            }
+
+            // Pick 2 pivots from 5 approximately uniform through the range.
+            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
+            // worse. 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+            // Ensure the value is above zero to choose different points!
+            final int step = 1 + (n >>> 3) + (n >>> 6);
+            final int i3 = l + (n >>> 1);
+            final int i2 = i3 - step;
+            final int i1 = i2 - step;
+            final int i4 = i3 + step;
+            final int i5 = i4 + step;
+            Sorting.sort5(a, i1, i2, i3, i4, i5);
+
+            // Possible switch to single pivot mode here
+            final int p0 = partitionDP(a, l, r, i2, i4, upper, ka, kb);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            // Recursion to max depth
+            // Note: Here we possibly branch left, middle and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set in each region.
+            //                    p0 p1              p2 p3
+            // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
+            //                 kb  |      ka
+            maxDepth--;
+            // Recurse left side if required
+            if (ka < p0) {
+                if (kb <= p1) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    if (r < kb) {
+                        kb = k.updateRight(r);
+                    }
+                    continue;
+                }
+                select(a, l, p0 - 1, k.split(p0, p1), maxDepth);
+                // Here we must process middle and possibly right
+                ka = k.left();
+            }
+            // Recurse middle if required
+            // Check the interval overlaps the middle; and the middle exists.
+            //                    p0 p1                p2 p3
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:      ----kb                    ka----
+            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
+                // Advance lower bound
+                l = p1 + 1;
+                if (ka < l) {
+                    ka = k.updateLeft(l);
+                }
+                if (kb <= p3) {
+                    // Entirely in middle
+                    r = p2 - 1;
+                    if (r < kb) {
+                        kb = k.updateRight(r);
+                    }
+                    continue;
+                }
+                select(a, l, p2 - 1, k.split(p2, p3), maxDepth);
+                // Here we must process right
+                ka = k.left();
+            }
+            if (kb <= p3) {
+                // No right side
+                return;
+            }
+            // Continue right
+            l = p3 + 1;
+            if (ka < l) {
+                ka = k.updateLeft(l);
+            }
         }
-
-        // JVM does not like this massive method
-
-//        // If partitioning splits the interval then recursion is used for left and/or
-//        // right sides and the middle remains within this function. If partitioning does
-//        // not split the interval then it remains within this function.
-//        int l = left;
-//        int r = right;
-//        int ka = k1;
-//        int kb = kn;
-//        final int[] index = {0};
-//        while (true) {
-//            // length - 1
-//            final int n = r - l;
-//
-//            // Use heapselect if too much recursion, or interval is close to the same end
-//            // |l|-----|ka|--------|kb|------|r|
-//            // |---------d1-----------|
-//            //         |----------d2-----------|
-//            if (maxDepth == 0 ||
-//                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
-//                //Math.min(kb - l, r - ka) < heapSelectK(n)) {
-//                heapSelectRange(a, l, r, ka, kb);
-//                return;
-//            }
-//
-//            if (n < MIN_QUICKSELECT_SIZE) {
-//                // Full sort of small data
-//                Sorting.sort(a, l, r);
-//                //Sorting.sort(a, l, r, l > 0);
-//                return;
-//            }
-//
-//            maxDepth--;
-//
-//            // Dual-pivot partitioning. This is performed here to allow branching
-//            // left/right immediately before processing the central region.
-//
-//            // Pick 2 pivots from 5 approximately uniform through the range.
-//            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much worse.
-//            // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
-//            // Ensure the value is above zero to choose different points!
-//            final int step = 1 + (n >>> 3) + (n >>> 6);
-//            final int i3 = l + (n >>> 1);
-//            final int i2 = i3 - step;
-//            final int i1 = i2 - step;
-//            final int i4 = i3 + step;
-//            final int i5 = i4 + step;
-//            Sorting.sort5(a, i1, i2, i3, i4, i5);
-//
-//            // Partition data using pivots P1 and P2 into less-than, greater-than or between.
-//            // Pivot values P1 & P2 are placed at the end. k traverses the unknown region ???
-//            // and values are moved if less-than (lt) or greater-than (gt):
-//            //
-//            // left        lt                k           gt        right
-//            // |P1|  <P1   |   P1 <= & <= P2 |    ???    |    >P2   |P2|
-//            //
-//            // At the end pivots are swapped back to behind the lt and gt pointers.
-//            //
-//            // |  <P1        |P1|     P1<= & <= P2    |P2|      >P2    |
-//            //
-//            // Note: If P1 == P2 we do not switch to a single pivot method; performance
-//            // remains good with the dual-pivot method.
-//
-//            final double p1 = a[i2];
-//            final double p2 = a[i4];
-//
-//            // Swap ends to the pivot locations.
-//            a[i2] = a[l];
-//            a[i4] = a[r];
-//            a[l] = p1;
-//            a[r] = p2;
-//
-//            // pointers
-//            int less = l;
-//            int great = r;
-//
-//            // Fast-forward ascending / descending runs to reduce swaps.
-//            // Cannot overrun as end pivots (p1 <= p2) act as sentinels.
-//            do {
-//                ++less;
-//            } while (a[less] < p1);
-//            do {
-//                --great;
-//            } while (a[great] > p2);
-//
-//            // a[less - 1] < P1 : a[great + 1] > P2
-//            // unvisited in [less, great]
-//            SORTING:
-//            for (int k = less - 1; ++k <= great;) {
-//                final double v = a[k];
-//                if (v < p1) {
-//                    // swap(a, k, less++)
-//                    a[k] = a[less];
-//                    a[less] = v;
-//                    less++;
-//                } else if (v > p2) {
-//                    // while k < great and a[great] > v2:
-//                    //   great--
-//                    while (a[great] > p2) {
-//                        if (great-- == k) {
-//                            // Done
-//                            break SORTING;
-//                        }
-//                    }
-//                    // swap(a, k, great--)
-//                    // if a[k] < v1:
-//                    //   swap(a, k, less++)
-//                    final double w = a[great];
-//                    a[great] = v;
-//                    great--;
-//                    // delay a[k] = w
-//                    if (w < p1) {
-//                        a[k] = a[less];
-//                        a[less] = w;
-//                        less++;
-//                    } else {
-//                        a[k] = w;
-//                    }
-//                }
-//            }
-//
-//            // Change to inclusive ends and move the pivots to correct locations
-//            less--;
-//            great++;
-//            a[l] = a[less];
-//            a[less] = p1;
-//            a[r] = a[great];
-//            a[great] = p2;
-//
-//            // Once partitioned we possibly branch left, middle and right with multiple keys.
-//            // It is possible that the partition has split the keys
-//            // and the recursion proceeds with a reduced set in each region:
-//            //                    less                great
-//            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
-//            //                kb   |        ka
-//
-//            // Before processing the middle check for entirely below or above
-//            if (kb <= less) {
-//                // Entirely on left side
-//                r = less - 1;
-//                kb = Math.min(kb, r);
-//                continue;
-//            }
-//            if (ka >= great) {
-//                // Entirely on right-side
-//                l = great + 1;
-//                ka = Math.max(ka, l);
-//                continue;
-//            }
-//
-//            // save outer pivots
-//            final int lt = less;
-//            final int gt = great;
-//
-////            // Recurse left side if required
-////            if (ka < less) {
-////                if (kb < less) {
-////                    // Entirely on left side
-////                    r = less - 1;
-////                    continue;
-////                }
-////                //select(a, l, less - 1, keys, ka, keys.previousIndex(less - 1), maxDepth);
-////                select(a, l, less - 1, keys, ka, keys.splitLower(less, index), maxDepth);
-////                ka = index[0];
-////            }
-////            // Recurse right side if required
-////            if (kb > great) {
-////                if (ka > great) {
-////                    // Entirely on right-side
-////                    l = great + 1;
-////                    continue;
-////                }
-////                //select(a, great + 1, r, keys, keys.nextIndex(great + 1), kb, maxDepth);
-////                select(a, great + 1, r, keys, keys.splitUpper(great, index), kb, maxDepth);
-////                kb = index[0];
-////            }
-//
-//            // Continue with central region: (less, great)
-//            // less <= ka && kb <= great : omit overlap check here as it is rare for
-//            // kb <= less || great <= ka so we process possible equal elements first.
-//
-//            // Here we look for equal elements if the centre is more than 5/8 the length.
-//            // Occurs with ~7% frequency on random data and (far) more often
-//            // when duplicates are present. Pivots must be different!
-//            if ((great - less) > (n >>> 1) + (n >>> 3) && p1 != p2) {
-//
-//                // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
-//                // Since p1 != p2 these act as sentinels to prevent overrun.
-//                do {
-//                    ++less;
-//                } while (a[less] == p1);
-//                do {
-//                    --great;
-//                } while (a[great] == p2);
-//
-//                // This copies the logic in the sorting loop using == comparisons
-//                EQUAL:
-//                for (int k = less - 1; ++k <= great;) {
-//                    final double v = a[k];
-//                    if (v == p1) {
-//                        a[k] = a[less];
-//                        a[less] = v;
-//                        less++;
-//                    } else if (v == p2) {
-//                        while (a[great] == p2) {
-//                            if (great-- == k) {
-//                                break EQUAL;
-//                            }
-//                        }
-//                        final double w = a[great];
-//                        a[great] = v;
-//                        great--;
-//                        if (w == p1) {
-//                            a[k] = a[less];
-//                            a[less] = w;
-//                            less++;
-//                        } else {
-//                            a[k] = w;
-//                        }
-//                    }
-//                }
-//
-//                // Change to inclusive ends
-//                less--;
-//                great++;
-//            }
-//
-//            // Once partitioned we possibly branch left, middle and right with multiple keys.
-//            // It is possible that the partition has split the keys
-//            // and the recursion proceeds with a reduced set in each region:
-//            //                    less                great
-//            // |l|--|ka|--k----k--|P1|------k--|kb|----|P2|----|r|
-//            //                kb   |        ka
-//
-//            // Recurse left side if required
-//            if (ka < lt) {
-//                if (kb <= less) {
-//                    // Entirely on left side
-//                    r = lt - 1;
-//                    kb = Math.min(kb, r);
-//                    continue;
-//                }
-//                select(a, l, lt - 1, keys, ka, keys.split(lt, less, index), maxDepth);
-//                ka = index[0];
-//            }
-//            // Recurse right side if required
-//            if (kb > gt) {
-//                if (ka >= great) {
-//                    // Entirely on right-side
-//                    l = gt + 1;
-//                    ka = Math.max(ka, l);
-//                    continue;
-//                }
-//                final int lo = keys.split(great, gt, index);
-//                select(a, gt + 1, r, keys, index[0], kb, maxDepth);
-//                kb = lo;
-//            }
-//
-//            // Between pivots in (less, great)
-//            // Check the interval overlaps the middle; and an unsorted middle exists.
-//            //                         less         great
-//            // |l|-----------------|  P1  |---------|   P2   |----|r|
-//            // Eliminate:      ----------kb         ka------
-//            if (kb <= less || great <= ka || great - less <= 2 || p1 == p2) {
-//                return;
-//            }
-//            l = less + 1;
-//            r = great - 1;
-//            // Housekeeping on the interval bounds. Note that ka and kb are updated
-//            // when the interval is split. This is only used if the P1 or P2
-//            // regions contained equal values. It is done here after the central
-//            // region is known to contain part of the interval.
-//            ka = Math.max(ka, l);
-//            kb = Math.min(kb, r);
-//        }
     }
 
     /**
@@ -7639,6 +7567,24 @@ final class Partition {
         // This result is always between floor(log3(x)) and ceil(log3(x)).
         // It is correctly rounded when x +/- 1 is a power of 3.
         return ((32 - Integer.numberOfLeadingZeros(x)) * 323) >>> 9;
+    }
+
+    /**
+     * Compute an approximation to {@code 2 * log3 (x)}.
+     *
+     * <p>The result is between {@code floor(log3(x))} and {@code ceil(log3(x))}.
+     * The result is correctly rounded when {@code x +/- 1} is a power of 3.
+     *
+     * @param x Value.
+     * @return {@code log3(x))}
+     */
+    static int twiceLog3(int x) {
+        // log3(2) ~ 1.5849625
+        // log3(x) ~ log2(x) * 0.630929753... ~ log2(x) * 323 / 512 (0.630859375)
+        // Use (floor(log2(x))+1) * 323 / 256
+        // This result is always between 2 * floor(log3(x)) and 2 * ceil(log3(x)).
+        // It is correctly rounded when x +/- 1 is a power of 3.
+        return ((32 - Integer.numberOfLeadingZeros(x)) * 323) >>> 8;
     }
 
     /**
