@@ -6283,6 +6283,7 @@ final class Partition {
         //   The end is then assumed to be the equal value. This would not work with
         //   object references. Equivalent swap calls are commented.
         // - Added a fast-forward over initial range containing the pivot.
+        // - Changed the final move to perform the minimum moves.
 
         int p = l;
         int q = r;
@@ -6324,9 +6325,10 @@ final class Partition {
                 // Move this to the lower-equal region.
                 if (i == j && v == data[i]) {
                     //swap(data, i++, p++)
-                    //data[i++] = data[p++];
-                    data[i++] = data[p];
-                    data[p++] = v;
+                    data[i] = data[p];
+                    data[p] = v;
+                    i++;
+                    p++;
                 }
                 break;
             }
@@ -6335,11 +6337,12 @@ final class Partition {
             final double vi = data[j];
             data[i] = vi;
             data[j] = vj;
+            // Move the equal values to the ends
             if (vi == v) {
                 //swap(data, i, p++)
-                //data[i] = data[p++];
                 data[i] = data[p];
-                data[p++] = v;
+                data[p] = v;
+                p++;
             }
             if (vj == v) {
                 //swap(data, j, --q)
@@ -6368,14 +6371,14 @@ final class Partition {
         // Move the minimum of less-equal or less-than
         int move = Math.min(p - l, j - p);
         final int lower = j - (p - l);
-        for (int k = l; move-- > 0; k++) {
+        for (int k = l; --move >= 0; k++) {
             data[k] = data[--j];
             data[j] = v;
         }
         // Move the minimum of greater-equal or greater-than
         move = Math.min(r - q, q - i);
         upper[0] = i + (r - q) - 1;
-        for (int k = r; move-- > 0; i++) {
+        for (int k = r; --move >= 0; i++) {
             data[--k] = data[i];
             data[i] = v;
         }
@@ -6864,12 +6867,6 @@ final class Partition {
      *
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
      *
-     * <p>This method assumes {@code a[pivot1] <= a[pivot2]}.
-     * If {@code pivot1 == pivot2} this triggers a switch to a single-pivot method.
-     * It is assumed this indicates that choosing two pivots failed due to many equal
-     * values. In this case the single-pivot method uses a Dutch National Flag algorithm
-     * suitable for many equal values.
-     *
      * <p>This method returns 4 points describing the pivot ranges of equal values.
      *
      * <pre>{@code
@@ -6895,6 +6892,7 @@ final class Partition {
      * <p>This method is similar to {@link #partitionDP(double[], int, int, int, int, int[])}
      * with the following changes:
      * <ul>
+     * <li>Selection of the pivots is performed in this method.
      * <li>The first {@code k1} and last {@code kn} indices of interest are passed. These
      * are used to determine if the central region should be processed. Benchmarking
      * fails to show this is noticeable.
@@ -6922,21 +6920,22 @@ final class Partition {
         final int i1 = i2 - step;
         final int i4 = i3 + step;
         final int i5 = i4 + step;
+        Sorting.sort5(a, i1, i2, i3, i4, i5);
 
-        // Sort the 5 points. This includes a detection for already sorted data.
-        if (Sorting.sort5a(a, i1, i2, i3, i4, i5) && Sorting.isAscending(a, left, right)) {
-            // k1 = k3; k2 == k0
-            bounds[0] = bounds[2] = right;
-            bounds[1] = left;
-            return left;
-        }
+//        // Sort the 5 points. This includes a detection for already sorted data.
+//        if (Sorting.sort5a(a, i1, i2, i3, i4, i5) && Sorting.isAscending(a, left, right)) {
+//            // k1 = k3; k2 == k0
+//            bounds[0] = bounds[2] = right;
+//            bounds[1] = left;
+//            return left;
+//        }
 
         // Possible switch to single pivot partition here ...
-//        if (pivot1 == pivot2) {
+//        if (a[i2] == a[i4]) {
 //            // Switch to a single pivot sort. This is used when there are
 //            // estimated to be many equal values so use the fastest equal
 //            // value single pivot method.
-//            final int lower = partitionDNF3(a, left, right, pivot1, bounds);
+//            final int lower = partitionDNF3(a, left, right, i3, bounds);
 //            // Set dual pivot range
 //            bounds[2] = bounds[0];
 //            // No unsorted internal region (set k1 = k3; k2 = k0)
