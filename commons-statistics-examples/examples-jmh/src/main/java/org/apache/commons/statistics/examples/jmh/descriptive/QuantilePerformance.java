@@ -28,6 +28,7 @@ import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -1256,6 +1257,26 @@ public class QuantilePerformance {
                 }
             } else if (name.startsWith(IDP)) {
                 function = createPartition(name, IDP)::sortIDP;
+            } else if (name.startsWith(SELECT)) {
+                // Sort by selection of the entire range.
+                final Supplier<DoubleDataTransformer> transformerFactory =
+                    DoubleDataTransformers.createFactory(NaNPolicy.INCLUDE, false);
+                function = a -> {
+                    // Handle NaN / signed zeros
+                    final DoubleDataTransformer t = transformerFactory.get();
+                    // Assume this is in-place
+                    t.preProcess(a);
+                    final int end = t.length();
+                    if (end <= 1) {
+                        // Nothing to sort
+                        return;
+                    }
+                    Partition.select(a, 0, end - 1,
+                        IndexIntervals.interval(0, end - 1),
+                        Partition.twiceLog3(a.length));
+                    // Restore signed zeros
+                    t.postProcess(a);
+                };
             // Insertion sort variations.
             // For parity with the internal version these all use the same (shorter) data
             } else if ("InsertionSortIF".equals(name)) {
