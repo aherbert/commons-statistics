@@ -915,8 +915,11 @@ class PartitionTest {
         // a full sort when the IndexInterval is saturated.
         assertSort(values, a -> {
             final int right = Partition.sortNaN(a);
+            if (right < 1) {
+                return;
+            }
             replaceNegativeZeros(a, 0, right);
-            Partition.select(a, 0, right, IndexIntervals.anyIndex(), 0, right, 100);
+            Partition.select(a, 0, right, IndexIntervals.interval(0, right), 100);
             restoreNegativeZeros(a, 0, right);
         });
     }
