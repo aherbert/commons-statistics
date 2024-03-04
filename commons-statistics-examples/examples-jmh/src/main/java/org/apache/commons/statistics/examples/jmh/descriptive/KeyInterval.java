@@ -103,24 +103,24 @@ final class KeyInterval implements Interval {
 
     @Override
     public int updateLeft(int k) {
-        // Assume left <= k < right (i.e. we must move left at least 1)
+        // Assume left < k <= right (i.e. we must move left at least 1)
         // Search using a scan on the assumption that k is close to the end
         int i = l;
         do {
             ++i;
-        } while (keys[i] <= k);
+        } while (keys[i] < k);
         setLeft(i);
         return leftKey;
     }
 
     @Override
     public int updateRight(int k) {
-        // Assume left < k <= right (i.e. we must move right at least 1)
+        // Assume left <= k < right (i.e. we must move right at least 1)
         // Search using a scan on the assumption that k is close to the end
         int i = r;
         do {
             --i;
-        } while (keys[i] >= k);
+        } while (keys[i] > k);
         r = i;
         return right();
     }
