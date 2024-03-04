@@ -669,20 +669,20 @@ final class IndexSet implements PivotCache, SearchableInterval, SearchableInterv
     public int toArray(int[] a) {
         // Adapted from o.a.c.collections4.IndexProducer
         int wordIdx = left;
-        int n = 0;
+        int n = -1;
         for (int i = 0; i < data.length; i++) {
             long bits = data[i];
             int index = wordIdx;
             while (bits != 0) {
                 if ((bits & 1L) == 1L) {
-                    a[n++] = index;
+                    a[++n] = index;
                 }
                 bits >>>= 1;
                 index++;
             }
             wordIdx += Long.SIZE;
         }
-        return n;
+        return n + 1;
     }
 
     // PivotCache interface
