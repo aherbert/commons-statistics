@@ -500,6 +500,104 @@ final class Sorting {
      * @param i2 Index.
      * @param i3 Index.
      * @param i4 Index.
+     * @return true if already sorted
+     */
+    static boolean sort5a(double[] data, int i0, int i1, int i2, int i3, int i4) {
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 9 comparisons.
+        // Order pairs:
+        // [(0,3),(1,4)]
+        // [(0,2),(1,3)]
+        // [(0,1),(2,4)]
+        // [(1,2),(3,4)]
+        // [(2,3)]
+        boolean alreadySorted = true;
+
+        if (data[i4] < data[i1]) {
+            final double u = data[i4];
+            data[i4] = data[i1];
+            data[i1] = u;
+            alreadySorted = false;
+        }
+        if (data[i3] < data[i0]) {
+            final double v = data[i3];
+            data[i3] = data[i0];
+            data[i0] = v;
+            alreadySorted = false;
+        }
+
+        if (data[i3] < data[i1]) {
+            final double u = data[i3];
+            data[i3] = data[i1];
+            data[i1] = u;
+            alreadySorted = false;
+        }
+        if (data[i2] < data[i0]) {
+            final double v = data[i2];
+            data[i2] = data[i0];
+            data[i0] = v;
+            alreadySorted = false;
+        }
+
+        if (data[i4] < data[i2]) {
+            final double u = data[i4];
+            data[i4] = data[i2];
+            data[i2] = u;
+            alreadySorted = false;
+        }
+        if (data[i1] < data[i0]) {
+            final double v = data[i1];
+            data[i1] = data[i0];
+            data[i0] = v;
+            alreadySorted = false;
+        }
+
+        if (data[i4] < data[i3]) {
+            final double u = data[i4];
+            data[i4] = data[i3];
+            data[i3] = u;
+            alreadySorted = false;
+        }
+        if (data[i2] < data[i1]) {
+            final double v = data[i2];
+            data[i2] = data[i1];
+            data[i1] = v;
+            alreadySorted = false;
+        }
+
+        if (data[i3] < data[i2]) {
+            final double u = data[i3];
+            data[i3] = data[i2];
+            data[i2] = u;
+            alreadySorted = false;
+        }
+
+        return alreadySorted;
+    }
+
+    /**
+     * Sorts the given indices in an array using an insertion sort.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
+     * a != b != c != d != e
+     * data[a] < data[b] < data[c] < data[d] < data[e]
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
      */
     static void sort5b(double[] data, int i0, int i1, int i2, int i3, int i4) {
         // Sorting network for size 5 is 9 comparisons (see sort5b).
@@ -1479,7 +1577,7 @@ final class Sorting {
     }
 
     /**
-     * Test the data is in ascending order: {@code data[i] <= data[i+1]}  for all {@code i}.
+     * Test the data is in ascending order: {@code data[i] <= data[i+1]} for all {@code i}.
      * Data is assumed to be at least length 1.
      *
      * @param data Data.
@@ -1488,6 +1586,25 @@ final class Sorting {
      */
     private static boolean isAscending(int[] data, int n) {
         for (int i = 0; ++i < n;) {
+            if (data[i] < data[i - 1]) {
+                // descending
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Test the data is in ascending order: {@code data[i] <= data[i+1]} for all {@code i}.
+     * Data is assumed to be at least length 1.
+     *
+     * @param data Data.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @return true if ascending
+     */
+    static boolean isAscending(double[] data, int left, int right) {
+        for (int i = left; ++i <= right;) {
             if (data[i] < data[i - 1]) {
                 // descending
                 return false;

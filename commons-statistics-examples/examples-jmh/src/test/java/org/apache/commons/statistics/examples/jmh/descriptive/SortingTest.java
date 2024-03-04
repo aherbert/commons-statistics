@@ -114,6 +114,13 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort"})
+    void testDoubleSort5a(double[] values) {
+        final double[] data = Arrays.copyOf(values, 5);
+        assertDoubleSort(data, x -> Sorting.sort5a(x, 0, 1, 2, 3, 4));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort"})
     void testDoubleSort5b(double[] values) {
         final double[] data = Arrays.copyOf(values, 5);
         assertDoubleSort(data, x -> Sorting.sort5b(x, 0, 1, 2, 3, 4));
@@ -168,6 +175,17 @@ class SortingTest {
         final int d = indices[3];
         final int e = indices[4];
         assertDoubleSortInternal(values, x -> Sorting.sort5(x, a, b, c, d, e), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5Internal"})
+    void testDoubleSort5aInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        assertDoubleSortInternal(values, x -> Sorting.sort5a(x, a, b, c, d, e), indices);
     }
 
     @ParameterizedTest
