@@ -5353,30 +5353,15 @@ final class Partition {
                 return;
             }
 
-            // length - 1
-            final int n = r - l;
-
-            if (n < MIN_QUICKSELECT_SIZE) {
+            if (r - l < MIN_QUICKSELECT_SIZE) {
                 // Full sort of small data
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
 
-            // Pick 2 pivots from 5 approximately uniform through the range.
-            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
-            // worse. 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
-            // Ensure the value is above zero to choose different points!
-            final int step = 1 + (n >>> 3) + (n >>> 6);
-            final int i3 = l + (n >>> 1);
-            final int i2 = i3 - step;
-            final int i1 = i2 - step;
-            final int i4 = i3 + step;
-            final int i5 = i4 + step;
-            Sorting.sort5(a, i1, i2, i3, i4, i5);
-
-            // Possible switch to single pivot mode here
-            final int p0 = partitionDP(a, l, r, i2, i4, upper, ka, kb);
+            // Dual-pivot partitioning
+            final int p0 = partitionDP(a, l, r, upper, ka, kb);
             final int p1 = upper[0];
             final int p2 = upper[1];
             final int p3 = upper[2];
@@ -5469,7 +5454,7 @@ final class Partition {
     // package-private for benchmarking
     static void select(double[] a, int left, int right, UpdatingInterval k, int maxDepth) {
         // Inline code using the defaults.
-        // Changes branching from left/right/middle to left/middle/right.
+        // Branching uses left/middle/right.
         // This allows branch prediction to track that after a split then the next section
         // should execute (since a split is used when there are indices after a pivot).
 
@@ -5493,30 +5478,15 @@ final class Partition {
                 return;
             }
 
-            // length - 1
-            final int n = r - l;
-
-            if (n < MIN_QUICKSELECT_SIZE) {
+            if (r - l < MIN_QUICKSELECT_SIZE) {
                 // Full sort of small data
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
 
-            // Pick 2 pivots from 5 approximately uniform through the range.
-            // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
-            // worse. 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
-            // Ensure the value is above zero to choose different points!
-            final int step = 1 + (n >>> 3) + (n >>> 6);
-            final int i3 = l + (n >>> 1);
-            final int i2 = i3 - step;
-            final int i1 = i2 - step;
-            final int i4 = i3 + step;
-            final int i5 = i4 + step;
-            Sorting.sort5(a, i1, i2, i3, i4, i5);
-
-            // Possible switch to single pivot mode here
-            final int p0 = partitionDP(a, l, r, i2, i4, upper, ka, kb);
+            // Dual-pivot partitioning
+            final int p0 = partitionDP(a, l, r, upper, ka, kb);
             final int p1 = upper[0];
             final int p2 = upper[1];
             final int p3 = upper[2];
@@ -5525,7 +5495,7 @@ final class Partition {
             // Note: Here we possibly branch left, middle and right with multiple keys.
             // It is possible that the partition has split the keys
             // and the recursion proceeds with a reduced set in each region.
-            //                    p0 p1              p2 p3
+            //                   p0 p1               p2 p3
             // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
             //                 kb  |      ka
             maxDepth--;
@@ -6934,27 +6904,39 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param bounds Points [k1, k2, k3].
-     * @param pivot1 Pivot1 location.
-     * @param pivot2 Pivot2 location.
      * @param k1 First key of interest.
      * @param kn Last key of interest.
      * @return Lower bound (inclusive) of the pivot range [k0].
      */
-    static int partitionDP(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds,
+    static int partitionDP(double[] a, int left, int right, int[] bounds,
             int k1, int kn) {
-        // Allow caller to choose a single-pivot
-        if (pivot1 == pivot2) {
-            // Switch to a single pivot sort. This is used when there are
-            // estimated to be many equal values so use the fastest equal
-            // value single pivot method.
-            final int lower = partitionDNF3(a, left, right, pivot1, bounds);
-            // Set dual pivot range
-            bounds[2] = bounds[0];
-            // No unsorted internal region (set k1 = k3; k2 = k0)
-            // Note: It is extra work for the caller to detect that this region can be skipped.
-            bounds[1] = lower;
-            return lower;
-        }
+
+        // Pick 2 pivots from 5 approximately uniform through the range.
+        // Spacing is ~ 1/7 made using shifts. Other strategies are equal or much
+        // worse. 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
+        // Ensure the value is above zero to choose different points!
+        final int n = right - left;
+        final int step = 1 + (n >>> 3) + (n >>> 6);
+        final int i3 = left + (n >>> 1);
+        final int i2 = i3 - step;
+        final int i1 = i2 - step;
+        final int i4 = i3 + step;
+        final int i5 = i4 + step;
+        Sorting.sort5(a, i1, i2, i3, i4, i5);
+
+        // Possible switch to single pivot partition here ...
+//        if (pivot1 == pivot2) {
+//            // Switch to a single pivot sort. This is used when there are
+//            // estimated to be many equal values so use the fastest equal
+//            // value single pivot method.
+//            final int lower = partitionDNF3(a, left, right, pivot1, bounds);
+//            // Set dual pivot range
+//            bounds[2] = bounds[0];
+//            // No unsorted internal region (set k1 = k3; k2 = k0)
+//            // Note: It is extra work for the caller to detect that this region can be skipped.
+//            bounds[1] = lower;
+//            return lower;
+//        }
 
         // Dual-pivot quicksort method by Vladimir Yaroslavskiy.
         //
@@ -6990,13 +6972,12 @@ final class Partition {
         //   when the central region is too large).
         // - Identify a large central region using ~5/8 of the length.
 
-        final double v1 = a[pivot1];
-        final double v2 = a[pivot2];
-
         // Swap ends to the pivot locations.
-        a[pivot1] = a[left];
-        a[pivot2] = a[right];
+        final double v1 = a[i2];
+        a[i2] = a[left];
         a[left] = v1;
+        final double v2 = a[i4];
+        a[i4] = a[right];
         a[right] = v2;
 
         // pointers
@@ -7071,7 +7052,7 @@ final class Partition {
         // Here we look for equal elements if the centre is more than 5/8 the length.
         // 5/8 = 1/2 + 1/8. Pivots must be different and the central region must be
         // of interest.
-        if ((great - less) > ((right - left) >>> 1) + ((right - left) >>> 3) &&
+        if ((great - less) > (n >>> 1) + (n >>> 3) &&
             v1 != v2 && kn > less && k1 < great) {
 
             // Fast-forward to reduce swaps. Changes inclusive ends to exclusive ends.
