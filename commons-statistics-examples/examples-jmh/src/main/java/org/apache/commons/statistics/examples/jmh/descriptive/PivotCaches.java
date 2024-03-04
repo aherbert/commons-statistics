@@ -329,7 +329,7 @@ final class PivotCaches {
             // Only support scanning within [left, right]
             // assume lowerPivot <= left <= k <= right <= upperPivot
             if (sparse()) {
-                throw new IllegalStateException();
+                throw new UnsupportedOperationException();
             }
             // range of size 2
             // scan right
@@ -351,7 +351,7 @@ final class PivotCaches {
             // Only support scanning within [left, right]
             // assume lowerPivot <= left <= k <= right <= upperPivot
             if (sparse()) {
-                throw new IllegalStateException();
+                throw new UnsupportedOperationException();
             }
             // range of size 2
             // scan left

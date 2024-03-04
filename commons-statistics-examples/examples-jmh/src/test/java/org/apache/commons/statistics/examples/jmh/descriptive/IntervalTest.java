@@ -38,9 +38,9 @@ class IntervalTest {
         final Interval interval = IndexIntervals.interval(k);
         Assertions.assertEquals(k, interval.left());
         Assertions.assertEquals(k, interval.right());
-        Assertions.assertThrows(IllegalStateException.class, () -> interval.updateLeft(k));
-        Assertions.assertThrows(IllegalStateException.class, () -> interval.updateRight(k));
-        Assertions.assertThrows(IllegalStateException.class, () -> interval.split(k, k));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateLeft(k));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateRight(k));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.split(k, k));
     }
 
     @ParameterizedTest
