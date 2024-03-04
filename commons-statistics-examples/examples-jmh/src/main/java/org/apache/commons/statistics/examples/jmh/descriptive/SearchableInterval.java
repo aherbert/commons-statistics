@@ -34,7 +34,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-interface IndexInterval {
+interface SearchableInterval {
 
     /**
      * The start (inclusive) of the range of indices supported.

@@ -34,7 +34,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-interface Interval {
+interface UpdatingInterval {
 
     /**
      * The start (inclusive) of the interval.
@@ -104,5 +104,5 @@ interface Interval {
      * @param kb Split index.
      * @return the left interval
      */
-    Interval split(int ka, int kb);
+    UpdatingInterval split(int ka, int kb);
 }

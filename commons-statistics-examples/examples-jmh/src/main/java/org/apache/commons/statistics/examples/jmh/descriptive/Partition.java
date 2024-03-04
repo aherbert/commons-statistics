@@ -130,7 +130,7 @@ final class Partition {
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
     /** Default 1 or 2 key strategy. */
-    static final PairedKeyStrategy PAIRED_KEY_STRATEGY = PairedKeyStrategy.INDEX_INTERVAL;
+    static final PairedKeyStrategy PAIRED_KEY_STRATEGY = PairedKeyStrategy.SEARCHABLE_INTERVAL;
     /** Default recursion multiple. */
     static final double RECURSION_MULTIPLE = 2;
     /** Default recursion constant. */
@@ -220,28 +220,28 @@ final class Partition {
         /** Sort unique keys, collate ranges and process in ascending order. */
         SEQUENTIAL,
         /** Process in input order using an {@link IndexSet} to cover the entire range.
-         * Introselect implementations will use an {@link IndexInterval}. */
+         * Introselect implementations will use a {@link SearchableInterval}. */
         INDEX_SET,
         /** Process in input order using a {@link CompressedIndexSet} to cover the entire range.
-         * Introselect implementations will use an {@link IndexInterval}. */
+         * Introselect implementations will use a {@link SearchableInterval}. */
         COMPRESSED_INDEX_SET,
         /** Process in input order using a {@link PivotCache} to cover the minimum range. */
         PIVOT_CACHE,
         /** Sort unique keys and process using recursion with division of the keys
          * for each sub-partition. */
         ORDERED_KEYS,
-        /** Sort unique keys and process using recursion with a {@link ScanningKeyIndexInterval}. */
-        SCANNING_KEY_INDEX_INTERVAL,
-        /** Sort unique keys and process using recursion with a {@link BinarySearchKeyIndexInterval}. */
-        SEARCH_KEY_INDEX_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link ScanningKeyInterval}. */
+        SCANNING_KEY_SEARCHABLE_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link BinarySearchKeyInterval}. */
+        SEARCH_KEY_SEARCHABLE_INTERVAL,
         /** Sort unique keys and process using recursion with a {@link KeyIndexIterator}. */
         INDEX_ITERATOR,
         /** Process in input order using an {@link IndexIterator} of a {@link CompressedIndexSet}. */
         COMPRESSED_INDEX_ITERATOR,
-        /** Process using recursion with an {@link IndexSet}-based {@link Interval}. */
-        INDEX_SET_INTERVAL,
-        /** Sort unique keys and process using recursion with a {@link KeyInterval}. */
-        KEY_INTERVAL;
+        /** Process using recursion with an {@link IndexSet}-based {@link UpdatingInterval}. */
+        INDEX_SET_UPDATING_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link KeyUpdatingInterval}. */
+        KEY_UPDATING_INTERVAL;
     }
 
     /**
@@ -252,12 +252,12 @@ final class Partition {
         PAIRED_KEYS,
         /** Use a method that accepts two keys. */
         TWO_KEYS,
-        /** Use an {@link IndexInterval} covering the keys. This will reuse a multi-key
+        /** Use an {@link SearchableInterval} covering the keys. This will reuse a multi-key
          * strategy with keys that are a very small range. */
-        INDEX_INTERVAL,
-        /** Use an {@link Interval} covering the keys. This will reuse a multi-key
+        SEARCHABLE_INTERVAL,
+        /** Use an {@link UpdatingInterval} covering the keys. This will reuse a multi-key
          * strategy with keys that are a very small range. */
-        INTERVAL;
+        UPDATING_INTERVAL;
     }
 
     /**
@@ -2728,18 +2728,18 @@ final class Partition {
     }
 
     /**
-     * Creates the {@link IndexInterval} for the partition of data of the specified
+     * Creates the {@link SearchableInterval} for the partition of data of the specified
      * {@code size}.
      *
      * <p>This method assesses the saturation of the indices given the {@code size} and
-     * returns a suitable {@link IndexInterval} for partitioning.
+     * returns a suitable {@link SearchableInterval} for partitioning.
      *
      * <p>Returns {@code null} if the indices {@code k} saturate the {@code size}; this
      * occurs when partitioning will require visiting all regions of the data. In this
      * case a full sort of the data is recommended.
      *
      * <p>The heuristics used within this method may not always return the optimal
-     * {@link IndexInterval}. The method aims to avoid poor decisions, and recommend a
+     * {@link SearchableInterval}. The method aims to avoid poor decisions, and recommend a
      * full sort when it is obvious that there are too many indices to efficiently
      * partition.
      *
@@ -2762,7 +2762,7 @@ final class Partition {
      * <p>If a {@code pivot} is found in the interval then the smallest region of data
      * that was most recently partitioned was the length between the two flanking k. This
      * involves a full scan (and partitioning) over the data of length (k2 - k1). If the
-     * {@link IndexInterval} uses a BitSet-type structure it will require a scan over 1/64
+     * {@link SearchableInterval} uses a BitSet-type structure it will require a scan over 1/64
      * of this length of data to find the next and previous index from a {@code pivot}
      * point. In practice the interval may be partitioned over a much larger length, e.g.
      * (kn - k1). Thus the length of time for the partition algorithm is expected to be at
@@ -2780,7 +2780,7 @@ final class Partition {
      * @param n Count of indices (must be strictly positive).
      * @return the index interval (or {@code null} to recommend a full sort)
      */
-    static IndexInterval createIndexInterval(int size, int[] k, int n) {
+    static SearchableInterval createIndexInterval(int size, int[] k, int n) {
         if (size < MIN_QUICKSELECT_SIZE) {
             // Sort tiny data
             return null;
@@ -3221,10 +3221,10 @@ final class Partition {
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
                 // Dedicated method for two keys using the same key
                 introselect(part, a, 0, right, k[0], k[0], maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.SEARCHABLE_INTERVAL) {
                 // Reuse the IndexInterval method using the same key
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.UPDATING_INTERVAL) {
                 // Reuse the Interval method using a single key
                 introselect(part, a, 0, right, IndexIntervals.interval(k[0]), maxDepth);
             } else {
@@ -3249,10 +3249,10 @@ final class Partition {
                 final int ka = Math.min(k[0], k[1]);
                 final int kb = Math.max(k[0], k[1]);
                 introselect(part, a, 0, right, ka, kb, maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.SEARCHABLE_INTERVAL) {
                 // Reuse the IndexInterval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.UPDATING_INTERVAL) {
                 // Reuse the Interval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.interval(k[0], k[1]), maxDepth);
             } else {
@@ -3276,28 +3276,28 @@ final class Partition {
         if (keyStrategy == KeyStrategy.ORDERED_KEYS) {
             final int unique = Sorting.sortIndices(k, n);
             introselect(part, a, 0, right, k, 0, unique - 1, maxDepth);
-        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INDEX_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
+            final ScanningKeyInterval keys = ScanningKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INDEX_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
+            final BinarySearchKeyInterval keys = BinarySearchKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_SET) {
             // Note: Here we do not have to sort keys.
-            final IndexInterval keys = CompressedIndexSet.of(compression, k, n);
+            final SearchableInterval keys = CompressedIndexSet.of(compression, k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.
-            final IndexInterval keys = IndexSet.of(k, n);
+            final SearchableInterval keys = IndexSet.of(k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.KEY_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.KEY_UPDATING_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final KeyInterval keys = KeyInterval.of(k, unique);
+            final KeyUpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
             introselect(part, a, 0, right, keys, maxDepth);
-        } else if (keyStrategy == KeyStrategy.INDEX_SET_INTERVAL) {
-            final Interval keys = IndexSet.of(k, n).interval();
+        } else if (keyStrategy == KeyStrategy.INDEX_SET_UPDATING_INTERVAL) {
+            final UpdatingInterval keys = IndexSet.of(k, n).interval();
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
@@ -3618,9 +3618,9 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link IndexInterval} of indices {@code k} and the
+     * <p>This function accepts a {@link SearchableInterval} of indices {@code k} and the
      * first index {@code ka} and last index {@code kb} that define the range of indices
-     * to partition. The {@link IndexInterval} is used to search for keys in {@code [ka, kb]}
+     * to partition. The {@link SearchableInterval} is used to search for keys in {@code [ka, kb]}
      * to create {@code [ka, kb1]} and {@code [ka1, kb]} if partitioning splits the range.
      *
      * <pre>{@code
@@ -3645,7 +3645,7 @@ final class Partition {
      */
     // package-private for benchmarking
     void introselect(SPEPartition part, double[] a, int left, int right,
-        IndexInterval k, int ka, int kb, int maxDepth) {
+        SearchableInterval k, int ka, int kb, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
         int l = left;
@@ -3727,8 +3727,8 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link Interval} of indices {@code k} that define the
-     * range of indices to partition. The {@link Interval} can be narrowed or split as
+     * <p>This function accepts a {@link UpdatingInterval} of indices {@code k} that define the
+     * range of indices to partition. The {@link UpdatingInterval} can be narrowed or split as
      * partitioning divides the range.
      *
      * <pre>{@code
@@ -3751,7 +3751,7 @@ final class Partition {
      */
     // package-private for benchmarking
     void introselect(SPEPartition part, double[] a, int left, int right,
-        Interval k, int maxDepth) {
+        UpdatingInterval k, int maxDepth) {
         // Only one side requires recursion. The other side
         // can remain within this function call.
         int l = left;
@@ -4064,10 +4064,10 @@ final class Partition {
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
                 // Dedicated method for two keys using the same key
                 introselect(part, a, 0, right, k[0], k[0], maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.SEARCHABLE_INTERVAL) {
                 // Reuse the IndexInterval method using the same key
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.UPDATING_INTERVAL) {
                 // Reuse the Interval method using a single key
                 introselect(part, a, 0, right, IndexIntervals.interval(k[0]), maxDepth);
             } else {
@@ -4092,10 +4092,10 @@ final class Partition {
                 final int ka = Math.min(k[0], k[1]);
                 final int kb = Math.max(k[0], k[1]);
                 introselect(part, a, 0, right, ka, kb, maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INDEX_INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.SEARCHABLE_INTERVAL) {
                 // Reuse the IndexInterval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
-            } else if (pairedKeyStrategy == PairedKeyStrategy.INTERVAL) {
+            } else if (pairedKeyStrategy == PairedKeyStrategy.UPDATING_INTERVAL) {
                 // Reuse the Interval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.interval(k[0], k[1]), maxDepth);
             } else {
@@ -4120,28 +4120,28 @@ final class Partition {
             // DP does not offer ORDERED_KEYS implementation but we include the branch
             // for completeness.
             throw new IllegalStateException(UNSUPPORTED_INTROSELECT + keyStrategy);
-        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_INDEX_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final ScanningKeyIndexInterval keys = ScanningKeyIndexInterval.of(k, unique);
+            final ScanningKeyInterval keys = ScanningKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_INDEX_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final BinarySearchKeyIndexInterval keys = BinarySearchKeyIndexInterval.of(k, unique);
+            final BinarySearchKeyInterval keys = BinarySearchKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_SET) {
             // Note: Here we do not have to sort keys.
-            final IndexInterval keys = CompressedIndexSet.of(compression, k, n);
+            final SearchableInterval keys = CompressedIndexSet.of(compression, k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.
             final IndexSet keys = IndexSet.of(k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
-        } else if (keyStrategy == KeyStrategy.KEY_INTERVAL) {
+        } else if (keyStrategy == KeyStrategy.KEY_UPDATING_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final KeyInterval keys = KeyInterval.of(k, unique);
+            final KeyUpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
             introselect(part, a, 0, right, keys, maxDepth);
-        } else if (keyStrategy == KeyStrategy.INDEX_SET_INTERVAL) {
-            final Interval keys = IndexSet.of(k, n).interval();
+        } else if (keyStrategy == KeyStrategy.INDEX_SET_UPDATING_INTERVAL) {
+            final UpdatingInterval keys = IndexSet.of(k, n).interval();
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
@@ -4374,9 +4374,9 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link IndexInterval} of indices {@code k} and the
+     * <p>This function accepts a {@link SearchableInterval} of indices {@code k} and the
      * first index {@code ka} and last index {@code kb} that define the range of indices
-     * to partition. The {@link IndexInterval} is used to search for keys in {@code [ka, kb]}
+     * to partition. The {@link SearchableInterval} is used to search for keys in {@code [ka, kb]}
      * to create {@code [ka, kb1]} and {@code [ka1, kb]} if partitioning splits the range.
      *
      * <pre>{@code
@@ -4401,7 +4401,7 @@ final class Partition {
      */
     // package-private for benchmarking
     void introselect(DPPartition part, double[] a, int left, int right,
-        IndexInterval k, int ka, int kb, int maxDepth) {
+        SearchableInterval k, int ka, int kb, int maxDepth) {
         // If partitioning splits the interval then recursion is used for left and/or
         // right sides and the middle remains within this function. If partitioning does
         // not split the interval then it remains within this function.
@@ -4509,8 +4509,8 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link Interval} of indices {@code k} that define the
-     * range of indices to partition. The {@link Interval} can be narrowed or split as
+     * <p>This function accepts a {@link UpdatingInterval} of indices {@code k} that define the
+     * range of indices to partition. The {@link UpdatingInterval} can be narrowed or split as
      * partitioning divides the range.
      *
      * <pre>{@code
@@ -4533,7 +4533,7 @@ final class Partition {
      */
     // package-private for benchmarking
     void introselect(DPPartition part, double[] a, int left, int right,
-        Interval k, int maxDepth) {
+        UpdatingInterval k, int maxDepth) {
         // If partitioning splits the interval then recursion is used for left and/or
         // right sides and the middle remains within this function. If partitioning does
         // not split the interval then it remains within this function.
@@ -5188,7 +5188,7 @@ final class Partition {
             select(a, 0, length - 1, IndexIntervals.anyIndex(), ka, kb, maxDepth);
             return;
         }
-        final IndexInterval keys =
+        final SearchableInterval keys =
             createIndexInterval(length, k, n);
             //IndexIntervals.create(k, n)
             //IndexSet.of(k, n);
@@ -5211,9 +5211,9 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>This function accepts a {@link IndexInterval} of {@code keyd} and the
+     * <p>This function accepts a {@link SearchableInterval} of {@code keyd} and the
      * first index {@code k1} and last index {@code kn} that define the range of indices
-     * to partition. The {@link IndexInterval} is used to search for keys in {@code [k1, kn]}
+     * to partition. The {@link SearchableInterval} is used to search for keys in {@code [k1, kn]}
      * to create {@code [k1, kb]} and {@code [ka, kn]} if partitioning splits the range.
      *
      * <pre>{@code
@@ -5238,7 +5238,7 @@ final class Partition {
      */
     // package-private for benchmarking
     static void select(double[] a, int left, int right,
-            IndexInterval keys, int k1, int kn, int maxDepth) {
+            SearchableInterval keys, int k1, int kn, int maxDepth) {
         // Inline code using the defaults.
         // Changes branching from left/right/middle to left/middle/right.
         // This allows branch prediction to track that after a split then the next section

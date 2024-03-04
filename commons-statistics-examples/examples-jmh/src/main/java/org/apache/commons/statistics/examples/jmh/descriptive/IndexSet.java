@@ -41,7 +41,7 @@ import java.util.function.IntConsumer;
  *
  * @since 1.1
  */
-final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
+final class IndexSet implements PivotCache, SearchableInterval, SearchableInterval2 {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
@@ -942,13 +942,13 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
     }
 
     /**
-     * Return a {@link Interval} implementation to support the range
+     * Return a {@link UpdatingInterval} implementation to support the range
      * {@code [left, right]} re-using the same internal storage.
      *
      * @return the interval
      */
-    Interval interval() {
-        return new IndexSetInterval(left, right);
+    UpdatingInterval interval() {
+        return new IndexSetUpdatingInterval(left, right);
     }
 
     /**
@@ -1128,12 +1128,12 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
     }
 
     /**
-     * Implementation of the {@link Interval} using the {@link IndexSet}.
+     * Implementation of the {@link UpdatingInterval} using the {@link IndexSet}.
      *
      * <p>This class is bound to the enclosing {@link IndexSet} instance to provide
      * the functionality to search indexes.
      */
-    private class IndexSetInterval implements Interval {
+    private class IndexSetUpdatingInterval implements UpdatingInterval {
         /** Left bound of the interval. */
         private int left;
         /** Right bound of the interval. */
@@ -1143,7 +1143,7 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
          * @param left Lower bound (inclusive).
          * @param right Upper bound (inclusive).
          */
-        IndexSetInterval(int left, int right) {
+        IndexSetUpdatingInterval(int left, int right) {
             this.left = left;
             this.right = right;
         }
@@ -1171,11 +1171,11 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
         }
 
         @Override
-        public Interval split(int ka, int kb) {
+        public UpdatingInterval split(int ka, int kb) {
             // Assume left < ka <= kb < right
             final int lower = left;
             left = nextIndex(kb + 1);
-            return new IndexSetInterval(lower, previousIndex(ka - 1));
+            return new IndexSetUpdatingInterval(lower, previousIndex(ka - 1));
         }
     }
 }

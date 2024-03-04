@@ -906,7 +906,7 @@ public class QuantilePerformance {
     }
 
     /**
-     * Source of k-th indices to be searched by an {@link IndexInterval}.
+     * Source of k-th indices to be searched by a {@link SearchableInterval}.
      */
     @State(Scope.Benchmark)
     public static class IndexSource {
@@ -1067,7 +1067,7 @@ public class QuantilePerformance {
         }
     }
     /**
-     * Source of an {@link IndexInterval}.
+     * Source of an {@link SearchableInterval}.
      */
     @State(Scope.Benchmark)
     public static class IndexIntervalSource {
@@ -1082,13 +1082,13 @@ public class QuantilePerformance {
         private String name;
 
         /** The factory. */
-        private Function<int[], IndexInterval> factory;
+        private Function<int[], SearchableInterval> factory;
 
         /**
          * @param indices Indices.
-         * @return {@link IndexInterval}
+         * @return {@link SearchableInterval}
          */
-        public IndexInterval create(int[] indices) {
+        public SearchableInterval create(int[] indices) {
             return factory.apply(indices);
         }
 
@@ -1102,13 +1102,13 @@ public class QuantilePerformance {
                 factory = k -> {
                     k = k.clone();
                     final int unique = Sorting.sortIndices(k, k.length);
-                    return ScanningKeyIndexInterval.of(k, unique);
+                    return ScanningKeyInterval.of(k, unique);
                 };
             } else if ("BinarySearchKeyIndexInterval".equals(name)) {
                 factory = k -> {
                     k = k.clone();
                     final int unique = Sorting.sortIndices(k, k.length);
-                    return BinarySearchKeyIndexInterval.of(k, unique);
+                    return BinarySearchKeyInterval.of(k, unique);
                 };
             } else if ("IndexSet".equals(name)) {
                 factory = IndexSet::of;
@@ -1155,12 +1155,12 @@ public class QuantilePerformance {
         @Param({"1", "2", "3", "4", "5", "6", "7", "8", "9"})
         private int shift;
         /** Target indices. */
-        private IndexInterval[] indices;
+        private SearchableInterval[] indices;
 
         /**
          * @return the target indices
          */
-        public IndexInterval[] getIndices() {
+        public SearchableInterval[] getIndices() {
             return indices;
         }
 
@@ -1185,9 +1185,9 @@ public class QuantilePerformance {
             // Create a single index at both ends
             // TODO - support specifying a range: [ka, kb]
             final int k1 = length - 1 - k;
-            indices = new IndexInterval[] {
-                ScanningKeyIndexInterval.of(new int[] {k}, 1),
-                ScanningKeyIndexInterval.of(new int[] {k1}, 1),
+            indices = new SearchableInterval[] {
+                ScanningKeyInterval.of(new int[] {k}, 1),
+                ScanningKeyInterval.of(new int[] {k1}, 1),
             };
         }
     }
@@ -1561,12 +1561,12 @@ public class QuantilePerformance {
         private String name;
 
         /** The action. */
-        private BiFunction<double[], IndexInterval, double[]> function;
+        private BiFunction<double[], SearchableInterval, double[]> function;
 
         /**
          * @return the function
          */
-        public BiFunction<double[], IndexInterval, double[]> getFunction() {
+        public BiFunction<double[], SearchableInterval, double[]> getFunction() {
             return function;
         }
 
@@ -1609,7 +1609,7 @@ public class QuantilePerformance {
          * @param indices Indices.
          * @return the data
          */
-        private static double[] extractIndices(double[] data, IndexInterval indices) {
+        private static double[] extractIndices(double[] data, SearchableInterval indices) {
             final int l = indices.left();
             final int r = indices.right();
             final double[] x = new double[r - l + 1];
@@ -2119,10 +2119,10 @@ public class QuantilePerformance {
     @Benchmark
     public void edgeSelect(EdgeFunctionSource function, EdgeSource source, Blackhole bh) {
         final int size = source.size();
-        final IndexInterval[] indices = source.getIndices();
-        final BiFunction<double[], IndexInterval, double[]> fun = function.getFunction();
+        final SearchableInterval[] indices = source.getIndices();
+        final BiFunction<double[], SearchableInterval, double[]> fun = function.getFunction();
         for (int j = -1; ++j < size;) {
-            for (final IndexInterval i : indices) {
+            for (final SearchableInterval i : indices) {
                 bh.consume(fun.apply(source.getData(j), i));
             }
         }
@@ -2131,7 +2131,7 @@ public class QuantilePerformance {
     /**
      * Benchmark the tracking of an interval of indices during a partition algorithm.
      *
-     * <p>The {@link IndexInterval} is created for the indices of interest. These are then
+     * <p>The {@link SearchableInterval} is created for the indices of interest. These are then
      * cut at all points in the interval between indices to simulate a partition algorithm
      * dividing the data and requiring a new interval to use in each part:
      * <pre>{@code
@@ -2167,7 +2167,7 @@ public class QuantilePerformance {
         for (int i = 0; i < indices.length; i++) {
             final int[] x = indices[i];
             final int[] p = points[i];
-            final IndexInterval interval = function.create(x);
+            final SearchableInterval interval = function.create(x);
             for (final int k : p) {
                 sum += interval.nextIndex(k);
                 sum += interval.previousIndex(k);
@@ -2181,7 +2181,7 @@ public class QuantilePerformance {
      *
      * <p>This is similar to
      * {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)}. It uses the
-     * {@link IndexInterval#split(int, int, int[])} method. This requires {@code k} to be
+     * {@link SearchableInterval#split(int, int, int[])} method. This requires {@code k} to be
      * in an open interval. Some modes of the {@link IndexSource} do not ensure that
      * {@code left < k < right} for all split points so we have to check this before
      * calling the split method (it is a fixed overhead for the benchmark).
@@ -2202,7 +2202,7 @@ public class QuantilePerformance {
             final int[] p = points[i];
             // Note: A partition algorithm would only call split if there are indices
             // above and below the split point.
-            final IndexInterval interval = function.create(x);
+            final SearchableInterval interval = function.create(x);
             final int left = interval.left();
             final int right = interval.right();
             for (final int k : p) {
@@ -2221,7 +2221,7 @@ public class QuantilePerformance {
      *
      * <p>This baselines the {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)} benchmark.
      * For the BitSet-type structures a large overhead is the memory allocation to create
-     * the {@link IndexInterval}. Note that this will be at most 1/64 the size of the array
+     * the {@link SearchableInterval}. Note that this will be at most 1/64 the size of the array
      * that is being partitioned and in practice this overhead is not significant.
      *
      * @param function Source of the interval.

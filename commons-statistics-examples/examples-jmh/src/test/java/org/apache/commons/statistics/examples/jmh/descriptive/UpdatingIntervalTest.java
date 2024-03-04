@@ -29,13 +29,13 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * Test for {@link Interval} implementations.
+ * Test for {@link UpdatingInterval} implementations.
  */
-class IntervalTest {
+class UpdatingIntervalTest {
     @ParameterizedTest
     @ValueSource(ints = {0, 1, 42, Integer.MAX_VALUE - 1})
     void testPointInterval(int k) {
-        final Interval interval = IndexIntervals.interval(k);
+        final UpdatingInterval interval = IndexIntervals.interval(k);
         Assertions.assertEquals(k, interval.left());
         Assertions.assertEquals(k, interval.right());
         Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateLeft(k));
@@ -51,7 +51,7 @@ class IntervalTest {
         "10, 42",
     })
     void testRangeInterval(int lo, int hi) {
-        final Interval interval = IndexIntervals.interval(lo, hi);
+        final UpdatingInterval interval = IndexIntervals.interval(lo, hi);
         Assertions.assertEquals(lo, interval.left());
         Assertions.assertEquals(hi, interval.right());
         if (interval.left() < interval.right()) {
@@ -65,7 +65,7 @@ class IntervalTest {
             final int right = interval.right();
             final int m1 = (interval.left() + interval.right()) >>> 1;
             final int m2 = m1 + 1;
-            final Interval leftInterval = interval.split(m1, m2);
+            final UpdatingInterval leftInterval = interval.split(m1, m2);
             Assertions.assertEquals(left, leftInterval.left());
             Assertions.assertEquals(m1 - 1, leftInterval.right());
             Assertions.assertEquals(m2 + 1, interval.left());
@@ -75,15 +75,15 @@ class IntervalTest {
 
     @Test
     void testKeyIntervalInvalidIndicesThrows() {
-        assertInvalidIndicesThrows(KeyInterval::of);
+        assertInvalidIndicesThrows(KeyUpdatingInterval::of);
         // Invalid indices: not in [0, Integer.MAX_VALUE)
         Assertions.assertThrows(IllegalArgumentException.class,
-            () -> KeyInterval.of(new int[] {-1, 2, 3}, 3));
+            () -> KeyUpdatingInterval.of(new int[] {-1, 2, 3}, 3));
         Assertions.assertThrows(IllegalArgumentException.class,
-            () -> KeyInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
+            () -> KeyUpdatingInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
     }
 
-    private static void assertInvalidIndicesThrows(BiFunction<int[], Integer, Interval> constructor) {
+    private static void assertInvalidIndicesThrows(BiFunction<int[], Integer, UpdatingInterval> constructor) {
         // Size zero
         Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[0], 0));
         Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[10], 0));
@@ -98,7 +98,7 @@ class IntervalTest {
     @ParameterizedTest
     @MethodSource(value = {"testIndices"})
     void testUpdateKeyInterval(int[] indices) {
-        assertUpdate(KeyInterval::of, indices);
+        assertUpdate(KeyUpdatingInterval::of, indices);
     }
 
     @ParameterizedTest
@@ -118,7 +118,7 @@ class IntervalTest {
     @ParameterizedTest
     @MethodSource(value = {"testIndices"})
     void testSplitKeyInterval(int[] indices) {
-        assertSplit(KeyInterval::of, indices);
+        assertSplit(KeyUpdatingInterval::of, indices);
     }
 
     @ParameterizedTest
@@ -130,16 +130,16 @@ class IntervalTest {
     }
 
     /**
-     * Assert the {@link Interval#updateLeft(int)} and {@link Interval#updateRight(int)} methods.
+     * Assert the {@link UpdatingInterval#updateLeft(int)} and {@link UpdatingInterval#updateRight(int)} methods.
      * These are tested by successive calls to reduce the interval by 1 index until it
      * has only 1 index remaining.
      *
      * @param constructor Interval constructor.
      * @param indices Indices.
      */
-    private static void assertUpdate(BiFunction<int[], Integer, Interval> constructor,
+    private static void assertUpdate(BiFunction<int[], Integer, UpdatingInterval> constructor,
             int[] indices) {
-        Interval interval = constructor.apply(indices, indices.length);
+        UpdatingInterval interval = constructor.apply(indices, indices.length);
         final int nm1 = indices.length - 1;
         Assertions.assertEquals(indices[0], interval.left());
         Assertions.assertEquals(indices[nm1], interval.right());
@@ -165,13 +165,13 @@ class IntervalTest {
     }
 
     /**
-     * Assert the {@link Interval#split(int, int)} method.
+     * Assert the {@link UpdatingInterval#split(int, int)} method.
      * These are tested by successive calls to split the interval around the mid-point.
      *
      * @param constructor Interval constructor.
      * @param indices Indices.
      */
-    private static void assertSplit(BiFunction<int[], Integer, Interval> constructor, int[] indices) {
+    private static void assertSplit(BiFunction<int[], Integer, UpdatingInterval> constructor, int[] indices) {
         assertSplitMedian(constructor.apply(indices, indices.length),
             indices, 0, indices.length - 1);
         assertSplitMiddleIndices(constructor.apply(indices, indices.length),
@@ -186,7 +186,7 @@ class IntervalTest {
      * @param i Low index into the indices (inclusive).
      * @param j High index into the indices (inclusive).
      */
-    private static void assertSplitMedian(Interval interval, int[] indices, int i, int j) {
+    private static void assertSplitMedian(UpdatingInterval interval, int[] indices, int i, int j) {
         if (indices[i] + 1 >= indices[j]) {
             // Cannot split - no value between the low and high points
             return;
@@ -207,7 +207,7 @@ class IntervalTest {
 
         final int left = interval.left();
         final int right = interval.right();
-        final Interval leftInterval = interval.split(m, m);
+        final UpdatingInterval leftInterval = interval.split(m, m);
         Assertions.assertEquals(left, leftInterval.left());
         Assertions.assertEquals(indices[lo], leftInterval.right());
         Assertions.assertEquals(indices[hi], interval.left());
@@ -226,7 +226,7 @@ class IntervalTest {
      * @param i Low index into the indices (inclusive).
      * @param j High index into the indices (inclusive).
      */
-    private static void assertSplitMiddleIndices(Interval interval, int[] indices, int i, int j) {
+    private static void assertSplitMiddleIndices(UpdatingInterval interval, int[] indices, int i, int j) {
         if (i + 3 >= j) {
             // Cannot split - not two indices between low and high index
             return;
@@ -237,7 +237,7 @@ class IntervalTest {
 
         final int left = interval.left();
         final int right = interval.right();
-        final Interval leftInterval = interval.split(indices[m1], indices[m2]);
+        final UpdatingInterval leftInterval = interval.split(indices[m1], indices[m2]);
         Assertions.assertEquals(left, leftInterval.left());
         Assertions.assertEquals(indices[m1 - 1], leftInterval.right());
         Assertions.assertEquals(indices[m2 + 1], interval.left());
@@ -249,7 +249,7 @@ class IntervalTest {
     }
 
     static Stream<int[]> testIndices() {
-        return IndexIntervalTest.testPreviousNextIndex();
+        return SearchableIntervalTest.testPreviousNextIndex();
     }
 
 //    @Test

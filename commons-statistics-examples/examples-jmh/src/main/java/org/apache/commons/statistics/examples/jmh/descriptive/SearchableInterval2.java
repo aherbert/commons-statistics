@@ -38,7 +38,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-interface IndexInterval2 {
+interface SearchableInterval2 {
 
     /**
      * Start pointer of the interval.
