@@ -1160,14 +1160,14 @@ final class IndexSet implements PivotCache, IndexInterval, IndexInterval2 {
 
         @Override
         public int updateLeft(int k) {
-            // Assume left <= k < right
-            return left = nextIndex(k + 1);
+            // Assume left < k= < right
+            return left = nextIndex(k);
         }
 
         @Override
         public int updateRight(int k) {
-            // Assume left < k <= right
-            return right = previousIndex(k - 1);
+            // Assume left <= k < right
+            return right = previousIndex(k);
         }
 
         @Override

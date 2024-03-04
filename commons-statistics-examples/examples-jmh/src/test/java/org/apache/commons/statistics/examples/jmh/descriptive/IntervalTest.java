@@ -26,11 +26,23 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Test for {@link Interval} implementations.
  */
 class IntervalTest {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 42, Integer.MAX_VALUE - 1})
+    void testPointInterval(int k) {
+        final Interval interval = IndexIntervals.interval(k);
+        Assertions.assertEquals(k, interval.left());
+        Assertions.assertEquals(k, interval.right());
+        Assertions.assertThrows(IllegalStateException.class, () -> interval.updateLeft(k));
+        Assertions.assertThrows(IllegalStateException.class, () -> interval.updateRight(k));
+        Assertions.assertThrows(IllegalStateException.class, () -> interval.split(k, k));
+    }
+
     @ParameterizedTest
     @CsvSource({
         "1, 1",
@@ -43,10 +55,10 @@ class IntervalTest {
         Assertions.assertEquals(lo, interval.left());
         Assertions.assertEquals(hi, interval.right());
         if (interval.left() < interval.right()) {
-            Assertions.assertEquals(lo + 1, interval.updateLeft(lo));
+            Assertions.assertEquals(lo + 1, interval.updateLeft(lo + 1));
         }
         if (interval.left() < interval.right()) {
-            Assertions.assertEquals(hi - 1, interval.updateRight(hi));
+            Assertions.assertEquals(hi - 1, interval.updateRight(hi - 1));
         }
         if (interval.left() + 2 < interval.right()) {
             final int left = interval.left();
@@ -136,7 +148,7 @@ class IntervalTest {
         for (int i = 1; i < indices.length; i++) {
             // rounded down median between indices
             final int k = (indices[i - 1] + indices[i]) >>> 1;
-            interval.updateLeft(k);
+            interval.updateLeft(k + 1);
             Assertions.assertEquals(indices[i], interval.left());
         }
         Assertions.assertEquals(interval.left(), interval.right());
@@ -146,7 +158,7 @@ class IntervalTest {
         for (int i = indices.length; --i > 0;) {
             // rounded up median between indices
             final int k = 1 + ((indices[i - 1] + indices[i]) >>> 1);
-            interval.updateRight(k);
+            interval.updateRight(k - 1);
             Assertions.assertEquals(indices[i - 1], interval.right());
         }
         Assertions.assertEquals(interval.left(), interval.right());

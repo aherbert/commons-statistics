@@ -51,14 +51,14 @@ interface Interval {
     int right();
 
     /**
-     * Update the interval so {@code k < left}.
+     * Update the interval so {@code k <= left}.
      *
-     * <p>Note: Requires {@code left <= k < right}, i.e. there exists a valid interval
+     * <p>Note: Requires {@code left < k <= right}, i.e. there exists a valid interval
      * above the index.
      *
      * <pre>{@code
      * l-----------k----------r
-     *              |--> l
+     *             |--> l
      * }</pre>
      *
      * @param k Index to start checking from (inclusive).
@@ -67,14 +67,14 @@ interface Interval {
     int updateLeft(int k);
 
     /**
-     * Update the interval so {@code right < k}.
+     * Update the interval so {@code right <= k}.
      *
-     * <p>Note: Requires {@code left < k <= right}, i.e. there exists a valid interval
+     * <p>Note: Requires {@code left <= k < right}, i.e. there exists a valid interval
      * below the index.
      *
      * <pre>{@code
      * l-----------k----------r
-     *       r <--|
+     *        r <--|
      * }</pre>
      *
      * @param k Index to start checking from (inclusive).

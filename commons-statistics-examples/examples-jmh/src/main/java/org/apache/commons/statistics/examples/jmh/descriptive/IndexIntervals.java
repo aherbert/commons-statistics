@@ -60,6 +60,17 @@ final class IndexIntervals {
     }
 
     /**
+     * Returns an interval that covers a single index {@code k}. The interval cannot
+     * be split or the bounds updated.
+     *
+     * @param k Index.
+     * @return the interval
+     */
+    static Interval interval(int k) {
+        return new PointInterval(k);
+    }
+
+    /**
      * Returns an interval that covers all indices {@code [left, right]}.
      * This method will sort the input bound to ensure {@code left <= right}.
      *
@@ -258,6 +269,49 @@ final class IndexIntervals {
     }
 
     /**
+     * {@link Interval} for a single {@code index}.
+     */
+    private static final class PointInterval implements Interval {
+        /** Left/right bound of the interval. */
+        private int index;
+
+        /**
+         * @param k Left/right bound.
+         */
+        PointInterval(int k) {
+            this.index = k;
+        }
+
+        @Override
+        public int left() {
+            return index;
+        }
+
+        @Override
+        public int right() {
+            return index;
+        }
+
+        @Override
+        public int updateLeft(int k) {
+            // Assume left <= k < right
+            throw new IllegalStateException("updateLeft should not be called");
+        }
+
+        @Override
+        public int updateRight(int k) {
+            // Assume left < k <= right
+            throw new IllegalStateException("updateRight should not be called");
+        }
+
+        @Override
+        public Interval split(int ka, int kb) {
+            // Assume left < ka <= kb < right
+            throw new IllegalStateException("split should not be called");
+        }
+    }
+
+    /**
      * {@link Interval} for range {@code [left, right]}.
      */
     private static final class RangeInterval implements Interval {
@@ -287,14 +341,16 @@ final class IndexIntervals {
 
         @Override
         public int updateLeft(int k) {
-            // Assume left <= k < right
-            return left = k + 1;
+            // Assume left < k <= right
+            left = k;
+            return k;
         }
 
         @Override
         public int updateRight(int k) {
-            // Assume left < k <= right
-            return right = k - 1;
+            // Assume left <= k < right
+            right = k;
+            return k;
         }
 
         @Override
