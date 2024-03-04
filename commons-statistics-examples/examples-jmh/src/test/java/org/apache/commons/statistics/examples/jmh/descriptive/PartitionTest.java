@@ -560,6 +560,24 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionISBMKeyInterval(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
+            .setKeyStrategy(KeyStrategy.KEY_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.INTERVAL)
+            ::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMIndexSetInterval(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
+            .setKeyStrategy(KeyStrategy.INDEX_SET_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.INTERVAL)
+            ::partitionISBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
@@ -626,6 +644,24 @@ class PartitionTest {
     void testPartitionIDPIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
+            .setPairedKeyStrategy(PairedKeyStrategy.INDEX_INTERVAL)
+            ::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPKeyInterval(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
+            .setKeyStrategy(KeyStrategy.KEY_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.INDEX_INTERVAL)
+            ::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPIndexSetInterval(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
+            .setKeyStrategy(KeyStrategy.INDEX_SET_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.INDEX_INTERVAL)
             ::partitionIDP);
     }
