@@ -1412,7 +1412,7 @@ final class Sorting {
             return sortIndicesHashIndexSet(data, n);
         }
 
-        // Repeat code from sortIndicesIndexSet as we have the min/max
+        // Repeat code from IndexSet as we have the min/max
         final IndexSet set = IndexSet.ofRange(min, max);
         for (int i = -1; ++i < n;) {
             set.set(data[i]);
@@ -1632,14 +1632,14 @@ final class Sorting {
         // Min heap is now 1 smaller
         // Proceed with the remaining elements but do not write them
         // to the sorted data unless different from the previous value.
-        int unique = 1;
+        int last = 0;
         for (;;) {
             s--;
             // Move top of heap to the sorted end
             final int v = data[offset];
             data[offset] = data[offset - s];
             if (previous != v) {
-                data[unique++] = v;
+                data[++last] = v;
                 previous = v;
             }
             if (s == 1) {
@@ -1651,9 +1651,9 @@ final class Sorting {
         // Stopped sifting when the heap was size 1.
         // Move the last (max) value to the sorted data.
         if (previous != data[offset]) {
-            data[unique++] = data[offset];
+            data[++last] = data[offset];
         }
-        return unique;
+        return last + 1;
     }
 
     /**
@@ -1728,7 +1728,7 @@ final class Sorting {
     private static int compressDuplicates(int[] data, int n) {
         // Compress to remove duplicates
         int i = 0;
-        int unique = 1;
+        int last = 0;
         int previous = data[0];
         OUTER:
         while (++i < n) {
@@ -1738,9 +1738,9 @@ final class Sorting {
                 }
             }
             previous = data[i];
-            data[unique++] = previous;
+            data[++last] = previous;
         }
-        return unique;
+        return last + 1;
     }
 
     /**
@@ -1782,17 +1782,17 @@ final class Sorting {
         // Storage (bytes) = 4 * next-power-of-2(n*2) => 2-4 times n
         final HashIndexSet set = new HashIndexSet(n);
         int i = 0;
-        int unique = 1;
+        int last = 0;
         set.add(data[0]);
         while (++i < n) {
             final int v = data[i];
             if (set.add(v)) {
-                data[unique++] = v;
+                data[++last] = v;
             }
         }
         // Sort unique data.
         // This can exploit the input already being sorted.
-        Arrays.sort(data, 0, unique);
-        return unique;
+        Arrays.sort(data, 0, ++last);
+        return last;
     }
 }
