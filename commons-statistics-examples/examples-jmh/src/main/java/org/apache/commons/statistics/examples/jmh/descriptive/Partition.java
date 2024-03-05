@@ -5240,19 +5240,19 @@ final class Partition {
         // by doubling this value.
         int maxDepth = twiceLog3(length);
 
-//        // Handle cases without multiple keys
-//        if (n == 1) {
-//            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
-//            return;
-//        }
-//        // Special case for partition around adjacent indices (for interpolation).
-//        // If the keys are not separated then they are effectively a single key.
-//        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
-//            final int ka = Math.min(k[0], k[1]);
-//            final int kb = Math.max(k[0], k[1]);
-//            select(a, 0, length - 1, IndexIntervals.interval(ka, kb), maxDepth);
-//            return;
-//        }
+        // Handle cases without multiple keys
+        if (n == 1) {
+            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
+            return;
+        }
+        // Special case for partition around adjacent indices (for interpolation).
+        // If the keys are not separated then they are effectively a single key.
+        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
+            select(a, 0, length - 1, IndexIntervals.interval(k[0], k[1]), maxDepth);
+            return;
+        }
+
+//        // Key analysis ???
 //        final UpdatingInterval keys = createUpdatingInterval(length, k, n);
 //
 //        if (keys == null) {
@@ -5262,31 +5262,7 @@ final class Partition {
 //            select(a, 0, length - 1, keys, maxDepth);
 //        }
 
-        // Handle cases without multiple keys
-        if (n == 1) {
-            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
-            return;
-        }
-        // Special case for partition around adjacent indices (for interpolation).
-        // If the keys are not separated then they are effectively a single key.
-        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
-            final int ka = Math.min(k[0], k[1]);
-            final int kb = Math.max(k[0], k[1]);
-            select(a, 0, length - 1, IndexIntervals.interval(ka, kb), maxDepth);
-            return;
-        }
-
-        // Key analysis ???
-        final UpdatingInterval keys =
-            createUpdatingInterval(length, k, n);
-            //IndexIntervals.createUpdatingInterval(k, n);
-
-        if (keys == null) {
-            // Full sort recommended
-            Arrays.sort(a, 0, length);
-        } else {
-            select(a, 0, length - 1, keys, maxDepth);
-        }
+        select(a, 0, length - 1, IndexIntervals.createUpdatingInterval(k, n), maxDepth);
     }
 
     /**
