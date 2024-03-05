@@ -265,11 +265,11 @@ final class IndexIntervals {
             if ((long) n * n > ((long) size >> shift)) {
                 // Do not call IndexSet.of(k, n) which repeats the min/max search
                 // (especially given n is likely to be large).
-                final IndexSet interval = IndexSet.ofRange(min, max);
+                final BitIndexUpdatingInterval interval = BitIndexUpdatingInterval.ofRange(min, max);
                 for (int i = n; --i >= 0;) {
                     interval.set(k[i]);
                 }
-                return interval.interval();
+                return interval;
             }
 
             // Fall-though to the KeyUpdatingInterval...

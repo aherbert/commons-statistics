@@ -19,6 +19,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.function.BiFunction;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -75,7 +76,15 @@ class UpdatingIntervalTest {
 
     @Test
     void testKeyIntervalInvalidIndicesThrows() {
-        assertInvalidIndicesThrows(KeyUpdatingInterval::of);
+        // Size zero
+        Assertions.assertThrows(IllegalArgumentException.class, () -> KeyUpdatingInterval.of(new int[0], 0));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> KeyUpdatingInterval.of(new int[10], 0));
+        // Not sorted
+        Assertions.assertThrows(IllegalArgumentException.class,
+            () -> KeyUpdatingInterval.of(new int[] {3, 2, 1}, 3));
+        // Not unique
+        Assertions.assertThrows(IllegalArgumentException.class,
+            () -> KeyUpdatingInterval.of(new int[] {1, 2, 2, 3}, 4));
         // Invalid indices: not in [0, Integer.MAX_VALUE)
         Assertions.assertThrows(IllegalArgumentException.class,
             () -> KeyUpdatingInterval.of(new int[] {-1, 2, 3}, 3));
@@ -83,16 +92,16 @@ class UpdatingIntervalTest {
             () -> KeyUpdatingInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
     }
 
-    private static void assertInvalidIndicesThrows(BiFunction<int[], Integer, UpdatingInterval> constructor) {
+    @Test
+    void testBitIndexUpdatingIntervalInvalidIndicesThrows() {
         // Size zero
-        Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[0], 0));
-        Assertions.assertThrows(IllegalArgumentException.class, () -> constructor.apply(new int[10], 0));
-        // Not sorted
+        Assertions.assertThrows(IllegalArgumentException.class, () -> BitIndexUpdatingInterval.of(new int[0], 0));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> BitIndexUpdatingInterval.of(new int[10], 0));
+        // Invalid indices: not in [0, Integer.MAX_VALUE)
         Assertions.assertThrows(IllegalArgumentException.class,
-            () -> constructor.apply(new int[] {3, 2, 1}, 3));
-        // Not unique
+            () -> BitIndexUpdatingInterval.of(new int[] {-1, 2, 3}, 3));
         Assertions.assertThrows(IllegalArgumentException.class,
-            () -> constructor.apply(new int[] {1, 2, 2, 3}, 4));
+            () -> BitIndexUpdatingInterval.of(new int[] {1, 2, Integer.MAX_VALUE}, 3));
     }
 
     @ParameterizedTest
@@ -109,11 +118,19 @@ class UpdatingIntervalTest {
         assertUpdate((k, n) -> IndexSet.of(k, n).interval(), indices);
     }
 
-//    @ParameterizedTest
-//    @MethodSource(value = {"testIndices"})
-//    void testPreviousNextIndexInterval(int[] indices) {
-//        assertPreviousNextIndex(IndexIntervals.create(indices, indices.length), indices);
-//    }
+    @ParameterizedTest
+    @MethodSource(value = {"testIndices"})
+    void testUpdateBitIndexUpdatingInterval(int[] indices) {
+        // Skip this due to excess memory consumption
+        Assumptions.assumeTrue(indices[indices.length - 1] < Integer.MAX_VALUE - 1);
+        assertUpdate(BitIndexUpdatingInterval::of, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testIndices"})
+    void testUpdateIndexInterval(int[] indices) {
+        assertUpdate(IndexIntervals::createUpdatingInterval, indices);
+    }
 
     @ParameterizedTest
     @MethodSource(value = {"testIndices"})
@@ -127,6 +144,20 @@ class UpdatingIntervalTest {
         // Skip this due to excess memory consumption
         Assumptions.assumeTrue(indices[indices.length - 1] < Integer.MAX_VALUE - 1);
         assertSplit((k, n) -> IndexSet.of(k, n).interval(), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testIndices"})
+    void testSplitBitIndexUpdatingInterval(int[] indices) {
+        // Skip this due to excess memory consumption
+        Assumptions.assumeTrue(indices[indices.length - 1] < Integer.MAX_VALUE - 1);
+        assertSplit(BitIndexUpdatingInterval::of, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testIndices"})
+    void testSplitIndexInterval(int[] indices) {
+        assertSplit(IndexIntervals::createUpdatingInterval, indices);
     }
 
     /**
@@ -252,40 +283,40 @@ class UpdatingIntervalTest {
         return SearchableIntervalTest.testPreviousNextIndex();
     }
 
-//    @Test
-//    void testIndexIntervalCreate() {
-//        // The above tests verify the IndexInterval implementations all work.
-//        // Hit all paths in the key analysis performed to create an interval.
-//
-//        // Small number of keys; no analysis
-//        Assertions.assertEquals(ScanningKeyIndexInterval.class,
-//            IndexIntervals.create(new int[] {1}, 1).getClass());
-//
-//        // >10 keys for key analysis
-//
-//        // Small number of keys saturating the range
-//        Assertions.assertEquals(IndexSet.class,
-//            IndexIntervals.create(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 11).getClass());
-//        // Keys over a huge range
-//        Assertions.assertEquals(ScanningKeyIndexInterval.class,
-//            IndexIntervals.create(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, Integer.MAX_VALUE - 1}, 11).getClass());
-//
-//        // Small number of keys over a moderate range
-//        int[] k = IntStream.range(0, 30).map(i -> i * 64) .toArray();
-//        Assertions.assertEquals(IndexSet.class,
-//            IndexIntervals.create(k.clone(), k.length).getClass());
-//        // Same keys over a huge range
-//        k[k.length - 1] = Integer.MAX_VALUE - 1;
-//        Assertions.assertEquals(ScanningKeyIndexInterval.class,
-//            IndexIntervals.create(k, k.length).getClass());
-//
-//        // Moderate number of keys over a moderate range
-//        k = IntStream.range(0, 3000).map(i -> i * 64) .toArray();
-//        Assertions.assertEquals(IndexSet.class,
-//            IndexIntervals.create(k.clone(), k.length).getClass());
-//        // Same keys over a huge range - switch to binary search on the keys
-//        k[k.length - 1] = Integer.MAX_VALUE - 1;
-//        Assertions.assertEquals(BinarySearchKeyIndexInterval.class,
-//            IndexIntervals.create(k, k.length).getClass());
-//    }
+    @Test
+    void testIndexIntervalCreate() {
+        // The above tests verify the IndexInterval implementations all work.
+        // Hit all paths in the key analysis performed to create an interval.
+
+        // Small number of keys; no analysis
+        Assertions.assertEquals(KeyUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(new int[] {1}, 1).getClass());
+
+        // >10 keys for key analysis
+
+        // Small number of keys saturating the range
+        Assertions.assertEquals(BitIndexUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 11).getClass());
+        // Keys over a huge range
+        Assertions.assertEquals(KeyUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, Integer.MAX_VALUE - 1}, 11).getClass());
+
+        // Small number of keys over a moderate range
+        int[] k = IntStream.range(0, 30).map(i -> i * 64) .toArray();
+        Assertions.assertEquals(BitIndexUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(k.clone(), k.length).getClass());
+        // Same keys over a huge range
+        k[k.length - 1] = Integer.MAX_VALUE - 1;
+        Assertions.assertEquals(KeyUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(k, k.length).getClass());
+
+        // Moderate number of keys over a moderate range
+        k = IntStream.range(0, 3000).map(i -> i * 64) .toArray();
+        Assertions.assertEquals(BitIndexUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(k.clone(), k.length).getClass());
+        // Same keys over a huge range - switch to binary search on the keys
+        k[k.length - 1] = Integer.MAX_VALUE - 1;
+        Assertions.assertEquals(KeyUpdatingInterval.class,
+            IndexIntervals.createUpdatingInterval(k, k.length).getClass());
+    }
 }
