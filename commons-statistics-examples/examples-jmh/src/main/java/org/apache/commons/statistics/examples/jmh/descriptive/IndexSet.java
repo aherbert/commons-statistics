@@ -50,13 +50,12 @@ final class IndexSet implements PivotCache, SearchableInterval, SearchableInterv
      * Set as a value higher than any valid array index. */
     private static final int UPPER_DEFAULT = Integer.MAX_VALUE;
 
-
     /** Bit indexes. */
     private final long[] data;
 
     /** Left bound of the support. */
     private final int left;
-    /** Left bound of the support. */
+    /** Right bound of the support. */
     private final int right;
     /** The upstream pivot closest to the left bound of the support.
      * Provides a lower search bound for the range [left, right]. */
