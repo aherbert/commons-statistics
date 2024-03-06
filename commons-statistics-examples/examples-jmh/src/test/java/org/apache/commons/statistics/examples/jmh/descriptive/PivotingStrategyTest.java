@@ -98,6 +98,10 @@ class PivotingStrategyTest {
             Assertions.assertArrayEquals(x, y, "Data at indices changed");
             // Sort the data to obtain the expected pivot
             Arrays.sort(x);
+        } else if (effect == PivotingStrategy.PARTIAL_SORT) {
+            Arrays.sort(x);
+            Arrays.sort(y);
+            Assertions.assertArrayEquals(x, y, "Data destroyed");
         }
         // Pivot should be the centre of the sorted sample
         final int m = k.length >>> 1;

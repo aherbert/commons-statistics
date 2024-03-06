@@ -156,7 +156,7 @@ enum PivotingStrategy {
      * Pivot around the median of 5 values within the range.
      * Requires that {@code right - left >= 4}.
      *
-     * <p>Warning: This has the side effect that the 5 values are also sorted.
+     * <p>Warning: This has the side effect that the 5 values are also partially sorted.
      *
      * <p>Uses the same spacing as {@link DualPivotingStrategy#SORT_5}.
      */
@@ -173,8 +173,12 @@ enum PivotingStrategy {
             final int p1 = p2 - sixth;
             final int p4 = p3 + sixth;
             final int p5 = p4 + sixth;
-            Sorting.sort5(data, p1, p2, p3, p4, p5);
-            return p3;
+            Sorting.sort4(data, p1, p2, p4, p5);
+            // p2 and p4 are sorted: check if p3 is between them
+            if (data[p3] < data[p2]) {
+                return p2;
+            }
+            return data[p3] > data[p4] ? p4 : p3;
         }
 
         @Override
@@ -196,14 +200,14 @@ enum PivotingStrategy {
 
         @Override
         int samplingEffect() {
-            return SORT;
+            return PARTIAL_SORT;
         }
     },
     /**
      * Pivot around the median of 5 values within the range.
      * Requires that {@code right - left >= 4}.
      *
-     * <p>Warning: This has the side effect that the 5 values are also sorted.
+     * <p>Warning: This has the side effect that the 5 values are also partially sorted.
      *
      * <p>Uses the same spacing as {@link DualPivotingStrategy#SORT_5B}.
      */
@@ -220,8 +224,12 @@ enum PivotingStrategy {
             final int p1 = p2 - seventh;
             final int p4 = p3 + seventh;
             final int p5 = p4 + seventh;
-            Sorting.sort5(data, p1, p2, p3, p4, p5);
-            return p3;
+            Sorting.sort4(data, p1, p2, p4, p5);
+            // p2 and p4 are sorted: check if p3 is between them
+            if (data[p3] < data[p2]) {
+                return p2;
+            }
+            return data[p3] > data[p4] ? p4 : p3;
         }
 
         @Override
@@ -243,12 +251,14 @@ enum PivotingStrategy {
 
         @Override
         int samplingEffect() {
-            return SORT;
+            return PARTIAL_SORT;
         }
     };
 
     /** Sampled points are unchanged. */
     static final int UNCHANGED = 0;
+    /** Sampled points are partially sorted. */
+    static final int PARTIAL_SORT = 0x1;
     /** Sampled points are sorted. */
     static final int SORT = 0x2;
     /** Size to pivot around the median of 9. */
