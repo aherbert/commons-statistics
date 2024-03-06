@@ -907,7 +907,7 @@ public class QuantilePerformance {
     }
 
     /**
-     * Source of k-th indices to be searched by a {@link SearchableInterval}.
+     * Source of k-th indices.
      */
     @State(Scope.Benchmark)
     public static class IndexSource {
@@ -926,22 +926,15 @@ public class QuantilePerformance {
          * <p>If this is zero then a random seed is chosen. */
         @Param({"-7450238124206088695"})
         private long rngSeed;
-        /** Division mode. */
-        @Param({"RANDOM", "BINARY"})
-        private DivisionMode mode;
+        /** Ordered keys. */
+        @Param({"false"})
+        private boolean ordered;
+        /** Minimum separation between keys. */
+        @Param({"32"})
+        private int separation;
 
         /** Indices. */
         private int[][] indices;
-        /** Search points. */
-        private int[][] points;
-
-        /** Options for the division mode. */
-        public enum DivisionMode {
-            /** Randomly divide. */
-            RANDOM,
-            /** Divide using binary division with recursion left then right. */
-            BINARY;
-        }
 
         /**
          * @return the indices
@@ -951,10 +944,13 @@ public class QuantilePerformance {
         }
 
         /**
-         * @return the search points
+         * Gets the minimum separation between keys. This is used by benchmarks
+         * to ignore splitting/search keys below a threshold.
+         *
+         * @return the minimum separation
          */
-        public int[][] getPoints() {
-            return points;
+        public int getMinSeparation() {
+            return separation;
         }
 
         /**
@@ -979,10 +975,6 @@ public class QuantilePerformance {
             final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, length - 1);
 
             indices = new int[repeats][];
-            points = new int[repeats][];
-
-            // Set the division mode
-            final boolean random = Objects.requireNonNull(mode) == DivisionMode.RANDOM;
 
             for (int i = repeats; --i >= 0;) {
                 // Indices with possible repeats
@@ -991,22 +983,85 @@ public class QuantilePerformance {
                     x[j] = s.sample();
                 }
                 indices[i] = x;
+                if (ordered) {
+                    Sorting.sortIndices(x, x.length);
+                }
+            }
+        }
 
+        /**
+         * @return the RNG seed
+         */
+        long getRngSeed() {
+            return rngSeed;
+        }
+    }
+
+    /**
+     * Source of k-th indices to be searched/split by a {@link SearchableInterval}.
+     */
+    @State(Scope.Benchmark)
+    public static class SplitIndexSource extends IndexSource {
+        /** Division mode. */
+        @Param({"RANDOM", "BINARY"})
+        private DivisionMode mode;
+
+        /** Search points. */
+        private int[][] points;
+
+        /** Options for the division mode. */
+        public enum DivisionMode {
+            /** Randomly divide. */
+            RANDOM,
+            /** Divide using binary division with recursion left then right. */
+            BINARY;
+        }
+
+        /**
+         * @return the search points
+         */
+        public int[][] getPoints() {
+            return points;
+        }
+
+        /**
+         * Create the indices and search points.
+         */
+        @Setup(Level.Iteration)
+        public void setup() {
+            super.setup();
+
+            final UniformRandomProvider rng = RANDOM_SOURCE.create(getRngSeed());
+
+            final int[][] indices = getIndices();
+            points = new int[indices.length][];
+
+            final int s = getMinSeparation();
+
+            // Set the division mode
+            final boolean random = Objects.requireNonNull(mode) == DivisionMode.RANDOM;
+
+            for (int i = points.length; --i >= 0;) {
                 // Get the sorted unique indices
-                final int[] y = x.clone();
-                final int unique = Sorting.sortIndices(y, k);
+                final int[] y = indices[i].clone();
+                final int unique = Sorting.sortIndices(y, y.length);
 
                 // Create the cut points between each unique index
-                final int[] p = new int[unique - 1];
+                int[] p = new int[unique - 1];
                 if (random) {
+                    int c = 0;
                     for (int j = 0; j < p.length; j++) {
-                        p[j] = (y[j] + y[j + 1]) >>> 1;
+                        // Ignore dense keys
+                        if (y[j] + s < y[j + 1]) {
+                            p[c++] = (y[j] + y[j + 1]) >>> 1;
+                        }
                     }
+                    p = Arrays.copyOf(p, c);
                     shuffle(rng, p);
                     points[i] = p;
                 } else {
                     // binary division
-                    final int c = divide(y, 0, unique - 1, p, 0);
+                    final int c = divide(y, 0, unique - 1, p, 0, s);
                     points[i] = Arrays.copyOf(p, c);
                 }
             }
@@ -1021,23 +1076,24 @@ public class QuantilePerformance {
          * @param hi Upper index in indices (inclusive).
          * @param p Division points.
          * @param c Count of division points.
+         * @param s Minimum separation between indices.
          * @return the updated count of division points.
          */
-        private static int divide(int[] indices, int lo, int hi, int[] p, int c) {
+        private static int divide(int[] indices, int lo, int hi, int[] p, int c, int s) {
             if (lo < hi) {
                 // Divide the interval in half
                 final int m = (lo + hi) >>> 1;
                 // Create a division point at approximately the midpoint
                 final int m1 = m + 1;
                 // Ignore dense keys
-                if (indices[m] + 1 < indices[m1]) {
+                if (indices[m] + s < indices[m1]) {
                     final int k = (indices[m] + indices[m1]) >>> 1;
                     p[c++] = k;
                 }
                 // Recurse left then right.
                 // Does nothing if lo + 1 == hi as m == lo and m1 == hi.
-                c = divide(indices, lo, m, p, c);
-                c = divide(indices, m1, hi, p, c);
+                c = divide(indices, lo, m, p, c, s);
+                c = divide(indices, m1, hi, p, c, s);
             }
             return c;
         }
@@ -1067,15 +1123,16 @@ public class QuantilePerformance {
             array[j] = tmp;
         }
     }
+
     /**
      * Source of an {@link SearchableInterval}.
      */
     @State(Scope.Benchmark)
-    public static class IndexIntervalSource {
+    public static class SearchableIntervalSource {
         /** Name of the source. */
-        @Param({"ScanningKeyIndexInterval",
-            "BinarySearchKeyIndexInterval",
-            "IndexSet",
+        @Param({"ScanningKeyInterval",
+            "BinarySearchKeyInterval",
+            "IndexSetInterval",
             "CompressedIndexSet",
             // Same speed as the CompressedIndexSet
             //"CompressedIndexSet2",
@@ -1099,19 +1156,19 @@ public class QuantilePerformance {
         @Setup
         public void setup() {
             Objects.requireNonNull(name);
-            if ("ScanningKeyIndexInterval".equals(name)) {
+            if ("ScanningKeyInterval".equals(name)) {
                 factory = k -> {
                     k = k.clone();
                     final int unique = Sorting.sortIndices(k, k.length);
                     return ScanningKeyInterval.of(k, unique);
                 };
-            } else if ("BinarySearchKeyIndexInterval".equals(name)) {
+            } else if ("BinarySearchKeyInterval".equals(name)) {
                 factory = k -> {
                     k = k.clone();
                     final int unique = Sorting.sortIndices(k, k.length);
                     return BinarySearchKeyInterval.of(k, unique);
                 };
-            } else if ("IndexSet".equals(name)) {
+            } else if ("IndexSetInterval".equals(name)) {
                 factory = IndexSet::of;
             } else if (name.equals("CompressedIndexSet2")) {
                 factory = CompressedIndexSet2::of;
@@ -1121,7 +1178,7 @@ public class QuantilePerformance {
                 final int c = getCompression(name);
                 factory = k -> CompressedIndexSet.of(c, k);
             } else {
-                throw new IllegalStateException("Unknown IndexInterval: " + name);
+                throw new IllegalStateException("Unknown SearchableInterval: " + name);
             }
         }
 
@@ -1137,6 +1194,52 @@ public class QuantilePerformance {
                 return Character.digit(c, 10);
             }
             return 1;
+        }
+    }
+
+    /**
+     * Source of an {@link UpdatingInterval}.
+     */
+    @State(Scope.Benchmark)
+    public static class UpdatingIntervalSource {
+        /** Name of the source. */
+        @Param({"KeyUpdatingInterval",
+            // Same speed as BitIndexUpdatingInterval
+            //"IndexSet",
+            "BitIndexUpdatingInterval",
+            })
+        private String name;
+
+        /** The factory. */
+        private Function<int[], UpdatingInterval> factory;
+
+        /**
+         * @param indices Indices.
+         * @return {@link UpdatingInterval}
+         */
+        public UpdatingInterval create(int[] indices) {
+            return factory.apply(indices);
+        }
+
+        /**
+         * Create the function.
+         */
+        @Setup
+        public void setup() {
+            Objects.requireNonNull(name);
+            if ("KeyUpdatingInterval".equals(name)) {
+                factory = k -> {
+                    k = k.clone();
+                    final int unique = Sorting.sortIndices(k, k.length);
+                    return KeyUpdatingInterval.of(k, unique);
+                };
+            } else if ("IndexSet".equals(name)) {
+                factory = k -> IndexSet.of(k).interval();
+            } else if (name.equals("BitIndexUpdatingInterval")) {
+                factory = k -> BitIndexUpdatingInterval.of(k, k.length);
+            } else {
+                throw new IllegalStateException("Unknown UpdatingInterval: " + name);
+            }
         }
     }
 
@@ -2185,7 +2288,7 @@ public class QuantilePerformance {
      * @return value to consume
      */
     @Benchmark
-    public long indexIntervalNextPrevious(IndexIntervalSource function, IndexSource source) {
+    public long searchableIntervalNextPrevious(SearchableIntervalSource function, SplitIndexSource source) {
         final int[][] indices = source.getIndices();
         final int[][] points = source.getPoints();
         // Ensure we have something to consume during the benchmark
@@ -2206,7 +2309,7 @@ public class QuantilePerformance {
      * Benchmark the tracking of an interval of indices during a partition algorithm.
      *
      * <p>This is similar to
-     * {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)}. It uses the
+     * {@link #searchableIntervalNextPrevious(SearchableIntervalSource, SplitIndexSource)}. It uses the
      * {@link SearchableInterval#split(int, int, int[])} method. This requires {@code k} to be
      * in an open interval. Some modes of the {@link IndexSource} do not ensure that
      * {@code left < k < right} for all split points so we have to check this before
@@ -2217,7 +2320,7 @@ public class QuantilePerformance {
      * @return value to consume
      */
     @Benchmark
-    public long indexIntervalSplit(IndexIntervalSource function, IndexSource source) {
+    public long searchableIntervalSplit(SearchableIntervalSource function, SplitIndexSource source) {
         final int[][] indices = source.getIndices();
         final int[][] points = source.getPoints();
         // Ensure we have something to consume during the benchmark
@@ -2245,7 +2348,7 @@ public class QuantilePerformance {
     /**
      * Benchmark the creation of an interval of indices for controlling a partition algorithm.
      *
-     * <p>This baselines the {@link #indexIntervalNextPrevious(IndexIntervalSource, IndexSource)} benchmark.
+     * <p>This baselines the {@link #searchableIntervalNextPrevious(SearchableIntervalSource, SplitIndexSource)} benchmark.
      * For the BitSet-type structures a large overhead is the memory allocation to create
      * the {@link SearchableInterval}. Note that this will be at most 1/64 the size of the array
      * that is being partitioned and in practice this overhead is not significant.
@@ -2255,10 +2358,54 @@ public class QuantilePerformance {
      * @param bh Data sink.
      */
     @Benchmark
-    public void createIndexInterval(IndexIntervalSource function, IndexSource source, Blackhole bh) {
+    public void createSearchableInterval(SearchableIntervalSource function, IndexSource source, Blackhole bh) {
         final int[][] indices = source.getIndices();
         for (final int[] x : indices) {
             bh.consume(function.create(x));
         }
+    }
+
+    /**
+     * Benchmark the splitting of an interval of indices during a partition algorithm.
+     *
+     * <p>This is similar to
+     * {@link #searchableIntervalSplit(SearchableIntervalSource, SplitIndexSource)}. It uses the
+     * {@link UpdatingInterval#split(int, int)} method by recursive division of the indices.
+     *
+     * @param function Source of the interval.
+     * @param source Source of the data.
+     * @param bh Data sink.
+     */
+    @Benchmark
+    public void updatingIntervalSplit(UpdatingIntervalSource function, IndexSource source, Blackhole bh) {
+        final int[][] indices = source.getIndices();
+        final int s = source.getMinSeparation();
+        for (int i = 0; i < indices.length; i++) {
+            split(function.create(indices[i]), s, bh);
+        }
+    }
+
+    /**
+     * Recursively split the interval until the length is below the provided separation.
+     * Consume the interval when no more divides can occur.
+     * Simulates a single-pivot partition algorithm.
+     *
+     * @param interval Interval.
+     * @param s Minimum separation between left and right.
+     * @param bh Data sink.
+     */
+    private static void split(UpdatingInterval interval, int s, Blackhole bh) {
+        int l = interval.left();
+        final int r = interval.right();
+        // Note: A partition algorithm would only call split if there are indices
+        // above and below the split point.
+        if (r - l > s) {
+            final int middle = (l + r) >>> 1;
+            // recurse left
+            split(interval.split(middle, middle), s, bh);
+            // continue on right side
+            l = interval.left();
+        }
+        bh.consume(interval);
     }
 }
