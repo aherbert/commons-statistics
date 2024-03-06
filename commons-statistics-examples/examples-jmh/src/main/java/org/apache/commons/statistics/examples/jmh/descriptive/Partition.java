@@ -4906,6 +4906,29 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data.
      * It handles NaN and signed zeros in the data.
      *
+     * <p>Uses an introselect variant. The quickselect is a single-pivot partition method;
+     * the fall-back on poor convergence of the quickselectis a heapselect.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionISP(double[] data, int[] k, int n) {
+        introselect(Partition::partitionSP, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
      * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
      * is a heapselect.
@@ -5703,6 +5726,19 @@ final class Partition {
     /**
      * Sort the data using an intrasort.
      *
+     * <p>Uses a single-pivot quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortISP(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionSP, data);
+    }
+
+    /**
+     * Sort the data using an intrasort.
+     *
      * <p>Uses a Bentley-McIlroy quicksort method; falling back
      * to heapsort when quicksort recursion is slow.
      *
@@ -6117,6 +6153,75 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
      *
+     * <p>Uses a single pivot partition method. This method does not handle equal values
+     * at the pivot location: {@code lower == upper}. The method conforms to the
+     * {@link SPEPartition} interface to allow use with the single-pivot introselect method.
+     *
+     * @param data Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param pivot Pivot index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    static int partitionSP(double[] data, int l, int r, int pivot, int[] upper) {
+        // Partition data using pivot P into less-than or greater-than.
+        // P is placed at the end to act as a sentinel.
+        // k traverses the unknown region ??? and values moved if less or greater:
+        //
+        // left            i            j              right
+        // |          <P   |     ???    |   >P           |P|
+        //
+        // At the end P is swapped back to the centre.
+        //
+        // |         <P          |P|             >P        |
+
+        // Use the pivot index to set the upper sentinel value
+        final double v = data[pivot];
+        data[pivot] = data[r];
+        data[r] = v;
+
+        int i = l - 1;
+        int j = r;
+
+        for (;;) {
+            // Cannot pass upper sentinal
+            do {
+                ++i;
+            } while (data[i] < v);
+            while (data[--j] > v) {
+                // Cannot use i in the event that i == r
+                if (j == l) {
+                    break;
+                }
+            }
+            if (i >= j) {
+                break;
+            }
+            //swap(data, i, j)
+            // Can move equal values
+            final double tmp = data[i];
+            data[i] = data[j];
+            data[j] = tmp;
+        }
+
+        // data[i] >= P
+        // Move pivot value to correct location
+        data[r] = data[i];
+        data[i] = v;
+
+        upper[0] = i;
+        return i;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
      * @param data Data array.
@@ -6182,7 +6287,7 @@ final class Partition {
                 ++i;
             } while (data[i] < v);
             while (v < data[--j]) {
-                // Stop at l (not i) allows scan loops to be independent
+                // Cannot use j == i in the event that i == q (already passed j)
                 if (j == l) {
                     break;
                 }
