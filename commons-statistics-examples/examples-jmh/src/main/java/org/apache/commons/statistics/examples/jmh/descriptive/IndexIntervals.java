@@ -154,13 +154,14 @@ final class IndexIntervals {
             final int size = max - min + 1;
 
             // Divide by 32 is a shift of 5. This is reduced for each 4-fold size above 2^20.
+            // At 2^31 the shift reduces to 0.
             int shift = 5;
             if (size > (1 << 20)) {
                 // log4(size/2^20) == (log2(size) - 20) / 2
                 shift -= (ceilLog2(size) - 20) >>> 1;
             }
 
-            if ((long) n * n > ((long) size >> shift)) {
+            if ((long) n * n > (size >> shift)) {
                 // Do not call IndexSet.of(k, n) which repeats the min/max search
                 // (especially given n is likely to be large).
                 final IndexSet interval = IndexSet.ofRange(min, max);
@@ -202,6 +203,9 @@ final class IndexIntervals {
         // in this method should be very fast when n is small.
         // We have a choice between a KeyUpdatingInterval which requires
         // sorted keys or a BitIndexUpdatingInterval which handles keys in any order.
+        // The purpose of the heuristics is to avoid a very bad choice of data structure,
+        // rather than choosing the best data structure in all situations. As long as the
+        // choice is reasonable the speed will not impact a partition algorithm.
 
         // Simple cases
         if (n < 3) {
@@ -224,8 +228,8 @@ final class IndexIntervals {
         }
 
         // Strategy: Must be fast on already ascending data.
-        // Note: The recommended way to generate a lot of partition indices from
-        // many quantiles for interpolation is to generate in sequence.
+        // Note: The recommended way to generate a lot of partition indices is to
+        // generate in sequence.
 
         // n <= small:
         //   Modified insertion sort (naturally finds ascending data)
@@ -258,9 +262,6 @@ final class IndexIntervals {
             max = Math.max(max, k[i]);
         }
 
-        // Here we use some heuristics to choose between sorting and using the keys
-        // or just using a BitSet-type structure.
-
         // Here we use a simple test based on the number of comparisons required
         // to perform the expected next/previous look-ups after a split.
         // It is expected that we can cut n keys a maximum of n-1 times.
@@ -278,18 +279,17 @@ final class IndexIntervals {
         // indices together: Order(2 * n * (size / n) / 64) = Order(size / 32)
 
         // Sorted keys: Sort time Order(n log(n)) : Splitting time Order(log(n)) (binary search approx)
-        // BitSet keys: Sort time Order(1)        : Splitting time Order(size / 32)
+        // Bit keys   : Sort time Order(1)        : Splitting time Order(size / 32)
 
         // Transition when n * n ~ size / 32
-        // Benchmarking shows this is a reasonable approximation when size is small.
-        // Speed of the BitSet is approximately independent of n and proportional to size.
-        // Large size observes the effect of memory cache degrading the BitSet performance
-        // more than expected from a linear relationship.
-        // Note the memory required is approximately (size / 8) bytes.
-        // We introduce a penalty for each 4x increase over size = 2^20 (== 128KiB).
+        // Benchmarking shows this is a reasonable approximation when size < 2^20.
+        // The speed of the bit keys is approximately independent of n and proportional to size.
+        // Large size observes degrading performance of the bit keys vs sorted keys.
+        // We introduce a penalty for each 4x increase over size = 2^20.
         // n * n = size/32 * 2^log4(size / 2^20)
-
-        // TODO - test this some more ...
+        // The transition point still favours the bit keys when sorted keys would be faster.
+        // However the difference is held within 4x and the BitSet type structure is still fast
+        // enough to be negligible against the speed of partitioning.
 
         // Transition point: n = sqrt(size/32)
         // size n
@@ -307,13 +307,16 @@ final class IndexIntervals {
         final int size = max - min + 1;
 
         // Divide by 32 is a shift of 5. This is reduced for each 4-fold size above 2^20.
+        // At 2^31 the shift reduces to 0.
         int shift = 5;
         if (size > (1 << 20)) {
             // log4(size/2^20) == (log2(size) - 20) / 2
             shift -= (ceilLog2(size) - 20) >>> 1;
         }
 
-        if ((long) n * n > ((long) size >> shift)) {
+        if ((long) n * n > (size >> shift)) {
+            // Do not call BitIndexUpdatingInterval.of(k, n) which repeats the min/max search
+            // (especially given n is likely to be large).
             final BitIndexUpdatingInterval interval = BitIndexUpdatingInterval.ofRange(min, max);
             for (int i = n; --i >= 0;) {
                 interval.set(k[i]);
