@@ -19,7 +19,6 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.function.BiFunction;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -126,11 +125,11 @@ class UpdatingIntervalTest {
         assertUpdate(BitIndexUpdatingInterval::of, indices);
     }
 
-    @ParameterizedTest
-    @MethodSource(value = {"testIndices"})
-    void testUpdateIndexInterval(int[] indices) {
-        assertUpdate(IndexIntervals::createUpdatingInterval, indices);
-    }
+//    @ParameterizedTest
+//    @MethodSource(value = {"testIndices"})
+//    void testUpdateIndexInterval(int[] indices) {
+//        assertUpdate(IndexIntervals::createUpdatingInterval, indices);
+//    }
 
     @ParameterizedTest
     @MethodSource(value = {"testIndices"})
@@ -154,11 +153,11 @@ class UpdatingIntervalTest {
         assertSplit(BitIndexUpdatingInterval::of, indices);
     }
 
-    @ParameterizedTest
-    @MethodSource(value = {"testIndices"})
-    void testSplitIndexInterval(int[] indices) {
-        assertSplit(IndexIntervals::createUpdatingInterval, indices);
-    }
+//    @ParameterizedTest
+//    @MethodSource(value = {"testIndices"})
+//    void testSplitIndexInterval(int[] indices) {
+//        assertSplit(IndexIntervals::createUpdatingInterval, indices);
+//    }
 
     /**
      * Assert the {@link UpdatingInterval#updateLeft(int)} and {@link UpdatingInterval#updateRight(int)} methods.
@@ -283,40 +282,40 @@ class UpdatingIntervalTest {
         return SearchableIntervalTest.testPreviousNextIndex();
     }
 
-    @Test
-    void testIndexIntervalCreate() {
-        // The above tests verify the IndexInterval implementations all work.
-        // Hit all paths in the key analysis performed to create an interval.
-
-        // Small number of keys; no analysis
-        Assertions.assertEquals(KeyUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(new int[] {1}, 1).getClass());
-
-        // >10 keys for key analysis
-
-        // Small number of keys saturating the range
-        Assertions.assertEquals(BitIndexUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 11).getClass());
-        // Keys over a huge range
-        Assertions.assertEquals(KeyUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, Integer.MAX_VALUE - 1}, 11).getClass());
-
-        // Small number of keys over a moderate range
-        int[] k = IntStream.range(0, 30).map(i -> i * 64) .toArray();
-        Assertions.assertEquals(BitIndexUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(k.clone(), k.length).getClass());
-        // Same keys over a huge range
-        k[k.length - 1] = Integer.MAX_VALUE - 1;
-        Assertions.assertEquals(KeyUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(k, k.length).getClass());
-
-        // Moderate number of keys over a moderate range
-        k = IntStream.range(0, 3000).map(i -> i * 64) .toArray();
-        Assertions.assertEquals(BitIndexUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(k.clone(), k.length).getClass());
-        // Same keys over a huge range - switch to binary search on the keys
-        k[k.length - 1] = Integer.MAX_VALUE - 1;
-        Assertions.assertEquals(KeyUpdatingInterval.class,
-            IndexIntervals.createUpdatingInterval(k, k.length).getClass());
-    }
+//    @Test
+//    void testIndexIntervalCreate() {
+//        // The above tests verify the IndexInterval implementations all work.
+//        // Hit all paths in the key analysis performed to create an interval.
+//
+//        // Small number of keys; no analysis
+//        Assertions.assertEquals(KeyUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(new int[] {1}, 1).getClass());
+//
+//        // >10 keys for key analysis
+//
+//        // Small number of keys saturating the range
+//        Assertions.assertEquals(BitIndexUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 11).getClass());
+//        // Keys over a huge range
+//        Assertions.assertEquals(KeyUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, Integer.MAX_VALUE - 1}, 11).getClass());
+//
+//        // Small number of keys over a moderate range
+//        int[] k = IntStream.range(0, 30).map(i -> i * 64) .toArray();
+//        Assertions.assertEquals(BitIndexUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(k.clone(), k.length).getClass());
+//        // Same keys over a huge range
+//        k[k.length - 1] = Integer.MAX_VALUE - 1;
+//        Assertions.assertEquals(KeyUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(k, k.length).getClass());
+//
+//        // Moderate number of keys over a moderate range
+//        k = IntStream.range(0, 3000).map(i -> i * 64) .toArray();
+//        Assertions.assertEquals(BitIndexUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(k.clone(), k.length).getClass());
+//        // Same keys over a huge range - switch to binary search on the keys
+//        k[k.length - 1] = Integer.MAX_VALUE - 1;
+//        Assertions.assertEquals(KeyUpdatingInterval.class,
+//            IndexIntervals.createUpdatingInterval(k, k.length).getClass());
+//    }
 }

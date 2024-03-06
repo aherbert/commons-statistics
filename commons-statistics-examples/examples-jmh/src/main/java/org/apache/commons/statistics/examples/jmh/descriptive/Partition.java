@@ -141,6 +141,8 @@ final class Partition {
     private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
     /** Message for an unsupported introselect configuration. */
     private static final String UNSUPPORTED_INTROSELECT = "Unsupported introselect: ";
+    /** The upper threshold to use a modified insertion sort to find unique indices. */
+    private static final int INDICES_INSERTION_SORT_SIZE = 20;
 
     /** Transformer factory for double data with the behaviour of a JDK sort.
      * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
@@ -2879,60 +2881,171 @@ final class Partition {
      * When {@code n} is large then a BitSet-type structure is returned. The maximum
      * memory consumption is approximately {@code size / 8} bytes.
      *
-     * @param size Length of the data to partition.
+     * @param length Length of the data to partition.
      * @param k Indices.
      * @param n Count of indices (must be strictly positive).
      * @return the index interval (or {@code null} to recommend a full sort)
      */
-    static UpdatingInterval createUpdatingInterval(int size, int[] k, int n) {
-        if (size < MIN_QUICKSELECT_SIZE) {
-            // Sort tiny data
+    static UpdatingInterval createUpdatingInterval(int length, int[] k, int n) {
+        // Note: A typical use case is to have a few indices. Thus the heuristics
+        // in this method should be very fast when n is small.
+        // We have a choice between a KeyUpdatingInterval which requires
+        // sorted keys or a BitIndexUpdatingInterval which handles keys in any order.
+
+        // Simple cases
+        if (n < 3) {
+            if (n == 1 || k[0] == k[1]) {
+                // 1 unique value
+                return IndexIntervals.interval(k[0]);
+            }
+            // 2 unique values
+            if (Math.abs(k[0] - k[1]) <= 2) {
+                // Small range
+                return IndexIntervals.interval(k[0], k[1]);
+            }
+            // 2 well separated values
+            if (k[1] < k[0]) {
+                final int v = k[0];
+                k[0] = k[1];
+                k[1] = v;
+            }
+            return KeyUpdatingInterval.of(k, 2);
+        }
+
+        // Strategy: Must be fast on already ascending data.
+        // Note: The recommended way to generate a lot of partition indices from
+        // many quantiles for interpolation is to generate in sequence.
+
+        // n <= small:
+        //   Modified insertion sort (naturally finds ascending data)
+        // n > small:
+        //   Look for ascending sequence and compact
+        // else:
+        //   Remove duplicates using an order(1) data structure and sort
+
+        if (n <= INDICES_INSERTION_SORT_SIZE) {
+            final int unique = Sorting.sortIndicesInsertionSort(k, n);
+            return KeyUpdatingInterval.of(k, unique);
+        }
+
+        if (isAscending(k, n)) {
+            // For sorted keys the KeyUpdatingInterval is fast. It may be slower than the
+            // BitIndexUpdatingInterval depending on data length but not significantly
+            // slower and the difference is lost in the time taken for partitioning.
+            // So always use the keys.
+            final int unique = compressDuplicates(k, n);
+            return KeyUpdatingInterval.of(k, unique);
+        }
+
+        // At least 20 indices that are partially unordered.
+
+        // Find min/max to understand the range.
+        int min = k[n - 1];
+        int max = min;
+        for (int i = n - 1; --i >= 0;) {
+            min = Math.min(min, k[i]);
+            max = Math.max(max, k[i]);
+        }
+
+        // Sorting is performed using an Order(1) structure to filter the keys.
+        // We choose between a HashSet or BitSet based on memory consumption alone which is a
+        // fair approximation when n < 1000.
+        if (HashIndexSet.memoryFootprint(n) > (BitIndexUpdatingInterval.memoryFootprint(min, max) >>> 1)) {
+            // Avoid the sort and use the bits directly in an interval
+            final BitIndexUpdatingInterval interval = BitIndexUpdatingInterval.ofRange(min, max);
+            for (int i = n; --i >= 0;) {
+                interval.set(k[i]);
+            }
+            return interval;
+        }
+
+        // Here we use some heuristics to choose between sorting and using the keys
+        // or just using a BitSet-type structure.
+
+        // Here we use a simple test based on the number of comparisons required
+        // to perform the expected next/previous look-ups after a split.
+        // It is expected that we can cut n keys a maximum of n-1 times.
+        // Each cut requires a scan next/previous to divide the interval into two intervals:
+        //
+        //            cut
+        //             |
+        //        k1--------k2---------k3---- ... ---------kn    initial interval
+        //         <--| find previous
+        //    find next |-->
+        //        k1        k2---------k3---- ... ---------kn    divided intervals
+        //
+        // An BitSet will scan from the cut location and find a match in time proportional to
+        // the index density. Average density is (size / n) and the scanning covers 64
+        // indices together: Order(2 * n * (size / n) / 64) = Order(size / 32)
+
+        // Sorted keys: Sort time Order(n log(n)) : Splitting time ignored
+        // BitSet keys: Sort time Order(1)        : Splitting time Order(size / 32)
+
+        // TODO: implement the transition
+
+        // Transition point: n log(n) = (size / 32)
+        // size n
+        // 2^10 5.66
+        // 2^15 32.0
+        // 2^20 181.0
+
+        // Benchmarking shows this transition point is a reasonable approximation.
+        // The benchmark processes k random indices sampled in [0, size) using
+        // a recursive partition algorithm that divides the interval in half.
+
+
+        // If the input data is small detect this and choose to sort the data rather than
+        // sorting so many indices. Only sort the indices if the data is twice the size
+        // of the number of indices.
+        if ((length >>> 1) < n) {
             return null;
         }
 
-        // The partition algorithm performs a full sort of data when any sub-length
-        // is below 32. If keys are separated by at most 32 throughout the range
-        // then the data is suitable for a full sort. However benchmarking shows that
-        // partitioning with many indices performs close to the speed of a full sort
-        // using the same quicksort algorithm; even when keys should be saturated,
-        // e.g. 5000 random indices in length 10000. Thus switching to a full sort is
-        // not performed until it is obvious the indices saturate the range.
-        // Note that this method cannot know about any structure in the data.
-        // Data that is structured (runs of continuous ascending/descending
-        // data) will benefit from the additional algorithms within the JDK sort function
-        // such as merge sort. The JDK sort function also supports parallel execution
-        // which can outperform single-threaded partitioning depending on parallelism
-        // and the spread of indices.
+        // Sort with a hash set to filter indices
+        final int unique = Sorting.sortIndicesHashIndexSet(k, n);
+        return KeyUpdatingInterval.of(k, unique);
+    }
 
-        // We check for saturation by compressing each index by 16-to-1. Any indices
-        // separated by < 16 will be the same compressed index or adjacent compressed indices.
-        // Any indices separated by [16, 32) may be compressed indices separated by 1 or 2.
-        // If there are no gaps in the compressed indices then a full sort is recommended
-        // as it is clear that all regions must be sorted. This heuristic avoids switching
-        // to a full sort in all but the most obvious cases of saturation; however it may
-        // choose to partition when a full sort would be faster.
-
-        // Set the limit on the number of indices that have to be sorted.
-        // Subtracting the quickselect size pads the min/max range of indices
-        // at the ends.
-        final int limit = size - MIN_QUICKSELECT_SIZE;
-
-        // Use a shift with a long to avoid overflow (of an excessive number of keys !!!).
-        // It is not expected to partition more than a few hundred keys.
-        if (((long) n << LOG2_HALF_QUICKSELECT_SIZE) > limit) {
-            // Keys could cover the entire data.
-            final IndexSet keys = IndexSet.of(k, n);
-            // Quick check if the range is smaller than the limit.
-            if ((keys.right() - keys.left()) < limit) {
-                return keys.interval();
+    /**
+     * Test the data is in ascending order: {@code data[i] <= data[i+1]} for all {@code i}.
+     * Data is assumed to be at least length 1.
+     *
+     * @param data Data.
+     * @param n Length of data.
+     * @return true if ascending
+     */
+    private static boolean isAscending(int[] data, int n) {
+        for (int i = 0; ++i < n;) {
+            if (data[i] < data[i - 1]) {
+                // descending
+                return false;
             }
-            // Special cardinality count using 16-to-1 compression
-            final int c = keys.cardinality16();
-            return c < limit ? keys.interval() : null;
         }
+        return true;
+    }
 
-        // This occurs when the indices cannot saturate the range.
-        return IndexIntervals.createUpdatingInterval(k, n);
+    /**
+     * Compress duplicates in the ascending data.
+     *
+     * <p>Warning: Requires {@code n > 0}.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of unique indices
+     */
+    private static int compressDuplicates(int[] data, int n) {
+        // Compress to remove duplicates
+        int last = 0;
+        int top = data[0];
+        for (int i = 0; ++i < n;) {
+            final int v = data[i];
+            if (v == top) {
+                continue;
+            }
+            top = v;
+            data[++last] = v;
+        }
+        return last + 1;
     }
 
     /**
@@ -5235,6 +5348,11 @@ final class Partition {
         if (n < 1) {
             return;
         }
+
+        // TODO: create the interval first.
+        // If the range is small compared to the length then use single-pivot,
+        // else use dual-pivot.
+
         // Ideal dual pivot recursion will take log3(n) steps as data is
         // divided into length (n/3) at each iteration; add contingency
         // by doubling this value.
@@ -5252,17 +5370,16 @@ final class Partition {
             return;
         }
 
-//        // Key analysis ???
-//        final UpdatingInterval keys = createUpdatingInterval(length, k, n);
-//
-//        if (keys == null) {
-//            // Full sort recommended
-//            Arrays.sort(a, 0, length);
-//        } else {
-//            select(a, 0, length - 1, keys, maxDepth);
-//        }
+        final UpdatingInterval keys = createUpdatingInterval(length, k, n);
 
-        select(a, 0, length - 1, IndexIntervals.createUpdatingInterval(k, n), maxDepth);
+        if (keys == null) {
+            // Full sort recommended
+            Arrays.sort(a, 0, length);
+        } else {
+            select(a, 0, length - 1, keys, maxDepth);
+        }
+
+        //select(a, 0, length - 1, IndexIntervals.createUpdatingInterval(k, n), maxDepth);
     }
 
     /**
