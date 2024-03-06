@@ -1844,18 +1844,15 @@ final class Sorting {
      */
     private static int compressDuplicates(int[] data, int n) {
         // Compress to remove duplicates
-        int i = 0;
         int last = 0;
-        int previous = data[0];
-        OUTER:
-        while (++i < n) {
-            while (data[i] == previous) {
-                if (++i == n) {
-                    break OUTER;
-                }
+        int top = data[0];
+        for (int i = 0; ++i < n;) {
+            final int v = data[i];
+            if (v == top) {
+                continue;
             }
-            previous = data[i];
-            data[++last] = previous;
+            top = v;
+            data[++last] = v;
         }
         return last + 1;
     }
