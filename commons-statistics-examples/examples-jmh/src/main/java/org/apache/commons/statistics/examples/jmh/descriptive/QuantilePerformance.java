@@ -111,6 +111,9 @@ public class QuantilePerformance {
 
     // Introselect functions
 
+    /** Commons Statistics Quantile introselect implementation with single pivot
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String ISP = "ISP";
     /** Commons Statistics Quantile introselect implementation with Sedgewick's Bentley-McIlroy
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
@@ -1027,6 +1030,7 @@ public class QuantilePerformance {
         /**
          * Create the indices and search points.
          */
+        @Override
         @Setup(Level.Iteration)
         public void setup() {
             super.setup();
@@ -1347,6 +1351,8 @@ public class QuantilePerformance {
             } else if (name.startsWith(SBM2)) {
                 function = createPartition(name, SBM2)::sortSBM;
             // Introsort
+            } else if (name.startsWith(ISP)) {
+                function = createPartition(name, ISP)::sortISP;
             } else if (name.startsWith(ISBM)) {
                 function = createPartition(name, ISBM)::sortISBM;
             } else if (name.startsWith(IDNF)) {
@@ -1629,6 +1635,12 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             // Introselect implementations
+            } else if (name.startsWith(ISP)) {
+                final Partition part = createPartition(name, ISP);
+                function = (data, indices) -> {
+                    part.partitionISP(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
             } else if (name.startsWith(ISBM)) {
                 final Partition part = createPartition(name, ISBM);
                 function = (data, indices) -> {
