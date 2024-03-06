@@ -24,6 +24,8 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 final class IndexIntervals {
     /** Size to perform key analysis. This avoids key analysis for a small number of keys. */
     private static final int KEY_ANALYSIS_SIZE = 10;
+    /** The upper threshold to use a modified insertion sort to find unique indices. */
+    private static final int INDICES_INSERTION_SORT_SIZE = 20;
 
     /** Size to use a {@link BinarySearchKeyInterval}. Note that the
      * {@link ScanningKeyInterval} uses points within the range to fast-forward
@@ -189,6 +191,184 @@ final class IndexIntervals {
     }
 
     /**
+     * Returns an interval that covers the specified indices {@code k}.
+     *
+     * @param k Indices.
+     * @param n Count of indices (must be strictly positive).
+     * @return the interval
+     */
+    static UpdatingInterval createUpdatingInterval(int[] k, int n) {
+        // Note: A typical use case is to have a few indices. Thus the heuristics
+        // in this method should be very fast when n is small.
+        // We have a choice between a KeyUpdatingInterval which requires
+        // sorted keys or a BitIndexUpdatingInterval which handles keys in any order.
+
+        // Simple cases
+        if (n < 3) {
+            if (n == 1 || k[0] == k[1]) {
+                // 1 unique value
+                return IndexIntervals.interval(k[0]);
+            }
+            // 2 unique values
+            if (Math.abs(k[0] - k[1]) <= 2) {
+                // Small range
+                return IndexIntervals.interval(k[0], k[1]);
+            }
+            // 2 well separated values
+            if (k[1] < k[0]) {
+                final int v = k[0];
+                k[0] = k[1];
+                k[1] = v;
+            }
+            return KeyUpdatingInterval.of(k, 2);
+        }
+
+        // Strategy: Must be fast on already ascending data.
+        // Note: The recommended way to generate a lot of partition indices from
+        // many quantiles for interpolation is to generate in sequence.
+
+        // n <= small:
+        //   Modified insertion sort (naturally finds ascending data)
+        // n > small:
+        //   Look for ascending sequence and compact
+        // else:
+        //   Remove duplicates using an order(1) data structure and sort
+
+        if (n <= INDICES_INSERTION_SORT_SIZE) {
+            final int unique = Sorting.sortIndicesInsertionSort(k, n);
+            return KeyUpdatingInterval.of(k, unique);
+        }
+
+        if (isAscending(k, n)) {
+            // For sorted keys the KeyUpdatingInterval is fast. It may be slower than the
+            // BitIndexUpdatingInterval depending on data length but not significantly
+            // slower and the difference is lost in the time taken for partitioning.
+            // So always use the keys.
+            final int unique = compressDuplicates(k, n);
+            return KeyUpdatingInterval.of(k, unique);
+        }
+
+        // At least 20 indices that are partially unordered.
+
+        // Find min/max to understand the range.
+        int min = k[n - 1];
+        int max = min;
+        for (int i = n - 1; --i >= 0;) {
+            min = Math.min(min, k[i]);
+            max = Math.max(max, k[i]);
+        }
+
+        // Here we use some heuristics to choose between sorting and using the keys
+        // or just using a BitSet-type structure.
+
+        // Here we use a simple test based on the number of comparisons required
+        // to perform the expected next/previous look-ups after a split.
+        // It is expected that we can cut n keys a maximum of n-1 times.
+        // Each cut requires a scan next/previous to divide the interval into two intervals:
+        //
+        //            cut
+        //             |
+        //        k1--------k2---------k3---- ... ---------kn    initial interval
+        //         <--| find previous
+        //    find next |-->
+        //        k1        k2---------k3---- ... ---------kn    divided intervals
+        //
+        // An BitSet will scan from the cut location and find a match in time proportional to
+        // the index density. Average density is (size / n) and the scanning covers 64
+        // indices together: Order(2 * n * (size / n) / 64) = Order(size / 32)
+
+        // Sorted keys: Sort time Order(n log(n)) : Splitting time Order(log(n)) (binary search approx)
+        // BitSet keys: Sort time Order(1)        : Splitting time Order(size / 32)
+
+        // Transition when n * n ~ size / 32
+        // Benchmarking shows this is a reasonable approximation when size is small.
+        // Speed of the BitSet is approximately independent of n and proportional to size.
+        // Large size observes the effect of memory cache degrading the BitSet performance
+        // more than expected from a linear relationship.
+        // Note the memory required is approximately (size / 8) bytes.
+        // We introduce a penalty for each 4x increase over size = 2^20 (== 128KiB).
+        // n * n = size/32 * 2^log4(size / 2^20)
+
+        // TODO - test this some more ...
+
+        // Transition point: n = sqrt(size/32)
+        // size n
+        // 2^10 5.66
+        // 2^15 32.0
+        // 2^20 181.0
+
+        // Transition point: n = sqrt(size/32 * 2^(log4(size/2^20))))
+        // size n
+        // 2^22 512.0
+        // 2^24 1448.2
+        // 2^28 11585
+        // 2^31 55108
+
+        final int size = max - min + 1;
+
+        // Divide by 32 is a shift of 5. This is reduced for each 4-fold size above 2^20.
+        int shift = 5;
+        if (size > (1 << 20)) {
+            // log4(size/2^20) == (log2(size) - 20) / 2
+            shift -= (ceilLog2(size) - 20) >>> 1;
+        }
+
+        if ((long) n * n > ((long) size >> shift)) {
+            final BitIndexUpdatingInterval interval = BitIndexUpdatingInterval.ofRange(min, max);
+            for (int i = n; --i >= 0;) {
+                interval.set(k[i]);
+            }
+            return interval;
+        }
+
+        // Sort with a hash set to filter indices
+        final int unique = Sorting.sortIndicesHashIndexSet(k, n);
+        return KeyUpdatingInterval.of(k, unique);
+    }
+
+    /**
+     * Test the data is in ascending order: {@code data[i] <= data[i+1]} for all {@code i}.
+     * Data is assumed to be at least length 1.
+     *
+     * @param data Data.
+     * @param n Length of data.
+     * @return true if ascending
+     */
+    private static boolean isAscending(int[] data, int n) {
+        for (int i = 0; ++i < n;) {
+            if (data[i] < data[i - 1]) {
+                // descending
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Compress duplicates in the ascending data.
+     *
+     * <p>Warning: Requires {@code n > 0}.
+     *
+     * @param data Indices.
+     * @param n Number of indices.
+     * @return the number of unique indices
+     */
+    private static int compressDuplicates(int[] data, int n) {
+        // Compress to remove duplicates
+        int last = 0;
+        int top = data[0];
+        for (int i = 0; ++i < n;) {
+            final int v = data[i];
+            if (v == top) {
+                continue;
+            }
+            top = v;
+            data[++last] = v;
+        }
+        return last + 1;
+    }
+
+    /**
      * Compute {@code ceil(log2(x))}. This is valid for all strictly positive {@code x}.
      *
      * <p>Returns -1 for {@code x = 0} in place of -infinity.
@@ -271,7 +451,7 @@ final class IndexIntervals {
     /**
      * {@link UpdatingInterval} for a single {@code index}.
      */
-    private static final class PointInterval implements UpdatingInterval {
+    static final class PointInterval implements UpdatingInterval {
         /** Left/right bound of the interval. */
         private final int index;
 
@@ -314,7 +494,7 @@ final class IndexIntervals {
     /**
      * {@link UpdatingInterval} for range {@code [left, right]}.
      */
-    private static final class RangeInterval implements UpdatingInterval {
+    static final class RangeInterval implements UpdatingInterval {
         /** Left bound of the interval. */
         private int left;
         /** Right bound of the interval. */
