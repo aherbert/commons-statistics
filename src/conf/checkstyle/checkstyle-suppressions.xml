@@ -45,6 +45,7 @@
   <suppress checks="ParameterNumber" files=".*[/\\]MannWhitneyUTestTest.java" />
   <suppress checks="ParameterNumber" files=".*[/\\]WilcoxonSignedRankTestTest.java" />
   <suppress checks="ParameterNumber" files=".*[/\\]UnconditionedExactTestTest.java" />
+  <suppress checks="ParameterNumber" files=".*[/\\]jmh[/\\]descriptive[/\\]PartitionTest.java" />
   <suppress checks="MethodLength" files=".*[/\\]WilcoxonSignedRankTestTest.java" />
   <suppress checks="IllegalCatch" files=".*[/\\]TestHelper.java" lines="400-550" />
   <suppress checks="IllegalCatch" files=".*[/\\]BaseStatisticTest.java" lines="280-400" />
