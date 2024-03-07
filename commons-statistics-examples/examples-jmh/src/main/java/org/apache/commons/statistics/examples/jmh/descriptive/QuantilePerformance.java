@@ -670,7 +670,7 @@ public class QuantilePerformance {
          * @param v Value.
          */
         void setSamples(int v) {
-            seed = v;
+            samples = v;
         }
     }
 
