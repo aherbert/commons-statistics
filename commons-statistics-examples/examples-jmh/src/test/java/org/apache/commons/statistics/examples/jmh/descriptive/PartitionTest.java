@@ -27,7 +27,6 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Formatter;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
@@ -1516,14 +1515,24 @@ class PartitionTest {
 
     /**
      * This is not a test. It creates a {@code partition} object for all parameters in
-     * {@code [min, max]} and passes the provided {@code data} to the object {@code function}.
-     * Timings are recorded to {@code file}.
+     * {@code [min, max]} and passes the provided {@code data} to the object
+     * {@code function}. Timings are recorded to {@code file}.
      *
      * <p>This method is used to find parameters of the {@link Partition} class.
      *
-     * <p>The filename will be used to record results. If it already exists the new results
-     * are horizontally joined to the existing results. This assumes this function
+     * <p>The filename will be used to record results. If it already exists the new
+     * results are horizontally joined to the existing results. This assumes this function
      * previously wrote the results.
+     *
+     * <p>CAUTION
+     *
+     * <p>This is not a substitute for a JMH benchmark. It allows easy parameter
+     * enumeration to find good starting points for further investigation. Results should
+     * always be cross-validated in a JMH benchmark.
+     *
+     * <p>Note that the data length can skew results to one or other algorithm due to the
+     * mean number of partitions taken before reaching the minimum size. Thus results
+     * should only be compared within a single or dual pivot algorithm.
      *
      * @param size Size of the data.
      * @param data Data factory.
@@ -1555,13 +1564,16 @@ class PartitionTest {
             results.set(0, results.get(0) + " " + name);
         }
 
+        // Use randomness to make the order unpredictable
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+
         // warm-up for 500ms
         long t = System.currentTimeMillis() + 500;
         while (t >= 0) {
             for (int i = min; i <= max; i++) {
                 final Partition p = partition.apply(i);
                 for (int j = 0; j < size; j++) {
-                    function.accept(p, data.apply(ThreadLocalRandom.current().nextInt(size)));
+                    function.accept(p, data.apply(rng.nextInt(size)));
                 }
                 // Avoid long warm-ups
                 if (System.currentTimeMillis() >= t) {
@@ -1573,16 +1585,22 @@ class PartitionTest {
 
         // Timings are performed using 5 repeats of random order
         final int[][] order = new PermutationSampler(
-            RandomSource.XO_SHI_RO_128_PP.create(), size, size)
+            rng, size, size)
             .samples(5).toArray(int[][]::new);
 
         for (int i = min, j = 1; i <= max; i++, j++) {
             final Partition p = partition.apply(i);
             t = System.nanoTime();
             for (final int[] o : order) {
-                for (final int k : o) {
-                    function.accept(p, data.apply(k));
-                }
+                // Random rotation of the order
+                final int start = rng.nextInt(size);
+                int k = start;
+                do {
+                    function.accept(p, data.apply(o[k]));
+                    if (--k < 0) {
+                        k = size - 1;
+                    }
+                } while (k != start);
             }
             t = System.nanoTime() - t;
             // Update results
@@ -1653,26 +1671,30 @@ class PartitionTest {
         // SP min select size ~ 100 - 120 (random) : ~85 (all)
         // Note: The all data does include worst-case data for insertion sort (reverse sorted data);
         // it also contains some reverse ascending sequences.
-        // The SP method is faster but requires a higher select size. This would suffer under
-        // worse case data for insertion sort.
+        // The SP method tentatively appears faster but requires a higher select size
+        // (note this would suffer under worse case data for insertion sort). This result
+        // is not reproducible in JMH and may be an artifact of short data lengths.
         final Path file = Files.createTempFile("sort", "");
         final BiConsumer<Partition, double[]> sortDP = Partition::sortIDP;
         final BiConsumer<Partition, double[]> sortSP = Partition::sortISBM;
 
         // Standard data.
-        builder.add(Arguments.of(randomSource.size(), randomData, 10, 150, minSelectSize, sortDP, file, "dp_random"));
-        builder.add(Arguments.of(allSource.size(), allData, 10, 150, minSelectSize, sortDP, file, "dp_all"));
-
-        builder.add(Arguments.of(randomSource.size(), randomData, 10, 150, minSelectSize, sortSP, file, "sp_random"));
-        builder.add(Arguments.of(allSource.size(), allData, 10, 150, minSelectSize, sortSP, file, "sp_all"));
+//        builder.add(Arguments.of(randomSource.size(), randomData, 10, 150, minSelectSize, sortDP, file, "dp_random"));
+//        builder.add(Arguments.of(allSource.size(), allData, 10, 150, minSelectSize, sortDP, file, "dp_all"));
+//
+//        builder.add(Arguments.of(randomSource.size(), randomData, 10, 150, minSelectSize, sortSP, file, "sp_random"));
+//        builder.add(Arguments.of(allSource.size(), allData, 10, 150, minSelectSize, sortSP, file, "sp_all"));
 
         // Require a lot of samples to view a good average time.
         // Require the length to be a multiple of 2 and 3 so split in 1/2 or 1/3
         // should perform equal number of splits to get to the select size.
         // Select size is optimal around 60-80. Choose length 12*60 - 12*80.
-        final int size = 10000;
+//        final int size = 10000;
+//        final IntFunction<double[]> randomData2 =
+//            createRandomData(RandomSource.XO_RO_SHI_RO_128_PP.create(), size, 720, 960);
+        final int size = 1000;
         final IntFunction<double[]> randomData2 =
-            createRandomData(RandomSource.XO_RO_SHI_RO_128_PP.create(), size, 720, 960);
+            createRandomData(RandomSource.XO_RO_SHI_RO_128_PP.create(), size, 3000, 4000);
 
         builder.add(Arguments.of(size, randomData2, 10, 150, minSelectSize, sortDP, file, "dp_random2"));
         builder.add(Arguments.of(size, randomData2, 10, 150, minSelectSize, sortSP, file, "sp_random2"));
@@ -1872,6 +1894,14 @@ class PartitionTest {
         // TODO:
         // select 2
         // Can it be shown that a larger min select size is better?
+
+        // TODO - transfer all this to JMH.
+        // Update KFunctionSource to be able to enumerate min select size
+        // Update SortSource to be able to enumerate min select size
+        // Update data source to be able to accept generate samples from
+        // the range. If samples=0 then enumerate the range, else sample from it.
+        // Then test properly in JMH.
+        // Try with the sort first as this should be easier to optimise.
 
         return builder.build();
     }
