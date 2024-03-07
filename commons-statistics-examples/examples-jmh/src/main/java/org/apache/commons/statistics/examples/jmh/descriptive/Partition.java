@@ -5164,17 +5164,17 @@ final class Partition {
         // by doubling this value.
         int maxDepth = twiceLog3(length);
 
-        // Handle cases without multiple keys
-        if (n == 1) {
-            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
-            return;
-        }
-        // Special case for partition around adjacent indices (for interpolation).
-        // If the keys are not separated then they are effectively a single key.
-        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
-            select(a, 0, length - 1, IndexIntervals.interval(k[0], k[1]), maxDepth);
-            return;
-        }
+//        // Handle cases without multiple keys
+//        if (n == 1) {
+//            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
+//            return;
+//        }
+//        // Special case for partition around adjacent indices (for interpolation).
+//        // If the keys are not separated then they are effectively a single key.
+//        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
+//            select(a, 0, length - 1, IndexIntervals.interval(k[0], k[1]), maxDepth);
+//            return;
+//        }
 
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
         select(a, 0, length - 1, keys, maxDepth);
