@@ -125,7 +125,7 @@ final class Partition {
     static final int HEAPSELECT_CONSTANT = 2;
     /** Default shift for the heapselect dynamic threshold mask. Disabled by default.
      * It is a very small number of cases where heapselect is useful
-     * (see {@link #heapSelectEdgeDistance(int)}). */
+     * (see {@link #heapSelectEdgeDistanceDP(int)}). */
     static final int HEAPSELECT_MASK_SHIFT = 31;
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
@@ -190,8 +190,8 @@ final class Partition {
     private final int heapSelectConstant;
     /** Mask used on the dynamic threshold for heapselect. The number of lower bits set in
      * this mask controls the maximum value for the dynamic heapselect threshold. If zero
-     * then the dynamic threshold is ignored. If -1 then the dynamic threshold is always
-     * used. */
+     * then the dynamic threshold is ignored. If {@link Integer#MAX_VALUE} then the dynamic
+     * threshold is always used. */
     private final int heapSelectDynamicMask;
 
     // Use final for settings used to configure partitioning functions
@@ -1092,7 +1092,7 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
      * @param heapSelectConstant Length shift used for heap select distance from end threshold.
-     * @param heapSelectMaskShift Shift applied to -1 to mask the heap select dynamic distance from end threshold.
+     * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(DualPivotingStrategy dualPivotingStrategy,
@@ -1116,7 +1116,7 @@ final class Partition {
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
      * @param heapSelectConstant Length shift used for heap select distance from end threshold.
-     * @param heapSelectMaskShift Shift applied to -1 to mask the heap select dynamic distance from end threshold.
+     * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
@@ -1132,7 +1132,7 @@ final class Partition {
         this.minQuickSelectSize = minQuickSelectSize;
         this.heapSelectShift = heapSelectShift;
         this.heapSelectConstant = heapSelectConstant;
-        this.heapSelectDynamicMask = -1 >>> heapSelectMaskShift;
+        this.heapSelectDynamicMask = Integer.MAX_VALUE >>> heapSelectMaskShift;
     }
 
     /**
@@ -1398,9 +1398,8 @@ final class Partition {
             }
         }
         //swap(data, left, j)
-        final double v = data[left];
+        data[j] = data[left];
         data[left] = min;
-        data[j] = v;
     }
 
     /**
@@ -1482,7 +1481,7 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
-        // Sweep forward.
+        // Sweep backward.
         // This requires less tracking of the max on (partly) sorted data.
         double max = data[right];
         int j = right;
@@ -1493,9 +1492,8 @@ final class Partition {
             }
         }
         //swap(data, right, j)
-        final double v = data[right];
+        data[j] = data[right];
         data[right] = max;
-        data[j] = v;
     }
 
     /**
@@ -3662,7 +3660,8 @@ final class Partition {
             //  ---------s2----------
             //          ----------s4-----------
             if (maxDepth == 0 ||
-                Math.min(kb1 - l, r - ka1) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                Math.min(kb - l, r - ka) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
+                    heapSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
                 // Too much recursion, or ka1 and kb1 are both close to the same end
                 heapSelectRange(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
@@ -3764,7 +3763,8 @@ final class Partition {
             //  ---------s2----------
             //          ----------s4-----------
             if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                Math.min(kb - l, r - ka) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
+                    heapSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
                 // Too much recursion, or ka and kb are both close to the same end
                 heapSelectRange(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
@@ -4418,12 +4418,23 @@ final class Partition {
             // This allows various strategies for heapselect to be tested.
             if (maxDepth == 0 ||
                 Math.min(kb1 - l, r - ka1) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
-                    heapSelectDynamicMask & heapSelectEdgeDistance(n))) {
+                    heapSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
                 // Too much recursion, or ka1 and kb1 are both close to the same end
                 heapSelectRange(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
+//            // Note limit heap select to 2 when a full sort is possible
+//            // (since heapselect is slow on tiny size).
+//            if (maxDepth == 0 ||
+//                Math.min(kb1 - l, r - ka1) < Math.min(n < minQuickSelectSize ? 2 : Integer.MAX_VALUE,
+//                    Math.max((n >>> heapSelectShift) + heapSelectConstant,
+//                        heapSelectDynamicMask & heapSelectEdgeDistance(n)))) {
+//                // Too much recursion, or ka1 and kb1 are both close to the same end
+//                heapSelectRange(a, l, r, ka1, kb1);
+//                recursionConsumer.accept(maxDepth);
+//                return;
+//            }
 
             if (n < minQuickSelectSize) {
                 // Full sort of small data
@@ -4546,7 +4557,7 @@ final class Partition {
             // This allows various strategies for heapselect to be tested.
             if (maxDepth == 0 ||
                 Math.min(kb - l, r - ka) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
-                    heapSelectDynamicMask & heapSelectEdgeDistance(n))) {
+                    heapSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
                 // Too much recursion, or ka and kb are both close to the same end
                 heapSelectRange(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
@@ -7549,7 +7560,36 @@ final class Partition {
 
     /**
      * Determine a threshold for the distance of a partition index {@code k} from the end
-     * of the length to switch to heapselect.
+     * of the length to switch to heapselect. Applies to single-pivot partitioning.
+     *
+     * <p>This method is used to estimate when heapselect will be faster than repeat
+     * partitioning using quickselect. Heapselect will use a heap of size {@code k}. When
+     * {@code k} is very small, relative to the length of the data, it is faster to
+     * perform a single pass heapselect.
+     *
+     * <p>This method requires some more analysis of a suitable switch point.
+     *
+     * @param n Length.
+     * @return distance
+     */
+    static int heapSelectEdgeDistanceSP(int n) {
+        // Note:
+        // 1. Heapselect is slow compared to insertion sort on small data.
+        // 2. Heapselect can be much faster on large data.
+        // Benchmarking shows that heapselect 1 is useful in SP partitioning
+        // even at small lengths.
+        // Here we set a conservative threshold using floor(log2(n)) but we
+        // shift n to avoid heapselect on tiny lengths.
+        // n   threshold
+        // 8   1
+        // 16  2
+        // 32  3
+        return floorLog2(n >> 2);
+    }
+
+    /**
+     * Determine a threshold for the distance of a partition index {@code k} from the end
+     * of the length to switch to heapselect. Applies to dual-pivot partitioning.
      *
      * <p>This method is used to estimate when heapselect will be faster than repeat
      * partitioning using quickselect. Heapselect will use a heap of size {@code k}. When
@@ -7567,16 +7607,28 @@ final class Partition {
      * @param n Length.
      * @return distance
      */
-    static int heapSelectEdgeDistance(int n) {
-        // Ideally this should be monotonic.
-        // Applying a shift to n is not monotonic when log3(n+1) = log3(n) + 1.
-        // Thus we use a power of 2:
-        // n >> log3(n) ~ n / 2^log3(n) ~ 2^(log2(n) - log3(n)
-        // == 1 << (log2(n) - log3(n))
-        // compute log2(n) as (floor(log2(x)))
-        // compute log3(n) as (floor(log2(x))+1) * 323 / 512
-        final int log2p1 = 32 - Integer.numberOfLeadingZeros(n);
-        return 1 << (log2p1 - 1 - ((log2p1 * 323) >> 9));
+    static int heapSelectEdgeDistanceDP(int n) {
+        // Note:
+        // 1. Heapselect is slow compared to insertion sort on small data.
+        // 2. Heapselect can be much faster on large data.
+        // Benchmarking shows that heapselect 1 is useful in DP partitioning
+        // when length is ~21.
+        // Here we set a conservative threshold using floor(log2(n)) but we
+        // shift n to avoid heapselect on tiny lengths.
+        // n   threshold
+        // 8   0
+        // 16  1
+        // 32  2
+        return floorLog2(n >> 3);
+//        // Ideally this should be monotonic.
+//        // Applying a shift to n is not monotonic when log3(n+1) = log3(n) + 1.
+//        // Thus we use a power of 2:
+//        // n >> log3(n) ~ n / 2^log3(n) ~ 2^(log2(n) - log3(n))
+//        // == 1 << (log2(n) - log3(n))
+//        // compute log2(n) as (floor(log2(x)))
+//        // compute log3(n) as (floor(log2(x))+1) * 323 / 512
+//        final int log2p1 = 32 - Integer.numberOfLeadingZeros(n);
+//        return 1 << (log2p1 - 1 - ((log2p1 * 323) >> 9));
     }
 
     /**
