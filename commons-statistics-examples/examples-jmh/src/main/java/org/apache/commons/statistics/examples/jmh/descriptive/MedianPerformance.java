@@ -196,7 +196,7 @@ public class MedianPerformance {
         private static Median withKthSelector(String name, String prefix) {
             return Median.withDefaults()
                 .withOverwrite(true)
-                .withKthSelector(QuantilePerformance.createKthSelector(name, prefix));
+                .withKthSelector(QuantilePerformance.createKthSelector(name, prefix, 0));
         }
 
         /**
@@ -210,7 +210,7 @@ public class MedianPerformance {
         private static Median withPartition(String name, String prefix) {
             return Median.withDefaults()
                 .withOverwrite(true)
-                .withPartition(QuantilePerformance.createPartition(name, prefix));
+                .withPartition(QuantilePerformance.createPartition(name, prefix, 0));
         }
     }
 
