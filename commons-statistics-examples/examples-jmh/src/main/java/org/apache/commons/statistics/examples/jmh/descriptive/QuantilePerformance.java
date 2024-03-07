@@ -161,8 +161,11 @@ public class QuantilePerformance {
      * use of reflection to set fields. Parameters set by JMH are initialized to their
      * defaults for convenience. Re-use requires:
      *
-     * <ol> <li>Creating an instance of the abstract class that provides the data length
-     * <li>Calling {@link #setup()} to create the data <li>Iterating over the data </ol>
+     * <ol>
+     * <li>Creating an instance of the abstract class that provides the data length
+     * <li>Calling {@link #setup()} to create the data
+     * <li>Iterating over the data
+     * </ol>
      *
      * <pre>
      * AbstractDataSource s = new AbstractDataSource() {
@@ -228,6 +231,8 @@ public class QuantilePerformance {
             REVERSE_BACK,
             /** sort modification. */
             SORT,
+            /** reverse sort modification (this is added to the suite of B & M). */
+            REVERSE_SORT,
             /** dither modification. */
             DITHER;
         }
@@ -361,11 +366,11 @@ public class QuantilePerformance {
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
                 // m is supported via the seed parameter.
-                // Default seed will create ceil(log2(2*n)) * 5 dist * 6 mods samples:
-                // MAX  = 32 * 5 * 6 * (2^31-1) * 4 bytes == 7679 GiB
-                // HUGE = 31 * 5 * 6 * 2^30 * 4 bytes == 3720 GiB
-                // BIG  = 21 * 5 * 6 * 2^20 * 4 bytes == 2520 MiB  <-- within configured JVM -Xmx
-                // MED  = 11 * 5 * 6 * 2^10 * 4 bytes == 1320 KiB
+                // Default seed will create ceil(log2(2*n)) * 5 dist * 7 mods samples:
+                // MAX  = 32 * 5 * 7 * (2^31-1) * 4 bytes == 8959 GiB
+                // HUGE = 31 * 5 * 7 * 2^30 * 4 bytes == 4340 GiB
+                // BIG  = 21 * 5 * 7 * 2^20 * 4 bytes == 2940 MiB  <-- within configured JVM -Xmx
+                // MED  = 11 * 5 * 7 * 2^10 * 4 bytes == 1540 KiB
                 // It is possible to create lengths above 2^30 using a single distribution,
                 // modification, and seed:
                 // MAX1 = 1 * 1 * 1 * (2^31-1) * 4 bytes == 8191 MiB
@@ -387,8 +392,17 @@ public class QuantilePerformance {
                         if (mod.contains(Modification.REVERSE_BACK)) {
                             sampleData.add(reverse(x, n / 2, n));
                         }
-                        if (mod.contains(Modification.SORT)) {
-                            sampleData.add(sort(x));
+                        // Only sort once
+                        if (mod.contains(Modification.SORT) ||
+                            mod.contains(Modification.REVERSE_SORT)) {
+                            final int[] y = x.clone();
+                            Arrays.sort(y);
+                            if (mod.contains(Modification.REVERSE_SORT)) {
+                                sampleData.add(reverse(y, 0, n));
+                            }
+                            if (mod.contains(Modification.SORT)) {
+                                sampleData.add(y);
+                            }
                         }
                         if (mod.contains(Modification.DITHER)) {
                             sampleData.add(dither(x));
@@ -558,18 +572,6 @@ public class QuantilePerformance {
                 a[i] = a[j];
                 a[j] = v;
             }
-            return a;
-        }
-
-        /**
-         * Return a sorted copy of the data.
-         *
-         * @param x Data.
-         * @return the copy
-         */
-        private static int[] sort(int[] x) {
-            final int[] a = x.clone();
-            Arrays.sort(a);
             return a;
         }
 
