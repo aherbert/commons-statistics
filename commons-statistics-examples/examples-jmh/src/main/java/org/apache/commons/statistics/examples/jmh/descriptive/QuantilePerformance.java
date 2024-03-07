@@ -231,8 +231,8 @@ public class QuantilePerformance {
             REVERSE_BACK,
             /** sort modification. */
             SORT,
-            /** reverse sort modification (this is added to the suite of B & M). */
-            REVERSE_SORT,
+            /** descending modification (this is an addition to the original suite of B & M). */
+            DESCENDING,
             /** dither modification. */
             DITHER;
         }
@@ -394,10 +394,10 @@ public class QuantilePerformance {
                         }
                         // Only sort once
                         if (mod.contains(Modification.SORT) ||
-                            mod.contains(Modification.REVERSE_SORT)) {
+                            mod.contains(Modification.DESCENDING)) {
                             final int[] y = x.clone();
                             Arrays.sort(y);
-                            if (mod.contains(Modification.REVERSE_SORT)) {
+                            if (mod.contains(Modification.DESCENDING)) {
                                 sampleData.add(reverse(y, 0, n));
                             }
                             if (mod.contains(Modification.SORT)) {
