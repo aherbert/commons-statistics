@@ -237,6 +237,13 @@ public class QuantilePerformance {
             DITHER;
         }
 
+        /** Order. This is randomized to ensure that successive calls do not partition
+         * similar distributions. Randomized per invocation to avoid the JVM 'learning'
+         * branch decisions to take in small data sets. */
+        protected int[] order;
+        /** Cached source of randomness. */
+        protected UniformRandomProvider rng;
+
         /** Type of data. Multiple types can be specified in the same string using
          * lower/upper case, delimited using ':'. */
         @Param({ALL})
@@ -285,16 +292,38 @@ public class QuantilePerformance {
         /**
          * Gets the sample for the given {@code index}.
          *
+         * <p>This is returned in a randomized order per iteration.
+         *
          * @param index Index.
          * @return the data sample
          */
         public double[] getData(int index) {
+            return getDataSample(order[index]);
+        }
+
+        /**
+         * Gets the sample for the given {@code index}.
+         *
+         * @param index Index.
+         * @return the data sample
+         */
+        protected double[] getDataSample(int index) {
             final int[] a = data[index];
             final double[] x = new double[a.length];
             for (int i = -1; ++i < a.length;) {
                 x[i] = a[i];
             }
             return x;
+        }
+
+        /**
+         * Gets the sample size for the given {@code index}.
+         *
+         * @param index Index.
+         * @return the data sample size
+         */
+        public int getDataSize(int index) {
+            return data[index].length;
         }
 
         /**
@@ -334,13 +363,10 @@ public class QuantilePerformance {
             if (rngSeed == 0) {
                 rngSeed = RandomSource.createLong();
             }
-            final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
-            // Advance the seed. Note: It can be verified that the RNG has different
-            // state per iteration but the same sequence across benchmarks by printing
-            // a few ints to the console. This scheme is used to eliminate unfair
-            // benchmarking where some methods may receive different random data.
-            // It also allows benchmarking across JVM platforms with the same data.
-            rngSeed = rng.nextLong();
+            if (rng == null) {
+                // First call, create objects
+                rng = RANDOM_SOURCE.create(rngSeed);
+            }
 
             // Special case for random distribution mode
             if (dist.contains(Distribution.RANDOM) && dist.size() == 1 && samples > 0) {
@@ -358,10 +384,6 @@ public class QuantilePerformance {
                 return;
             }
 
-//            // Only run per iteration for random distribution mode
-//            if (data != null) {
-//                return;
-//            }
             // New data per iteration
             data = null;
             final int o = offset;
@@ -422,6 +444,22 @@ public class QuantilePerformance {
                 }
             }
             data = sampleData.toArray(int[][]::new);
+        }
+
+        /**
+         * Create the order to process the indices.
+         *
+         * <p>JMH recommends that invocations should take at
+         * least 1 millisecond for timings to be usable. In practice there should be
+         * enough data that processing takes much longer than a few milliseconds.
+         */
+        @Setup(Level.Invocation)
+        public void createOrder() {
+            if (order == null) {
+                // First call, create objects
+                order = PermutationSampler.natural(size());
+            }
+            PermutationSampler.shuffle(rng, order);
         }
 
         /**
@@ -628,10 +666,12 @@ public class QuantilePerformance {
         protected abstract int getLength();
 
         /**
-         * @return the seed for the RNG
+         * Gets the range.
+         *
+         * @return the range
          */
-        long getRngSeed() {
-            return rngSeed;
+        final int getRange() {
+            return range;
         }
 
         /**
@@ -902,7 +942,7 @@ public class QuantilePerformance {
     @State(Scope.Benchmark)
     public static class SortSource extends AbstractDataSource {
         /** Data length. */
-        @Param({"20", "40", "80"})
+        @Param({"1023"})
         private int length;
 
         /** {@inheritDoc} */
@@ -913,7 +953,11 @@ public class QuantilePerformance {
     }
 
     /**
-     * Source of k-th indices.
+     * Source of k-th indices to partition.
+     *
+     * <p>This class provides both data to partition and the indices to partition.
+     * The indices and data are created per iteration. The order to process them
+     * is created per invocation.
      */
     @State(Scope.Benchmark)
     public static class KSource extends SortSource {
@@ -926,12 +970,33 @@ public class QuantilePerformance {
 
         /** Indices. */
         private int[][] indices;
+        /** Cache permutation samplers. */
+        private PermutationSampler[] samplers;
+
+        /** {@inheritDoc} */
+        @Override
+        public int size() {
+            return super.size() * repeats;
+        };
+
+        /** {@inheritDoc} */
+        @Override
+        public double[] getData(int index) {
+            // order = (data index) * repeats + repeat
+            // data index = order / repeats
+            return super.getDataSample(order[index] / repeats);
+        }
 
         /**
-         * @return the indices
+         * Gets the indices for the given {@code index}.
+         *
+         * @param index Index.
+         * @return the data indices
          */
-        public int[][] getIndices() {
-            return indices;
+        public int[] getIndices(int index) {
+            // order = (data index) * repeats + repeat
+            // Directly look-up the indices for this repeat.
+            return indices[order[index]];
         }
 
         /**
@@ -942,9 +1007,40 @@ public class QuantilePerformance {
         public void setup() {
             super.setup();
             // Data will be randomized per iteration
-            final UniformRandomProvider rng = RANDOM_SOURCE.create(getRngSeed());
-            final PermutationSampler s = new PermutationSampler(rng, getLength(), k);
-            indices = s.samples(repeats).toArray(int[][]::new);
+            if (indices == null) {
+                // First call, create objects
+                indices = new int[size()][];
+                // Cache samplers. These hold an array which is randomized
+                // per call to obtain a permutation.
+                if (k > 1) {
+                    samplers = new PermutationSampler[getRange() + 1];
+                }
+            }
+
+            int index = 0;
+            final int noOfSamples = super.size();
+            if (k > 1) {
+                final int length = getLength();
+                for (int i = 0; i < noOfSamples; i++) {
+                    final int len = getDataSize(i);
+                    // Create permutation sampler for the length
+                    PermutationSampler s = samplers[len - length];
+                    if (s == null) {
+                        samplers[len - length] = s = new PermutationSampler(rng, len, k);
+                    }
+                    for (int j = repeats; --j >= 0;) {
+                        indices[index++] = s.sample();
+                    }
+                }
+            } else {
+                // k=1: No requirement for a permutation
+                for (int i = 0; i < noOfSamples; i++) {
+                    final int len = getDataSize(i);
+                    for (int j = repeats; --j >= 0;) {
+                        indices[index++] = new int[] {rng.nextInt(len)};
+                    }
+                }
+            }
         }
     }
 
@@ -2287,14 +2383,11 @@ public class QuantilePerformance {
     @Benchmark
     public void partition(KFunctionSource function, KSource source, Blackhole bh) {
         final int size = source.size();
-        final int[][] indices = source.getIndices();
         final BiFunction<double[], int[], double[]> fun = function.getFunction();
         for (int j = -1; ++j < size;) {
-            for (final int[] i : indices) {
-                // Note: This uses the indices without cloning. This is because some
-                // functions do not destructively modify the data.
-                bh.consume(fun.apply(source.getData(j), i));
-            }
+            // Note: This uses the indices without cloning. This is because some
+            // functions do not destructively modify the data.
+            bh.consume(fun.apply(source.getData(j), source.getIndices(j)));
         }
     }
 
