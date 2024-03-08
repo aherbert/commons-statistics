@@ -257,7 +257,13 @@ public class QuantilePerformance {
         @Param({"0"})
         private int seed;
 
-        /** Number of samples. Applies only to the random distribution. */
+        /** Sample offset. This is used to shift each distribution to create different data.
+         * It is advanced on each invocation of {@link #setup()}. */
+        @Param({"0"})
+        private int offset;
+
+        /** Number of samples. Applies only to the random distribution. In this case
+         * the length of the data is randomly chosen in {@code [length, length + range)}. */
         @Param({"0"})
         private int samples;
 
@@ -314,39 +320,6 @@ public class QuantilePerformance {
             if (length < 1) {
                 throw new IllegalStateException("Unsupported length: " + length);
             }
-
-            // Allow pseudorandom seeding
-            if (rngSeed == 0) {
-                rngSeed = RandomSource.createLong();
-            }
-
-            // Special case for random distribution mode
-            if (dist.contains(Distribution.RANDOM) && dist.size() == 1 && samples > 0) {
-                final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
-                // Advance the seed. Note: It can be verified that the RNG has different
-                // state per iteration but the same sequence across benchmarks by printing
-                // a few ints to the console. This scheme is used to eliminate unfair
-                // benchmarking where some methods may receive different random data.
-                // It also allows benchmarking across JVM platforms with the same data.
-                rngSeed = rng.nextLong();
-                data = new int[samples][length];
-                final int upper = seed > 0 ? seed : Integer.MAX_VALUE;
-                final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, upper);
-                for (int i = 0; i < data.length; i++) {
-                    final int[] a = data[i];
-                    for (int j = a.length; --j >= 0;) {
-                        a[j] = s.sample();
-                    }
-                }
-                return;
-            }
-
-            // Only run per iteration for random distribution mode
-            if (data != null) {
-                return;
-            }
-
-            final EnumSet<Modification> mod = getModifications();
             // Note: Bentley-McIlroy use n in {100, 1023, 1024, 1025}.
             // Here we only support a continuous range. The range is important
             // for the median as it will require one or two points to partition
@@ -357,10 +330,48 @@ public class QuantilePerformance {
             }
             final int length2 = length + r;
 
+            // Allow pseudorandom seeding
+            if (rngSeed == 0) {
+                rngSeed = RandomSource.createLong();
+            }
+            final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
+            // Advance the seed. Note: It can be verified that the RNG has different
+            // state per iteration but the same sequence across benchmarks by printing
+            // a few ints to the console. This scheme is used to eliminate unfair
+            // benchmarking where some methods may receive different random data.
+            // It also allows benchmarking across JVM platforms with the same data.
+            rngSeed = rng.nextLong();
+
+            // Special case for random distribution mode
+            if (dist.contains(Distribution.RANDOM) && dist.size() == 1 && samples > 0) {
+                data = new int[samples][];
+                final int upper = seed > 0 ? seed : Integer.MAX_VALUE;
+                final SharedStateDiscreteSampler s1 = DiscreteUniformSampler.of(rng, 0, upper);
+                final SharedStateDiscreteSampler s2 = DiscreteUniformSampler.of(rng, length, length2);
+                for (int i = 0; i < data.length; i++) {
+                    final int[] a = new int[s2.sample()];
+                    for (int j = a.length; --j >= 0;) {
+                        a[j] = s1.sample();
+                    }
+                    data[i] = a;
+                }
+                return;
+            }
+
+//            // Only run per iteration for random distribution mode
+//            if (data != null) {
+//                return;
+//            }
+            // New data per iteration
+            data = null;
+            final int o = offset;
+            offset = rng.nextInt();
+
+            final EnumSet<Modification> mod = getModifications();
+
             // Data using the RNG will be randomized only once.
             // Here we use the same seed for parity across methods.
             // Note that most distributions do not use the source of randomness.
-            final UniformRandomProvider rng = RANDOM_SOURCE.create(rngSeed);
             final ArrayList<int[]> sampleData = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
                 // Note: Large lengths may wish to limit the range of m to limit
@@ -377,7 +388,7 @@ public class QuantilePerformance {
                 // However this is then used to create double[] data thus requiring an extra
                 // ~16GiB memory for the sample to partition.
                 for (final int m : createSeeds(seed, n)) {
-                    for (final int[] x : createDistributions(dist, rng, n, m)) {
+                    for (final int[] x : createDistributions(dist, rng, n, m, o)) {
                         if (mod.contains(Modification.COPY)) {
                             // Don't copy! All other methods generate copies
                             // so we can use this in-place.
@@ -493,29 +504,36 @@ public class QuantilePerformance {
         /**
          * Creates the distribution samples. Handles {@code m = 2^31} using {@link Integer#MIN_VALUE}.
          *
+         * <p>The offset is used to adjust each distribution to generate a different output.
+         * Only applies to distributions that do not use the source of randomness.
+         *
          * @param dist Distributions.
          * @param rng Source of randomness.
          * @param n Length of the sample.
          * @param m Sample seed (in [1, 2^31])
+         * @param o Offset.
          * @return the samples
          */
         private static List<int[]> createDistributions(EnumSet<Distribution> dist,
-                UniformRandomProvider rng, int n, int m) {
+                UniformRandomProvider rng, int n, int m, int o) {
             final ArrayList<int[]> distData = new ArrayList<>(5);
             int[] x;
             if (dist.contains(Distribution.SAWTOOTH)) {
                 distData.add(x = new int[n]);
                 // i % m
                 // Typical case m is a power of 2 so we can use a mask
+                // Use the offset.
                 final int mask = m - 1;
                 if ((m & mask) == 0) {
                     for (int i = -1; ++i < n;) {
-                        x[i] = i & mask;
+                        x[i] = (i + o) & mask;
                     }
                 } else {
-                    // User input seed
+                    // User input seed. Start at the offset.
+                    int j = o & Integer.MAX_VALUE;
                     for (int i = -1; ++i < n;) {
-                        x[i] = i % m;
+                        j = j % m;
+                        x[i] = j++;
                     }
                 }
             }
@@ -533,7 +551,8 @@ public class QuantilePerformance {
                 // Overflow safe: (i * m + i) % n
                 final long nn = n;
                 for (int i = -1; ++i < n;) {
-                    x[i] = (int) (Integer.toUnsignedLong(i * m + i) % nn);
+                    final int j = i + o;
+                    x[i] = (int) (Integer.toUnsignedLong(j * m + j) % nn);
                 }
             }
             if (dist.contains(Distribution.PLATEAU)) {
@@ -544,6 +563,14 @@ public class QuantilePerformance {
                 }
                 for (int i = m - 1; ++i < n;) {
                     x[i] = m;
+                }
+                // Rotate
+                final int n1 = (o & Integer.MAX_VALUE) % n;
+                if (n1 != 0) {
+                    final int[] a = x.clone();
+                    final int n2 = n - n1;
+                    System.arraycopy(a, 0, x, n1, n2);
+                    System.arraycopy(a, n2, x, 0, n1);
                 }
             }
             if (dist.contains(Distribution.SHUFFLE)) {
@@ -663,6 +690,16 @@ public class QuantilePerformance {
          */
         void setSeed(int v) {
             seed = v;
+        }
+
+        /**
+         * Sets the sample 'offset' used to generate distributions. Advanced to a new
+         * random integer on each invocation of {@link #setup()}.
+         *
+         * @param v Value.
+         */
+        void setOffset(int v) {
+            offset = v;
         }
 
         /**
