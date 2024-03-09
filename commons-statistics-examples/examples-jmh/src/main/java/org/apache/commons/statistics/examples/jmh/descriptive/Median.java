@@ -518,6 +518,63 @@ public final class Median {
      * <p>Note: This method may partially sort this input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
+     * <p>Uses an introselect variant. The quickselect is a single-pivot partition method;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * @param values Values.
+     * @return the median
+     */
+    public double evaluateISP(double[] values) {
+        // Floating-point data handling
+        final DoubleDataTransformer t = transformer.get();
+        final double[] x = t.preProcess(values);
+        final int n = t.size();
+        // Special cases
+        if (n <= 2) {
+            t.postProcess(x, null, 0);
+            switch (n) {
+            case 2:
+                return DoubleMath.mean(x[0], x[1]);
+            case 1:
+                return x[0];
+            default:
+                return Double.NaN;
+            }
+        }
+        // Median index
+        final int m = n >>> 1;
+        // Length of data to partition
+        final int len = t.length();
+        // Odd
+        if ((n & 0x1) == 0x1) {
+            if (m < len) {
+                final int[] k = new int[] {m};
+                partition.partitionISP(x, len, k, 1);
+                t.postProcess(x, k, 1);
+            } else {
+                t.postProcess(x, null, 0);
+            }
+            return x[m];
+        }
+        // Even: require (m-1, m)
+        // Do the minimal partition work
+        final int[] k = new int[] {m - 1, m};
+        if (m - 1 < len) {
+            final int kn = m < len ? 2 : 1;
+            partition.partitionISP(x, len, k, kn);
+            t.postProcess(x, k, kn);
+        } else {
+            t.postProcess(x, null, 0);
+        }
+        return DoubleMath.mean(x[m - 1], x[m]);
+    }
+
+    /**
+     * Evaluate the median.
+     *
+     * <p>Note: This method may partially sort this input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
      * handling equal keys by Sedgewick; switching to heapselect if quickselect convergence
      * is slow.
