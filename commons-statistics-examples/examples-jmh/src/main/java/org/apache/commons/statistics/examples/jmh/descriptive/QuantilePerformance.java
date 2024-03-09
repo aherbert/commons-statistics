@@ -114,6 +114,9 @@ public class QuantilePerformance {
     /** Commons Statistics Quantile introselect implementation with single pivot
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISP = "ISP";
+    /** Commons Statistics Quantile introselect implementation with Bentley-McIlroy
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String IBM = "IBM";
     /** Commons Statistics Quantile introselect implementation with Sedgewick's Bentley-McIlroy
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
@@ -862,7 +865,7 @@ public class QuantilePerformance {
             CM, SP, BM, SBM, DP, DP5,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM, IDP, SELECT})
+            ISP, IBM, ISBM, IDP, SELECT})
         private String name;
 
         /** The action. */
@@ -926,6 +929,8 @@ public class QuantilePerformance {
             // Introselect implementations
             } else if (name.startsWith(ISP)) {
                 function = withPartition(name, ISP)::evaluateISP;
+            } else if (name.startsWith(IBM)) {
+                function = withPartition(name, IBM)::evaluateIBM;
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {
@@ -1494,6 +1499,8 @@ public class QuantilePerformance {
             // Introsort
             } else if (name.startsWith(ISP)) {
                 function = createPartition(name, ISP, qs)::sortISP;
+            } else if (name.startsWith(IBM)) {
+                function = createPartition(name, IBM, qs)::sortIBM;
             } else if (name.startsWith(ISBM)) {
                 function = createPartition(name, ISBM, qs)::sortISBM;
             } else if (name.startsWith(IDNF)) {
@@ -1644,7 +1651,7 @@ public class QuantilePerformance {
             DP, DP5, DNF,
             SBM2, KSBM, K1SBM,
             PSBM,
-            ISBM, IDNF, IDP, SELECT})
+            ISP, IBM, ISBM, IDNF, IDP, SELECT})
         private String name;
 
         /** Override of minimum quickselect size. */
@@ -1784,6 +1791,12 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, ISP, qs);
                 function = (data, indices) -> {
                     part.partitionISP(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(IBM)) {
+                final Partition part = createPartition(name, IBM, qs);
+                function = (data, indices) -> {
+                    part.partitionIBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(ISBM)) {

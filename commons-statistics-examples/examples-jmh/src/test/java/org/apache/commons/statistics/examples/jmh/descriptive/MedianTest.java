@@ -111,6 +111,12 @@ class MedianTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testMedian"})
+    void testMedianIBM(double[] values, double expected) {
+        Assertions.assertEquals(expected, Median.withDefaults().evaluateIBM(values));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testMedian"})
     void testMedianISBM(double[] values, double expected) {
         Assertions.assertEquals(expected, Median.withDefaults().evaluateISBM(values));
     }
