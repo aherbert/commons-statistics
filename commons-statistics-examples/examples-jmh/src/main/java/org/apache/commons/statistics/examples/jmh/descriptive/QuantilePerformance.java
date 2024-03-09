@@ -924,6 +924,8 @@ public class QuantilePerformance {
             } else if (name.startsWith(PSBM)) {
                 function = withPartition(name, PSBM)::evaluatePairedSBM;
             // Introselect implementations
+            } else if (name.startsWith(ISP)) {
+                function = withPartition(name, ISP)::evaluateISP;
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {

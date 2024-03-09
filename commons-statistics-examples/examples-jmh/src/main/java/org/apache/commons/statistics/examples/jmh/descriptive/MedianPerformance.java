@@ -79,6 +79,9 @@ public class MedianPerformance {
 
     // Introselect functions
 
+    /** Commons Statistics Quantile introselect implementation with single pivot
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String ISP = "ISP";
     /** Commons Statistics Median introselect implementation with Sedgewick's Bentley-McIlroy
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
@@ -174,6 +177,8 @@ public class MedianPerformance {
             } else if (name.startsWith(PSBM)) {
                 function = withPartition(name, PSBM)::evaluatePairedSBM;
             // Introselect implementations
+            } else if (name.startsWith(ISP)) {
+                function = withPartition(name, ISBM)::evaluateISP;
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name, ISBM)::evaluateISBM;
             } else if (name.startsWith(IDP)) {
