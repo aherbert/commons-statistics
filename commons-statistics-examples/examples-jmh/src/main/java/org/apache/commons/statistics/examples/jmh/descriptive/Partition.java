@@ -5933,7 +5933,7 @@ final class Partition {
                 ++i;
             } while (data[i] < v);
             while (v < data[--j]) {
-                // Stop at l (not i) allows scan loops to be independent
+                // Cannot use j == i in the event that i == q (already passed j)
                 if (j == l) {
                     break;
                 }
@@ -5944,22 +5944,24 @@ final class Partition {
                 // Move this to the lower-equal region.
                 if (i == j && v == data[i]) {
                     //swap(data, i++, p++)
-                    //data[i++] = data[p++];
-                    data[i++] = data[p];
-                    data[p++] = v;
+                    data[i] = data[p];
+                    data[p] = v;
+                    i++;
+                    p++;
                 }
                 break;
             }
             //swap(data, i, j)
-            final double vj = data[i];
             final double vi = data[j];
+            final double vj = data[i];
             data[i] = vi;
             data[j] = vj;
+            // Move the equal values to the ends
             if (vi == v) {
                 //swap(data, i, p++)
-                //data[i] = data[p++];
                 data[i] = data[p];
-                data[p++] = v;
+                data[p] = v;
+                p++;
             }
             if (vj == v) {
                 //swap(data, j, --q)
@@ -6098,7 +6100,7 @@ final class Partition {
                 ++i;
             } while (data[i] < v);
             while (v < data[--j]) {
-                // Stop at l (not i) allows scan loops to be independent
+                // Cannot use j == i in the event that i == q (already passed j)
                 if (j == l) {
                     break;
                 }
@@ -6109,22 +6111,24 @@ final class Partition {
                 // Move this to the lower-equal region.
                 if (i == j && v == data[i]) {
                     //swap(data, i++, p++)
-                    //data[i++] = data[p++];
-                    data[i++] = data[p];
-                    data[p++] = v;
+                    data[i] = data[p];
+                    data[p] = v;
+                    i++;
+                    p++;
                 }
                 break;
             }
             //swap(data, i, j)
-            final double vj = data[i];
             final double vi = data[j];
+            final double vj = data[i];
             data[i] = vi;
             data[j] = vj;
+            // Move the equal values to the ends
             if (vi == v) {
                 //swap(data, i, p++)
-                //data[i] = data[p++];
                 data[i] = data[p];
-                data[p++] = v;
+                data[p] = v;
+                p++;
             }
             if (vj == v) {
                 //swap(data, j, --q)
@@ -6234,10 +6238,9 @@ final class Partition {
                 break;
             }
             //swap(data, i, j)
-            // Can move equal values
-            final double tmp = data[i];
-            data[i] = data[j];
-            data[j] = tmp;
+            final double tmp = data[j];
+            data[j] = data[i];
+            data[i] = tmp;
         }
 
         // data[i] >= P
@@ -6341,8 +6344,8 @@ final class Partition {
                 break;
             }
             //swap(data, i, j)
-            final double vj = data[i];
             final double vi = data[j];
+            final double vj = data[i];
             data[i] = vi;
             data[j] = vj;
             // Move the equal values to the ends
