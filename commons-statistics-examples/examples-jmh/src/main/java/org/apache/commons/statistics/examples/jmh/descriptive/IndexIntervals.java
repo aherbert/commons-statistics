@@ -214,7 +214,7 @@ final class IndexIntervals {
                 return IndexIntervals.interval(k[0]);
             }
             // 2 unique values
-            if (Math.abs(k[0] - k[1]) <= 2) {
+            if (Math.abs(k[0] - k[1]) == 1) {
                 // Small range
                 return IndexIntervals.interval(k[0], k[1]);
             }
