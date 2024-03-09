@@ -67,15 +67,6 @@ public class MedianPerformance {
 
     /** Commons Statistics Median implementation with Sedgewick's BM quickselect. */
     private static final String SBM2 = "2SBM";
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
-    private static final String KSBM = "KSBM";
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
-    private static final String K1SBM = "K1SBM";
-
-    // Paired-key partition functions
-
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect (paired-index variant). */
-    private static final String PSBM = "PairedSBM";
 
     // Introselect functions
 
@@ -172,13 +163,6 @@ public class MedianPerformance {
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
                 function = withPartition(name, SBM2)::evaluateSBM2;
-            } else if (name.startsWith(KSBM)) {
-                function = withPartition(name, KSBM)::evaluateKSBM;
-            } else if (name.startsWith(K1SBM)) {
-                function = withPartition(name, K1SBM)::evaluateK1SBM;
-            // Paired key implementations
-            } else if (name.startsWith(PSBM)) {
-                function = withPartition(name, PSBM)::evaluatePairedSBM;
             // Introselect implementations
             } else if (name.startsWith(ISP)) {
                 function = withPartition(name, ISP)::evaluateISP;

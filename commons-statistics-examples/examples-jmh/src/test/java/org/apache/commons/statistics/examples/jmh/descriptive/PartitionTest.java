@@ -491,34 +491,6 @@ class PartitionTest {
             new Partition(SP, QS).setKeyStrategy(KeyStrategy.SEQUENTIAL)::partitionSBM);
     }
 
-    @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
-    void testPartitionKSBM(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionKSBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
-    void testPartitionK1SBM(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionK1SBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
-    void testPartitionPairedSBM(double[] values, int[] indices) {
-        assertPartitionPaired(values, indices,
-            new Partition(SP, QS).setKeyStrategy(KeyStrategy.INDEX_SET)::partitionPairedSBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
-    void testPartitionPairedSBMPivotCache(double[] values, int[] indices) {
-        assertPartitionPaired(values, indices,
-            new Partition(SP, QS).setKeyStrategy(KeyStrategy.PIVOT_CACHE)::partitionPairedSBM);
-    }
-
     // Introselect versions use heap select configuration.
     // We test the different PairedKeyStrategy options alongside KeyStrategy options.
 
@@ -1207,87 +1179,6 @@ class PartitionTest {
             }
         });
         return builder2.build();
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void testCreateIndexSetForPairedIndices(int[] k, int n) {
-        final int[] copy = k.clone();
-        n = n < 0 ? k.length : n;
-        final IndexSet set = Partition.createIndexSetForPairedIndices(k, n);
-        final int min = Arrays.stream(copy).limit(n).map(i -> i & Integer.MAX_VALUE).min().getAsInt();
-        final int max = Arrays.stream(copy).limit(n).map(i -> (i & Integer.MAX_VALUE) + (i < 0 ? 1 : 0)).max().getAsInt();
-        Assertions.assertEquals(min, k[0] & Integer.MAX_VALUE, "Invalid min");
-        Assertions.assertEquals(max, (k[n - 1] & Integer.MAX_VALUE) + (k[n - 1] < 0 ? 1 : 0), "Invalid max");
-        // Check for destroyed data.
-        // This is only relevant if the indices have an internal range.
-        if (max - min > 1) {
-            Arrays.sort(copy, 0, n);
-            Arrays.sort(k, 0, n);
-            Assertions.assertArrayEquals(copy, k, "Indices destroyed");
-        }
-        // Quick check we can write to the IndexSet with the entire range
-        Assertions.assertFalse(set.get(min));
-        set.add(min);
-        Assertions.assertTrue(set.get(min));
-        if (max != min) {
-            Assertions.assertFalse(set.get(max));
-            set.add(max);
-            Assertions.assertTrue(set.get(max));
-        }
-    }
-
-    static Stream<Arguments> testCreateIndexSetForPairedIndices() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        final int allIndices = -1;
-        final int signBit = Integer.MIN_VALUE;
-        builder.add(Arguments.of(new int[] {1, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 1, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 1, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[] {1, 1, 1, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {1, 2}, allIndices));
-        builder.add(Arguments.of(new int[] {2, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 2, 3}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 3, 2}, allIndices));
-        builder.add(Arguments.of(new int[] {2, 1, 3}, allIndices));
-        builder.add(Arguments.of(new int[] {2, 3, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {3, 1, 2}, allIndices));
-        builder.add(Arguments.of(new int[] {3, 2, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 2, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[] {2, 1, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[] {1, 2, 3, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {1, 3, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {2, 1, 3, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {2, 3, 1, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {3, 1, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {3, 2, 1, 99, 98, 97}, 3));
-        // Paired keys. Replace highest value from above with the next value and a sign bit.
-        builder.add(Arguments.of(new int[] {1, 1 | signBit}, allIndices));
-        builder.add(Arguments.of(new int[] {1 | signBit, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 2, 2 | signBit}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 2 | signBit, 2}, allIndices));
-        builder.add(Arguments.of(new int[] {2, 1, 2 | signBit}, allIndices));
-        builder.add(Arguments.of(new int[] {2, 2 | signBit, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {2 | signBit, 1, 2}, allIndices));
-        builder.add(Arguments.of(new int[] {2 | signBit, 2, 1}, allIndices));
-        builder.add(Arguments.of(new int[] {1, 1 | signBit, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[] {1 | signBit, 1, 99, 98, 97}, 2));
-        builder.add(Arguments.of(new int[] {1, 2, 2 | signBit, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {1, 2 | signBit, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {2, 1, 2 | signBit, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {2, 2 | signBit, 1, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {2 | signBit, 1, 2, 99, 98, 97}, 3));
-        builder.add(Arguments.of(new int[] {2 | signBit, 2, 1, 99, 98, 97}, 3));
-        // Case that created an index-out-of-bound error during benchmarking.
-        // The max value is first key.
-        builder.add(Arguments.of(new int[] {9874, 6495, 535, 9431, 2961, 5073, 9839, 5712, 9803, 1125, 6733, 2558, 1230, 35, 7378, 1114, 7142,
-            9542, 7654, 8722, 4403, 3435, 7350, 4674, 7147, 8806, 4040, 8959, 4945, 8849, 1647, 6601, 6654, 3229, 531,
-            5057, 9783, 4693, 8818, 7415, 6659, 9513, 6543, 8084, 4112, 1139, 3804, 4008, 6225, 2231, 139, 6731, 4562,
-            6717, 7598, 3149, 2843, 4073, 470, 3568, 9270, 6213, 9185, 34, 2084, 415, 2943, 2211, 9103, 7432, 8011,
-            6210, 5058, 3934, 8889, 9359, 2303, 8148, 5808, 1885, 5769, 7043, 653, 4198, 9758, 8659, 7348, 7373, 7081,
-            43, 747, 1695, 3779, 3676, 5985, 3035, 6966, 2081, 5390, 6807}, allIndices));
-
-        return builder.build();
     }
 
     /**

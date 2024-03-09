@@ -23,7 +23,6 @@ import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.stat.ranking.NaNStrategy;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
-import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -81,26 +80,6 @@ class MedianTest {
     @MethodSource(value = {"testMedian"})
     void testMedianSBM2(double[] values, double expected) {
         Assertions.assertEquals(expected, Median.withDefaults().evaluateSBM2(values));
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testMedian"})
-    void testMedianKSBM(double[] values, double expected) {
-        Assertions.assertEquals(expected, Median.withDefaults().evaluateKSBM(values));
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testMedian"})
-    void testMedianK1SBM(double[] values, double expected) {
-        Assertions.assertEquals(expected, Median.withDefaults()
-            .withPartition(new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE))
-            .evaluateK1SBM(values));
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testMedian"})
-    void testMedianPairedSBM(double[] values, double expected) {
-        Assertions.assertEquals(expected, Median.withDefaults().evaluatePairedSBM(values));
     }
 
     @ParameterizedTest
