@@ -1640,6 +1640,50 @@ public final class Quantile {
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
+     * handling equal keys; switching to heapselect if quickselect convergence is slow.
+     *
+     * <p><strong>Performance</strong>
+     *
+     * <p>It is not recommended to use this method for repeat calls for different quantiles
+     * within the same values. The {@link #evaluateIBM(double[], double...)} method should be used
+     * which provides better performance.
+     *
+     * @param values Values.
+     * @param p Quantile.
+     * @return the quantile
+     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @see #evaluateSP(double[], double...)
+     */
+    public double evaluateIBM(double[] values, double p) {
+        return evaluate3(partition::partitionIBM, values, p);
+    }
+
+    /**
+     * Evaluate the {@code p}th quantiles of the values.
+     *
+     * <p>Note: This method may partially sort the input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
+     * handling equal keys; switching to heapselect if quickselect convergence is slow.
+     *
+     * @param values Values.
+     * @param p Quantiles.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
+     * or no quantiles are specified.
+     */
+    public double[] evaluateIBM(double[] values, double... p) {
+        return evaluate3(partition::partitionIBM, values, p);
+    }
+
+    /**
+     * Evaluate the {@code p}th quantile of the values.
+     *
+     * <p>Note: This method may partially sort the input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
      * handling equal keys by Sedgewick; switching to heapselect if quickselect convergence
      * is slow.
      *

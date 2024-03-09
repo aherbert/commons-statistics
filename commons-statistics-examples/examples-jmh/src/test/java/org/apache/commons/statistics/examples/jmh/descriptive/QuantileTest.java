@@ -154,6 +154,13 @@ class QuantileTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testQuantile"})
+    void testQuantileIBM(double[] values, double[] p, double[][] expected, double delta) {
+        assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
+            Quantile::evaluateIBM, Quantile::evaluateIBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testQuantile"})
     void testQuantileISBM(double[] values, double[] p, double[][] expected, double delta) {
         assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
             Quantile::evaluateISBM, Quantile::evaluateISBM);

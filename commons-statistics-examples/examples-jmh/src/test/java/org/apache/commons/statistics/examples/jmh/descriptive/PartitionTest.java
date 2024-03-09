@@ -533,6 +533,15 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionIBM(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC)
+            .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            ::partitionIBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionISBM(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
@@ -887,6 +896,13 @@ class PartitionTest {
     void testSortISP(double[] values) {
         assertSort(values,
             new Partition(SP, QS)::sortISP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
+    void testSortIBM(double[] values) {
+        assertSort(values,
+            new Partition(SP, QS)::sortIBM);
     }
 
     @ParameterizedTest

@@ -4941,6 +4941,30 @@ final class Partition {
      * It handles NaN and signed zeros in the data.
      *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
+     * partition method; the fall-back on poor convergence of the quickselect
+     * is a heapselect.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionIBM(double[] data, int[] k, int n) {
+        introselect(Partition::partitionBM, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
      * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
      * is a heapselect.
      *
@@ -5023,6 +5047,30 @@ final class Partition {
      */
     void partitionISP(double[] data, int length, int[] k, int n) {
         introselect(Partition::partitionSP, data, length - 1, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * @param data Values.
+     * @param length Length of data.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionIBM(double[] data, int length, int[] k, int n) {
+        introselect(Partition::partitionBM, data, length - 1, k, n);
     }
 
     /**
@@ -5779,6 +5827,19 @@ final class Partition {
      *
      * @param data Values.
      */
+    void sortIBM(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionBM, data);
+    }
+
+    /**
+     * Sort the data using an intrasort.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort method by Sedgewick; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
     void sortISBM(double[] data) {
         // NaN processing is done in the introsort method
         introsort(Partition::partitionSBM, data);
@@ -6203,7 +6264,7 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    static int partitionSP(double[] data, int l, int r, int pivot, int[] upper) {
+    private static int partitionSP(double[] data, int l, int r, int pivot, int[] upper) {
         // Partition data using pivot P into less-than or greater-than.
         // P is placed at the end to act as a sentinel.
         // k traverses the unknown region ??? and values moved if less or greater:
@@ -6260,6 +6321,103 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
      *
+     * <p>Uses a Bentley-McIlroy quicksort partition method.
+     *
+     * @param data Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param pivot Initial index of the pivot.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private static int partitionBM(double[] data, int l, int r, int pivot, int[] upper) {
+        // Single-pivot Bentley-McIlroy quicksort handling equal keys.
+        //
+        // Adapted from program 7 in Bentley-McIlroy (1993)
+        // Engineering a sort function
+        // SOFTWARE—PRACTICE AND EXPERIENCE, VOL.23(11), 1249–1265
+        //
+        // 3-way partition of the data using a pivot value into
+        // less-than, equal or greater-than.
+        //
+        // First partition data into 4 reqions by scanning the unknown region from
+        // left (i) and right (j) and moving equal values to the ends:
+        //                  i->       <-j
+        // l        p       |           |         q       r
+        // | equal  | less  |  unknown  | greater | equal |
+        //
+        //                    <-j
+        // l        p             i               q       r
+        // | equal  | less        |       greater | equal |
+        //
+        // Then the equal values are copied from the ends to the centre:
+        // | less        |        equal      |    greater |
+
+        int i = l;
+        int j = r;
+        int p = l;
+        int q = r;
+
+        final double v = data[pivot];
+
+        for (;;) {
+            while (i <= j && data[i] <= v) {
+                if (data[i] == v) {
+                    //swap(data, i, p++)
+                    data[i] = data[p];
+                    data[p] = v;
+                    p++;
+                }
+                i++;
+            }
+            while (j >= i && data[j] >= v) {
+                if (v == data[j]) {
+                    //swap(data, j, q--)
+                    data[j] = data[q];
+                    data[q] = v;
+                    q--;
+                }
+                j--;
+            }
+            if (i > j) {
+                break;
+            }
+            //swap(data, i++, j--)
+            final double tmp = data[j];
+            data[j] = data[i];
+            data[i] = tmp;
+        }
+
+        // Move equal regions to the centre.
+        int s = Math.min(p - l, i - p);
+        for (int k = l; s > 0; k++, s--) {
+            //swap(data, k, i - s)
+            data[k] = data[i - s];
+            data[i - s] = v;
+        }
+        s = Math.min(q - j, r - q);
+        for (int k = i; --s >= 0; k++) {
+            //swap(data, r - s, k)
+            data[r - s] = data[k];
+            data[k] = v;
+        }
+
+        // Set output range
+        i = i - p + l;
+        j = j - q + r;
+        upper[0] = j;
+
+        return i;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
      * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
      *
      * @param data Data array.
@@ -6285,6 +6443,11 @@ final class Partition {
         //
         // Adapted from Sedgewick "Quicksort is optimal"
         // https://sedgewick.io/wp-content/themes/sedgewick/talks/2002QuicksortIsOptimal.pdf
+        //
+        // Note: The difference between this and the original BM partition is the use of
+        // < or > rather than <= and >=. This allows the pivot to act as a sentinal and removes
+        // the requirement for checks on i; and j can be checked against an unlikely condition.
+        // This method will swap runs of equal values.
         //
         // The algorithm has been changed so that:
         // - A pivot point must be provided.
