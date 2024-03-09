@@ -23,7 +23,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
-import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -120,29 +119,6 @@ class QuantileTest {
     void testQuantileSBM2(double[] values, double[] p, double[][] expected, double delta) {
         assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
             Quantile::evaluateSBM2, Quantile::evaluateSBM2);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testQuantile"})
-    void testQuantileKSBM(double[] values, double[] p, double[][] expected, double delta) {
-        assertQuantile(Quantile.withDefaults().withPartition(new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE)),
-            values, p, expected, delta,
-            Quantile::evaluateKSBM, Quantile::evaluateKSBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testQuantile"})
-    void testQuantileK1SBM(double[] values, double[] p, double[][] expected, double delta) {
-        assertQuantile(Quantile.withDefaults().withPartition(new Partition().setKeyStrategy(KeyStrategy.PIVOT_CACHE)),
-            values, p, expected, delta,
-            Quantile::evaluateK1SBM, Quantile::evaluateK1SBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testQuantile"})
-    void testQuantilePairedSBM(double[] values, double[] p, double[][] expected, double delta) {
-        assertQuantile(Quantile.withDefaults(), values, p, expected, delta,
-            Quantile::evaluatePairedSBM, Quantile::evaluatePairedSBM);
     }
 
     @ParameterizedTest

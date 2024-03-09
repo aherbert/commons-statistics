@@ -99,15 +99,6 @@ public class QuantilePerformance {
 
     /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
     private static final String SBM2 = "2SBM";
-    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
-    private static final String KSBM = "KSBM";
-    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
-    private static final String K1SBM = "K1SBM";
-
-    // Paired-key partition functions
-
-    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
-    private static final String PSBM = "PSBM";
 
     // Introselect functions
 
@@ -863,8 +854,7 @@ public class QuantilePerformance {
             // Slow
             //SORT, SPH, SPE
             CM, SP, BM, SBM, DP, DP5,
-            SBM2, KSBM, K1SBM,
-            PSBM,
+            SBM2,
             ISP, IBM, ISBM, IDP, SELECT})
         private String name;
 
@@ -919,13 +909,6 @@ public class QuantilePerformance {
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
                 function = withPartition(name, SBM2)::evaluateSBM2;
-            } else if (name.startsWith(KSBM)) {
-                function = withPartition(name, KSBM)::evaluateKSBM;
-            } else if (name.startsWith(K1SBM)) {
-                function = withPartition(name, K1SBM)::evaluateK1SBM;
-            // Paired key implementations
-            } else if (name.startsWith(PSBM)) {
-                function = withPartition(name, PSBM)::evaluatePairedSBM;
             // Introselect implementations
             } else if (name.startsWith(ISP)) {
                 function = withPartition(name, ISP)::evaluateISP;
@@ -1649,8 +1632,7 @@ public class QuantilePerformance {
         @Param({SORT + JDK, SPH,
             SP, BM, SBM,
             DP, DP5, DNF,
-            SBM2, KSBM, K1SBM,
-            PSBM,
+            SBM2,
             ISP, IBM, ISBM, IDNF, IDP, SELECT})
         private String name;
 
@@ -1764,26 +1746,6 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, SBM2, qs);
                 function = (data, indices) -> {
                     part.partitionSBM(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(KSBM)) {
-                final Partition part = createPartition(name, KSBM, qs);
-                function = (data, indices) -> {
-                    part.partitionKSBM(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(K1SBM)) {
-                final Partition part = createPartition(name, K1SBM, qs);
-                function = (data, indices) -> {
-                    part.partitionK1SBM(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            // Paired key implementations.
-            // This can be used to show they have no disadvantage for processing single keys.
-            } else if (name.startsWith(PSBM)) {
-                final Partition part = createPartition(name, PSBM, qs);
-                function = (data, indices) -> {
-                    part.partitionPairedSBM(data, indices.clone());
                     return extractIndices(data, indices);
                 };
             // Introselect implementations
