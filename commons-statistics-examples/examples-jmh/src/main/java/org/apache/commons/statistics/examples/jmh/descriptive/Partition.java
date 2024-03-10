@@ -109,6 +109,20 @@ final class Partition {
      * <p>This is set at a power of 2. This allows analysis of the indices saturation of
      * the range using compressed indices where compression uses a power of 2. */
     static final int MIN_QUICKSELECT_SIZE = 32;
+    /** Minimum selection size for single-pivot select (used for single k).
+     * Below this switch to insertion sort rather than selection.
+     * Changes to this value are only noticeable when the input array is small.
+     * Benchmarking random data in range [96, 192] suggests a value of ~16. */
+    static final int SP_QUICKSELECT_SIZE = 16;
+    /** Minimum selection size for dual-pivot select (used for multiple k).
+     * Below this switch to insertion sort rather than selection.
+     * Changes to this value are only noticeable for select when the input array is small.
+     * Benchmarking random data in range [162, 486] suggests a value of ~27 for n=1 and
+     * increasing with higher n in the same range.
+     * As keys become saturated then the partition method tends towards a full sort.
+     * Dual-pivot sorting requires a value of ~120. If keys are saturated between k1 and kn
+     * an increase to this threshold will gain full sort performance. */
+    static final int DP_QUICKSELECT_SIZE = 27;
     /** Default length shift for heapselect. On random data this is approximately constant
      * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
      * of the time. On non-random data then the shift has to be larger. This idea is
@@ -4323,10 +4337,9 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
-     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
-     * partition method by Vladimir Yaroslavskiy; switches to a single-pivot Dutch National Flag
-     * method when two pivots cannot be identified; the fall-back on poor convergence of
-     * the quickselect is a heapselect.
+     * <p>Uses an introselect variant. The quickselect is either a single-pivot
+     * Bentley-McIlroy partition method by Sedgewick, or a dual-pivot partition method by
+     * Yaroslavskiy; the fall-back on poor convergence of the quickselect is a heapselect.
      *
      * <p>Note: This method does not use any configuration. It is built using the
      * components that perform well across a benchmarking for: single keys; a pair of keys;
@@ -4342,53 +4355,191 @@ final class Partition {
             return;
         }
 
-        // TODO: create the interval first.
-        // If the range is small compared to the length then use single-pivot,
-        // else use dual-pivot.
+        // Note:
+        // Single-pivot quickselect is faster by up to 7% when searching for single keys;
+        // the difference is most apparent when searching in the central region.
+        // Dual-pivot quickselect is faster by 2% when searching for two keys and up to 8%
+        // for multiple keys.
+        // If the keys saturate the range then partitioning -> sorting.
+
+        // Single-pivot quickselect has maximum recursion log2(length) * 2.
+        if (n == 1) {
+            select(a, 0, length - 1, k[0], k[0], floorLog2(length) << 1);
+            return;
+        }
+        // If the keys are not separated then they are effectively a single key.
+        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
+            final int k1 = Math.min(k[0], k[1]);
+            final int kn = Math.max(k[0], k[1]);
+            select(a, 0, length - 1, k1, kn, floorLog2(length) << 1);
+            return;
+        }
+
+        // TODO:
+        // Use dual-pivot for multiple keys and if keys saturate the range then
+        // increase the threshold to switch to a full sort of small lengths. This
+        // allows the case for multiple keys to approach the speed of a dual-pivot
+        // quicksort.
 
         // Ideal dual pivot recursion will take log3(n) steps as data is
         // divided into length (n/3) at each iteration; add contingency
         // by doubling this value.
         int maxDepth = twiceLog3(length);
 
-//        // Handle cases without multiple keys
-//        if (n == 1) {
-//            select(a, 0, length - 1, IndexIntervals.interval(k[0]), maxDepth);
-//            return;
-//        }
-//        // Special case for partition around adjacent indices (for interpolation).
-//        // If the keys are not separated then they are effectively a single key.
-//        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
-//            select(a, 0, length - 1, IndexIntervals.interval(k[0], k[1]), maxDepth);
-//            return;
-//        }
-
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
         select(a, 0, length - 1, keys, maxDepth);
     }
+
+//    /**
+//     * Partition the array such that indices {@code k} correspond to their
+//     * correctly sorted value in the equivalent fully sorted array.
+//     *
+//     * <p>For all indices {@code k} and any index {@code i}:
+//     *
+//     * <pre>{@code
+//     * data[i < k] <= data[k] <= data[k < i]
+//     * }</pre>
+//     *
+//     *
+//     * <p>This function accepts a {@link SearchableInterval} of indices {@code k} and the
+//     * first index {@code k1} and last index {@code kn} that define the range of indices
+//     * to partition. The {@link SearchableInterval} is used to search for keys in {@code [k1, kn]}
+//     * to create {@code [k1, kb]} and {@code [ka, kn]} if partitioning splits the range.
+//     *
+//     * <pre>{@code
+//     * left <= k1 <= kn <= right
+//     * }</pre>
+//     *
+//     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
+//     * partition method by Vladimir Yaroslavskiy;  the fall-back on poor convergence of
+//     * the quickselect is a heapselect.
+//     *
+//     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+//     * destroyed (the mixture updated during partitioning). The caller is responsible for
+//     * counting a mixture of signed zeros and restoring them if required.
+//     *
+//     * @param a Values.
+//     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+//     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+//     * @param k Interval of indices to partition (ordered).
+//     * @param k1 First key.
+//     * @param kn Last key.
+//     * @param maxDepth Maximum depth for recursion.
+//     */
+//    // package-private for benchmarking
+//    private static void select(double[] a, int left, int right,
+//        SearchableInterval k, int k1, int kn, int maxDepth) {
+//        // Inline code using the defaults.
+//        // Changes branching from left/right/middle to left/middle/right.
+//        // This allows branch prediction to track that after a split then the next section
+//        // should execute (since a split is used when there are indices after a pivot).
+//
+//        // If partitioning splits the interval then recursion is used for the left-most side(s)
+//        // and the right-most side remains within this function. If partitioning does
+//        // not split the interval then it remains within this function.
+//        int l = left;
+//        int r = right;
+//        int ka = k1;
+//        int kb = kn;
+//        final int[] upper = {0, 0, 0};
+//        while (true) {
+//            // It is possible to use heapselect when ka and kb are close to the same end
+//            // |l|-----|ka|--------|kb|------|r|
+//            //  ---------s2----------
+//            //          ----------s4-----------
+//            if (maxDepth == 0 ||
+//                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
+//                // Too much recursion, or ka and kb are both close to the same end
+//                heapSelectRange(a, l, r, ka, kb);
+//                return;
+//            }
+//
+//            if (r - l < MIN_QUICKSELECT_SIZE) {
+//                // Full sort of small data
+//                //Sorting.sort(a, l, r, l > 0);
+//                Sorting.sort(a, l, r);
+//                return;
+//            }
+//
+//            // Dual-pivot partitioning
+//            final int p0 = partitionDP(a, l, r, upper, ka, kb);
+//            final int p1 = upper[0];
+//            final int p2 = upper[1];
+//            final int p3 = upper[2];
+//
+//            // Recursion to max depth
+//            // Note: Here we possibly branch left, middle and right with multiple keys.
+//            // It is possible that the partition has split the keys
+//            // and the recursion proceeds with a reduced set in each region.
+//            //                    p0 p1              p2 p3
+//            // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
+//            //                 kb  |      ka
+//            maxDepth--;
+//            // Recurse left side if required
+//            if (ka < p0) {
+//                if (kb <= p1) {
+//                    // Entirely on left side
+//                    r = p0 - 1;
+//                    if (r < kb) {
+//                        kb = k.previousIndex(r);
+//                    }
+//                    continue;
+//                }
+//                select(a, l, p0 - 1, k, ka, k.split(p0, p1, upper), maxDepth);
+//                // Here we must process middle and possibly right
+//                ka = upper[0];
+//            }
+//            // Recurse middle if required
+//            // Check the interval overlaps the middle; and the middle exists.
+//            //                    p0 p1                p2 p3
+//            // |l|-----------------|P|------------------|P|----|r|
+//            // Eliminate:      ----kb                    ka----
+//            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
+//                // Advance lower bound
+//                l = p1 + 1;
+//                if (ka < l) {
+//                    ka = k.nextIndex(l);
+//                }
+//                if (kb <= p3) {
+//                    // Entirely in middle
+//                    r = p2 - 1;
+//                    if (r < kb) {
+//                        kb = k.previousIndex(r);
+//                    }
+//                    continue;
+//                }
+//                select(a, l, p2 - 1, k, ka, k.split(p2, p3, upper), maxDepth);
+//                // Here we must process right
+//                ka = upper[0];
+//            }
+//            if (kb <= p3) {
+//                // No right side
+//                return;
+//            }
+//            // Continue right
+//            l = p3 + 1;
+//            if (ka < l) {
+//                ka = k.nextIndex(l);
+//            }
+//        }
+//    }
 
     /**
      * Partition the array such that indices {@code k} correspond to their
      * correctly sorted value in the equivalent fully sorted array.
      *
-     * <p>For all indices {@code k} and any index {@code i}:
+     * <p>For all indices {@code [k1, kn]} and any index {@code i}:
      *
      * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
+     * data[i < k1] <= data[k1] <= data[kn] <= data[kn < i]
      * }</pre>
      *
+     * <p>This function accepts a indices {@code [k1, kn]} that define the
+     * range of indices to partition. The interval can be narrowed or split as
+     * partitioning divides the range.
      *
-     * <p>This function accepts a {@link SearchableInterval} of indices {@code k} and the
-     * first index {@code k1} and last index {@code kn} that define the range of indices
-     * to partition. The {@link SearchableInterval} is used to search for keys in {@code [k1, kn]}
-     * to create {@code [k1, kb]} and {@code [ka, kn]} if partitioning splits the range.
-     *
-     * <pre>{@code
-     * left <= k1 <= kn <= right
-     * }</pre>
-     *
-     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
-     * partition method by Vladimir Yaroslavskiy;  the fall-back on poor convergence of
+     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
+     * partition method by Sedgewick; the fall-back on poor convergence of
      * the quickselect is a heapselect.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
@@ -4398,19 +4549,13 @@ final class Partition {
      * @param a Values.
      * @param left Lower bound of data (inclusive, assumed to be strictly positive).
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param k Interval of indices to partition (ordered).
-     * @param k1 First key.
-     * @param kn Last key.
+     * @param k1 First key of interest.
+     * @param kn Last key of interest.
      * @param maxDepth Maximum depth for recursion.
      */
     // package-private for benchmarking
-    static void select(double[] a, int left, int right,
-        SearchableInterval k, int k1, int kn, int maxDepth) {
+    static void select(double[] a, int left, int right, int k1, int kn, int maxDepth) {
         // Inline code using the defaults.
-        // Changes branching from left/right/middle to left/middle/right.
-        // This allows branch prediction to track that after a split then the next section
-        // should execute (since a split is used when there are indices after a pivot).
-
         // If partitioning splits the interval then recursion is used for the left-most side(s)
         // and the right-most side remains within this function. If partitioning does
         // not split the interval then it remains within this function.
@@ -4418,7 +4563,7 @@ final class Partition {
         int r = right;
         int ka = k1;
         int kb = kn;
-        final int[] upper = {0, 0, 0};
+        final int[] upper = {0};
         while (true) {
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
@@ -4431,73 +4576,42 @@ final class Partition {
                 return;
             }
 
-            if (r - l < MIN_QUICKSELECT_SIZE) {
+            if (r - l < SP_QUICKSELECT_SIZE) {
                 // Full sort of small data
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
 
-            // Dual-pivot partitioning
-            final int p0 = partitionDP(a, l, r, upper, ka, kb);
+            // Pick a pivot and partition
+            final int p0 = partitionSBM(a, l, r,
+                PIVOTING_STRATEGY.pivotIndex(a, l, r),
+                upper);
             final int p1 = upper[0];
-            final int p2 = upper[1];
-            final int p3 = upper[2];
 
             // Recursion to max depth
-            // Note: Here we possibly branch left, middle and right with multiple keys.
-            // It is possible that the partition has split the keys
-            // and the recursion proceeds with a reduced set in each region.
-            //                    p0 p1              p2 p3
-            // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
-            //                 kb  |      ka
+            // Note: Here we possibly branch left and right with multiple keys.
+            // It is possible that the partition has split the pair
+            // and the recursion proceeds with a single point.
             maxDepth--;
             // Recurse left side if required
             if (ka < p0) {
                 if (kb <= p1) {
                     // Entirely on left side
                     r = p0 - 1;
-                    if (r < kb) {
-                        kb = k.previousIndex(r);
-                    }
+                    kb = r < kb ? ka : kb;
                     continue;
                 }
-                select(a, l, p0 - 1, k, ka, k.split(p0, p1, upper), maxDepth);
-                // Here we must process middle and possibly right
-                ka = upper[0];
+                select(a, l, p0 - 1, ka, ka, maxDepth);
+                ka = kb;
             }
-            // Recurse middle if required
-            // Check the interval overlaps the middle; and the middle exists.
-            //                    p0 p1                p2 p3
-            // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:      ----kb                    ka----
-            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
-                // Advance lower bound
-                l = p1 + 1;
-                if (ka < l) {
-                    ka = k.nextIndex(l);
-                }
-                if (kb <= p3) {
-                    // Entirely in middle
-                    r = p2 - 1;
-                    if (r < kb) {
-                        kb = k.previousIndex(r);
-                    }
-                    continue;
-                }
-                select(a, l, p2 - 1, k, ka, k.split(p2, p3, upper), maxDepth);
-                // Here we must process right
-                ka = upper[0];
-            }
-            if (kb <= p3) {
+            if (kb <= p1) {
                 // No right side
                 return;
             }
-            // Continue right
-            l = p3 + 1;
-            if (ka < l) {
-                ka = k.nextIndex(l);
-            }
+            // Continue on the right side
+            l = p1 + 1;
+            ka = ka < l ? kb : ka;
         }
     }
 
@@ -4556,7 +4670,7 @@ final class Partition {
                 return;
             }
 
-            if (r - l < MIN_QUICKSELECT_SIZE) {
+            if (r - l < DP_QUICKSELECT_SIZE) {
                 // Full sort of small data
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
