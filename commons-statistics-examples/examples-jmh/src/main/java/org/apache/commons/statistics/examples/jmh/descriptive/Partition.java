@@ -6524,7 +6524,8 @@ final class Partition {
         // 1   1
         // 8   2
         // 64  4
-        return 1 << ((floorLog2(n) * 189) >>> 9);
+        // May be better as a look-up table based on highest 1 bit
+        return 1 << ((floorLog2(n & ~0x7) * 189) >>> 9);
     }
 
     /**
