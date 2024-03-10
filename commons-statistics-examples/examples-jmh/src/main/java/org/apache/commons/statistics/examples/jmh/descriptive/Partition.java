@@ -6503,16 +6503,28 @@ final class Partition {
         // 8   0
         // 16  1
         // 32  2
-        return floorLog2(n >> 3);
-//        // Ideally this should be monotonic.
-//        // Applying a shift to n is not monotonic when log3(n+1) = log3(n) + 1.
-//        // Thus we use a power of 2:
-//        // n >> log3(n) ~ n / 2^log3(n) ~ 2^(log2(n) - log3(n))
-//        // == 1 << (log2(n) - log3(n))
-//        // compute log2(n) as (floor(log2(x)))
-//        // compute log3(n) as (floor(log2(x))+1) * 323 / 512
-//        final int log2p1 = 32 - Integer.numberOfLeadingZeros(n);
-//        return 1 << (log2p1 - 1 - ((log2p1 * 323) >> 9));
+        //return floorLog2(n >> 3);
+
+        // Ideally this should be monotonic.
+        // Applying a shift to n is not monotonic when log3(n+1) = log3(n) + 1.
+        // Thus we use a power of 2:
+        // n >> log3(n) ~ n / 2^log3(n) ~ 2^(log2(n) - log3(n))
+        // == 1 << (log2(n) - log3(n))
+
+        // compute log2(n) as (floor(log2(x)))
+        // compute log3(n) as (floor(log2(x))+1) * 323 / 512
+        //final int log2p1 = 32 - Integer.numberOfLeadingZeros(n);
+        //return 1 << (log2p1 - 1 - ((log2p1 * 323) >> 9));
+
+        // log2(n) - log3(n) = log2(n) - log2(n) / log2(3)
+        // log2(3) ~ 512/323
+        // => log2(n) - log2(n) * 323/512 = log2(n) * 189/512
+        // Too high for small n
+        // n   threshold
+        // 1   1
+        // 8   2
+        // 64  4
+        return 1 << ((floorLog2(n) * 189) >>> 9);
     }
 
     /**
