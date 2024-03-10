@@ -801,6 +801,7 @@ class PartitionTest {
         final double nan = Double.NaN;
         builder.add(Arguments.of(new double[] {}, new int[0]));
         builder.add(Arguments.of(new double[] {nan}, new int[] {0}));
+        builder.add(Arguments.of(new double[] {-0.0, nan}, new int[] {1}));
         builder.add(Arguments.of(new double[] {nan, nan, nan}, new int[] {2}));
         builder.add(Arguments.of(new double[] {nan, 0.0, -0.0, nan}, new int[] {3}));
         builder.add(Arguments.of(new double[] {nan, 0.0, -0.0, nan}, new int[] {1, 2}));
@@ -1048,12 +1049,15 @@ class PartitionTest {
                 builder.add(a.clone());
             }
         }
+        final double nan = Double.NaN;
         builder.add(new double[] {});
-        builder.add(new double[] {Double.NaN});
-        builder.add(new double[] {Double.NaN, Double.NaN, Double.NaN});
-        builder.add(new double[] {Double.NaN, 0.0, -0.0, Double.NaN});
-        builder.add(new double[] {Double.NaN, 0.0, -0.0});
-        builder.add(new double[] {Double.NaN, 1.23, 0.0, -4.56, -0.0, Double.NaN});
+        builder.add(new double[] {nan});
+        builder.add(new double[] {-0.0, nan});
+        builder.add(new double[] {nan, nan, nan});
+        builder.add(new double[] {nan, 0.0, -0.0, nan});
+        builder.add(new double[] {nan, 0.0, -0.0});
+        builder.add(new double[] {nan, 0.0, 1, -0.0});
+        builder.add(new double[] {nan, 1.23, 0.0, -4.56, -0.0, nan});
         return builder.build();
     }
 

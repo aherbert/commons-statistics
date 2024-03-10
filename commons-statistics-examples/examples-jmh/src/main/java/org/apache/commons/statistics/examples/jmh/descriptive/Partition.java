@@ -2194,11 +2194,9 @@ final class Partition {
         // Assume this is in-place
         t.preProcess(a);
         final int end = t.length();
-        if (end <= 1) {
-            // Nothing to sort
-            return;
+        if (end > 1) {
+            introsort(part, a, 0, end - 1, createMaxDepthSinglePivot(end));
         }
-        introsort(part, a, 0, end - 1, createMaxDepthSinglePivot(end));
         // Restore signed zeros
         t.postProcess(a);
     }
@@ -2267,11 +2265,9 @@ final class Partition {
         // Assume this is in-place
         t.preProcess(a);
         final int end = t.length();
-        if (end <= 1) {
-            // Nothing to sort
-            return;
+        if (end > 1) {
+            introsort(part, a, 0, end - 1, createMaxDepthDualPivot(end));
         }
-        introsort(part, a, 0, end - 1, createMaxDepthDualPivot(end));
         // Restore signed zeros
         t.postProcess(a);
     }
@@ -2355,30 +2351,21 @@ final class Partition {
         // Assume this is in-place
         t.preProcess(a);
         final int end = t.length();
-        if (end <= 1) {
-            // Nothing to partition
-            return;
-        }
-
-        // Filter indices invalidated by NaN check
         int n = count;
-        if (end < k.length) {
-            for (int i = n; i > 0;) {
-                final int v = k[--i];
-                if (v >= end) {
-                    // swap(k, i, --n)
-                    k[i] = k[--n];
-                    k[n] = v;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; i > 0;) {
+                    final int v = k[--i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
                 }
             }
-            if (n == 0) {
-                // NaNs for all k
-                return;
-            }
+            introselect(part, a, end - 1, k, n);
         }
-
-        introselect(part, a, end - 1, k, n);
-
         // Restore signed zeros
         t.postProcess(a, k, n);
     }
@@ -2412,6 +2399,9 @@ final class Partition {
      * @param n Count of indices (assumed to be strictly positive).
      */
     private void introselect(SPEPartition part, double[] a, int right, int[] k, int n) {
+        if (n < 1) {
+            return;
+        }
         final int maxDepth = createMaxDepthSinglePivot(right + 1);
         // Handle cases without multiple keys
         if (n == 1) {
@@ -3196,30 +3186,21 @@ final class Partition {
         // Assume this is in-place
         t.preProcess(a);
         final int end = t.length();
-        if (end <= 1) {
-            // Nothing to partition
-            return;
-        }
-
-        // Filter indices invalidated by NaN check
         int n = count;
-        if (end < k.length) {
-            for (int i = n; i > 0;) {
-                final int v = k[--i];
-                if (v >= end) {
-                    // swap(k, i, --n)
-                    k[i] = k[--n];
-                    k[n] = v;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; i > 0;) {
+                    final int v = k[--i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
                 }
             }
-            if (n == 0) {
-                // NaNs for all k
-                return;
-            }
+            introselect(part, a, end - 1, k, n);
         }
-
-        introselect(part, a, end - 1, k, n);
-
         // Restore signed zeros
         t.postProcess(a, k, n);
     }
@@ -3253,6 +3234,9 @@ final class Partition {
      * @param n Count of indices (assumed to be strictly positive).
      */
     private void introselect(DPPartition part, double[] a, int right, int[] k, int n) {
+        if (n < 1) {
+            return;
+        }
         final int maxDepth = createMaxDepthDualPivot(right + 1);
         // Handle cases without multiple keys
         if (n == 1) {
@@ -4307,31 +4291,22 @@ final class Partition {
         // Assume this is in-place
         t.preProcess(a);
         final int end = t.length();
-        if (end <= 1) {
-            // Nothing to partition
-            return;
-        }
-
-        // Filter indices invalidated by NaN check
         int n = count;
-        if (end < k.length) {
-            for (int i = n; i > 0;) {
-                final int v = k[--i];
-                if (v >= end) {
-                    // swap(k, i, --n)
-                    k[i] = k[--n];
-                    k[n] = v;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; i > 0;) {
+                    final int v = k[--i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
                 }
             }
-            if (n == 0) {
-                // NaNs for all k
-                return;
-            }
+            // select accepts an exclusive end
+            select(a, end, k, n);
         }
-
-        // select accepts an exclusive end
-        select(a, end, k, n);
-
         // Restore signed zeros
         t.postProcess(a, k, n);
     }
