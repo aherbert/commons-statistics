@@ -1004,7 +1004,7 @@ final class Partition {
         for (int i = j1; ++i <= right;) {
             final double v = data[i];
             if (v < min1) {
-                if (data[i] < min0) {
+                if (v < min0) {
                     j1 = j0;
                     j0 = i;
                     min1 = min0;
@@ -1098,7 +1098,7 @@ final class Partition {
         for (int i = j1; --i >= left;) {
             final double v = data[i];
             if (v > max1) {
-                if (data[i] > max0) {
+                if (v > max0) {
                     j1 = j0;
                     j0 = i;
                     max1 = max0;
@@ -1145,8 +1145,8 @@ final class Partition {
      */
     static void heapSort(double[] a, int left, int right) {
         // We could make a choice here
-        partitionMinK(a, left, right, right, right - left);
-        //partitionMaxK(a, left, right, left, right - left);
+        //partitionMinK(a, left, right, right, right - left);
+        partitionMaxK(a, left, right, left, right - left);
     }
 
     /**
@@ -1247,156 +1247,84 @@ final class Partition {
      * @param count Size of range to sort below k.
      */
     static void partitionMinK(double[] a, int left, int right, int k, int count) {
-        // Size of the heap
-        int n = k - left + 1;
         // Optimise
-        if (n <= 2) {
-            if (n == 1) {
+        if (k - 1 <= left) {
+            if (k == left) {
                 partitionMinIgnoreZeros(a, left, right);
             } else {
+                // TODO - decide if this is worth optimising.
+                // Currently this handles right <= left
                 partitionMin2IgnoreZeros(a, left, right);
             }
             return;
         }
+
+        // Create a max heap in-place in [left, k], rooted at a[left] = max
+        // |l|-max-heap-|k|--------------|
         // Build the heap using Floyd's heap-construction algorithm
-        // Start at parent of the last element in the heap (n-1)
-        for (int start = (n - 1) >> 1; start >= 0; start--) {
-            maxHeapSiftDown(a, left, start, n);
+        // Start at parent of the last element in the heap: (p = end - 1 + root) / 2
+        int end = k + 1;
+        for (int p = (k + left) >> 1; p >= left; p--) {
+            maxHeapSiftDown(a, a[p], p, left, end);
         }
         // Scan the remaining data and insert
-        // Heap is rooted at a[left]
         double max = a[left];
         for (int i = k; ++i <= right;) {
             if (a[i] < max) {
-                // swap(a[left], a[i])
-                a[left] = a[i];
+                maxHeapSiftDown(a, a[i], left, left, end);
                 a[i] = max;
-                maxHeapSiftDown(a, left, 0, n);
                 max = a[left];
             }
         }
 
-        // The max heap has been constructed in-place so a[left] is the max.
-        // To partition a[k] we have to move the top of the heap to the position
+        // To partition elements k (and below) move the top of the heap to the position
         // immediately after the end of the reduced size heap; the previous end
-        // of the heap [k] is placed at the top. Heap is above left:
-        // root
+        // of the heap [k] is placed at the top
         // |l|-max-heap-|k|--------------|
         //  |  <-swap->  |
         // The heap can be restored by sifting down the new top.
 
         // Always require the top 1
-        // swap(a[left], a[k])
         a[left] = a[k];
         a[k] = max;
 
         if (count > 0) {
-            // Heap size
-            n--;
-            // Sifting limited to heap size of 3 (i.e. don't sift heap n==2)
-            for (int c = Math.min(count, n - 2); --c >= 0;) {
-                // Sift down top element and reduce heap size by 1
-                maxHeapSiftDown(a, left, 0, n--);
-                // Move top of heap (now size n-1) to the sorted end
-                final double v = a[left];
-                a[left] = a[left + n];
-                a[left + n] = v;
-            }
-            // Sift heap of size 2
-            if (n == 2 && a[left + 1] < a[left]) {
-                final double v = a[left];
-                a[left] = a[left + 1];
-                a[left + 1] = v;
+            --end;
+            // Sifting limited to heap size of 2 (i.e. don't sift heap n==1)
+            for (int c = Math.min(count, end - left - 1); --c >= 0;) {
+                maxHeapSiftDown(a, a[left], left, left, end--);
+                // Move top of heap to the sorted end
+                max = a[left];
+                a[left] = a[end];
+                a[end] = max;
             }
         }
     }
 
-    // TODO: Sift down should accept the value to sift, and the start/end of the heap
-
     /**
-     * Sift the top element down the max heap.
+     * Sift the element down the max heap.
      *
-     * <p>Note this creates the max heap in ascending sequence so the
-     * heap is positioned above the root.
+     * <p>Assumes {@code root <= p < end}, i.e. the max heap is above root.
      *
      * @param a Heap data.
-     * @param offset Offset of the heap in the data.
+     * @param p Start position.
+     * @param v Value to sift.
      * @param root Root of the heap.
-     * @param n Size of the heap.
+     * @param end End of the heap (exclusive).
      */
-    private static void maxHeapSiftDown(double[] a, int offset, int root, int n) {
-        // For node i:
-        // left child: 2i + 1
-        // right child: 2i + 2
-        // parent: floor((i-1) / 2)
-
-        //// Value to sift
-        //int p = root;
-        //final double v = a[offset + p];
-        //// Left child of root: p * 2 + 1
-        //int c = (p << 1) + 1;
-        //while (c < n) {
-        //    // Left child value
-        //    double cv = a[offset + c];
-        //    // Use the right child if greater
-        //    if (c + 1 < n && cv < a[offset + c + 1]) {
-        //        cv = a[offset + c + 1];
-        //        c++;
-        //    }
-        //    // Max heap requires parent >= child
-        //    if (v >= cv) {
-        //        // Greater than largest child - done
-        //        break;
-        //    }
-        //    // Swap and descend
-        //    a[offset + p] = cv;
-        //    p = c;
-        //    c = (p << 1) + 1;
-        //}
-        //a[offset + p] = v;
-
-        // Incorporate the offset into the parent and child locations
-        // parent = offset + p
-        // child1 = offset + 2 * p + 1
-        //        = offset + 2 * (parent - offset) + 1
-        //        = 2 * parent - offset + 1
-        // child2 = offset + 2 * p + 2
-        //        = offset + 2 * (parent - offset) + 2
-        //        = 2 * parent - offset + 2
-        // Requires updating n with offset:
-        // c < n ==> offset + c < offset + n
-        n += offset;
-
-        // Value to sift
-        int p = offset + root;
-        final double v = a[p];
-//        // Left child
-//        int c = (p << 1) - offset + 1;
-//        while (c < n) {
-//            // Left child value
-//            double cv = a[c];
-//            // Use the right child if it exists and is greater
-//            if (c + 1 < n && cv < a[c + 1]) {
-//                cv = a[++c];
-//            }
-//            // Max heap requires parent >= child
-//            if (v >= cv) {
-//                // Greater than largest child - done
-//                break;
-//            }
-//            // Swap and descend
-//            a[p] = cv;
-//            p = c;
-//            c = (p << 1) - offset + 1;
-//        }
+    private static void maxHeapSiftDown(double[] a, double v, int p, int root, int end) {
+        // child2 = root + 2 * (parent - root) + 2
+        //        = 2 * parent - root + 2
+        // parent = (child1/2 - 1 + root) / 2
         while (true) {
             // Right child
-            int c = (p << 1) - offset + 2;
-            if (c > n) {
+            int c = (p << 1) - root + 2;
+            if (c > end) {
+                // No left child
                 break;
             }
             // Use the left child if it is greater, or right doesn't exist
-            if (c == n || a[c] < a[c - 1]) {
+            if (c == end || a[c] < a[c - 1]) {
                 --c;
             }
             if (v >= a[c]) {
@@ -1431,153 +1359,83 @@ final class Partition {
      * @param count Size of range to sort below k.
      */
     static void partitionMaxK(double[] a, int left, int right, int k, int count) {
-        // Size of the heap
-        int n = right - k + 1;
         // Optimise
-        if (n <= 2) {
-            if (n == 1) {
+        if (k + 1 >= right) {
+            if (k == right) {
                 partitionMaxIgnoreZeros(a, left, right);
             } else {
+                // TODO - decide if this is worth optimising.
+                // Currently this handles right <= left
                 partitionMax2IgnoreZeros(a, left, right);
             }
             return;
         }
+
+        // Create a min heap in-place in [k, right], rooted at a[right] = min
+        // |--------------|k|-min-heap-|r|
         // Build the heap using Floyd's heap-construction algorithm
-        // Start at parent of the last element in the heap (n-1)
-        for (int start = (n - 1) >> 1; start >= 0; start--) {
-            minHeapSiftDown(a, right, start, n);
+        // Start at parent of the last element in the heap: (p = end + 1 + root) / 2
+        int end = k - 1;
+        for (int p = (k + right) >> 1; p <= right; p++) {
+            minHeapSiftDown(a, a[p], p, right, end);
         }
         // Scan the remaining data and insert
-        // Heap is rooted at a[right]
         double min = a[right];
         for (int i = k; --i >= left;) {
             if (a[i] > min) {
-                // swap(a[right], a[i])
-                a[right] = a[i];
+                minHeapSiftDown(a, a[i], right, right, end);
                 a[i] = min;
-                minHeapSiftDown(a, right, 0, n);
                 min = a[right];
             }
         }
 
-        // The min heap has been constructed in-place so a[right] is the min.
-        // To partition a[k] we have to move the top of the heap to the position
+        // To partition elements k (and above) move the top of the heap to the position
         // immediately before the end of the reduced size heap; the previous end
-        // of the heap [k] is placed at the top. Heap is below right:
-        //                             root
+        // of the heap [k] is placed at the top.
         // |--------------|k|-min-heap-|r|
         //                 |  <-swap->  |
         // The heap can be restored by sifting down the new top.
 
         // Always require the top 1
-        // swap(a[right], a[k])
         a[right] = a[k];
         a[k] = min;
 
         if (count > 0) {
-            // Heap size
-            n--;
-            // Sifting limited to heap size of 3 (i.e. don't sift heap n==2)
-            for (int c = Math.min(count, n - 2); --c >= 0;) {
-                // Sift down top element and reduce heap size by 1
-                minHeapSiftDown(a, right, 0, n--);
-                // Move top of heap (now size n-1) to the sorted end
-                final double v = a[right];
-                a[right] = a[right - n];
-                a[right - n] = v;
-            }
-            // Sift heap of size 2
-            if (n == 2 && a[right - 1] > a[right]) {
-                final double v = a[right];
-                a[right] = a[right - 1];
-                a[right - 1] = v;
+            ++end;
+            // Sifting limited to heap size of 2 (i.e. don't sift heap n==1)
+            for (int c = Math.min(count, right - end - 1); --c >= 0;) {
+                minHeapSiftDown(a, a[right], right, right, end++);
+                // Move top of heap to the sorted end
+                min = a[right];
+                a[right] = a[end];
+                a[end] = min;
             }
         }
     }
 
     /**
-     * Sift the top element down the min heap.
+     * Sift the element down the min heap.
      *
-     * <p>Note this creates the min heap in descending sequence so the
-     * heap is positioned below the root.
+     * <p>Assumes {@code root >= p > end}, i.e. the max heap is below root.
      *
      * @param a Heap data.
-     * @param offset Offset of the heap in the data.
+     * @param p Start position.
+     * @param v Value to sift.
      * @param root Root of the heap.
-     * @param n Size of the heap.
+     * @param end End of the heap (exclusive).
      */
-    private static void minHeapSiftDown(double[] a, int offset, int root, int n) {
-        // For node i:
-        // left child: 2i + 1
-        // right child: 2i + 2
-        // parent: floor((i-1) / 2)
-
-        // Value to sift
-        //int p = root;
-        //final double v = a[offset - p];
-        //// Left child of root: p * 2 + 1
-        //int c = (p << 1) + 1;
-        //while (c < n) {
-        //    // Left child value
-        //    double cv = a[offset - c];
-        //    // Use the right child if less
-        //    if (c + 1 < n && cv > a[offset - c - 1]) {
-        //        cv = a[offset - c - 1];
-        //        c++;
-        //    }
-        //    // Min heap requires parent <= child
-        //    if (v <= cv) {
-        //        // Less than smallest child - done
-        //        break;
-        //    }
-        //    // Swap and descend
-        //    a[offset - p] = cv;
-        //    p = c;
-        //    c = (p << 1) + 1;
-        //}
-        //a[offset - p] = v;
-
-        // Incorporate the offset into the parent and child locations
-        // parent = offset - p
-        // child1 = offset - (2 * p + 1)
-        //        = offset - 2 * (offset - parent) - 1
-        //        = 2 * parent - offset - 1
-        // child2 = offset - (2 * p + 2)
-        //        = offset - 2 * (offset - parent) - 2
-        //        = 2 * parent - offset - 2
-        // Requires updating n with offset:
-        // c < n ==> offset - c > offset - n
-        n = offset - n;
-
-        int p = offset - root;
-        final double v = a[p];
-//        // Left child
-//        int c = (p << 1) - offset - 1;
-//        while (c > n) {
-//            // Left child value
-//            double cv = a[c];
-//            // Use the right child if it exists and is less
-//            if (c - 1 > n && cv > a[c - 1]) {
-//                cv = a[--c];
-//            }
-//            // Min heap requires parent <= child
-//            if (v <= cv) {
-//                // Less than smallest child - done
-//                break;
-//            }
-//            // Swap and descend
-//            a[p] = cv;
-//            p = c;
-//            c = (p << 1) - offset - 1;
-//        }
+    private static void minHeapSiftDown(double[] a, double v, int p, int root, int end) {
+        // child2 = root - 2 * (root - parent) - 2
+        //        = 2 * parent - root - 2
+        // parent = (child1/2 + 1 + root) / 2
         while (true) {
             // Right child
-            int c = (p << 1) - offset - 2;
-            if (c < n) {
+            int c = (p << 1) - root - 2;
+            if (c < end) {
                 break;
             }
             // Use the left child if it is less, or right doesn't exist
-            if (c == n || a[c] > a[c + 1]) {
+            if (c == end || a[c] > a[c + 1]) {
                 ++c;
             }
             if (v <= a[c]) {
@@ -1590,7 +1448,6 @@ final class Partition {
         }
         a[p] = v;
     }
-
 
     /**
      * Partition the array such that indices {@code k} correspond to their correctly
