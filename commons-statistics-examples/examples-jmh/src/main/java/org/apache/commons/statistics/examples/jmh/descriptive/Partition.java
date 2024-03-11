@@ -1311,6 +1311,8 @@ final class Partition {
         }
     }
 
+    // TODO: Sift down should accept the value to sift, and the start/end of the heap
+
     /**
      * Sift the top element down the max heap.
      *
@@ -1368,24 +1370,42 @@ final class Partition {
         // Value to sift
         int p = offset + root;
         final double v = a[p];
-        // Left child
-        int c = (p << 1) - offset + 1;
-        while (c < n) {
-            // Left child value
-            double cv = a[c];
-            // Use the right child if it exists and is greater
-            if (c + 1 < n && cv < a[c + 1]) {
-                cv = a[++c];
+//        // Left child
+//        int c = (p << 1) - offset + 1;
+//        while (c < n) {
+//            // Left child value
+//            double cv = a[c];
+//            // Use the right child if it exists and is greater
+//            if (c + 1 < n && cv < a[c + 1]) {
+//                cv = a[++c];
+//            }
+//            // Max heap requires parent >= child
+//            if (v >= cv) {
+//                // Greater than largest child - done
+//                break;
+//            }
+//            // Swap and descend
+//            a[p] = cv;
+//            p = c;
+//            c = (p << 1) - offset + 1;
+//        }
+        while (true) {
+            // Right child
+            int c = (p << 1) - offset + 2;
+            if (c > n) {
+                break;
             }
-            // Max heap requires parent >= child
-            if (v >= cv) {
-                // Greater than largest child - done
+            // Use the left child if it is greater, or right doesn't exist
+            if (c == n || a[c] < a[c - 1]) {
+                --c;
+            }
+            if (v >= a[c]) {
+                // Parent greater than largest child - done
                 break;
             }
             // Swap and descend
-            a[p] = cv;
+            a[p] = a[c];
             p = c;
-            c = (p << 1) - offset + 1;
         }
         a[p] = v;
     }
@@ -1531,24 +1551,42 @@ final class Partition {
 
         int p = offset - root;
         final double v = a[p];
-        // Left child
-        int c = (p << 1) - offset - 1;
-        while (c > n) {
-            // Left child value
-            double cv = a[c];
-            // Use the right child if it exists and is less
-            if (c - 1 > n && cv > a[c - 1]) {
-                cv = a[--c];
+//        // Left child
+//        int c = (p << 1) - offset - 1;
+//        while (c > n) {
+//            // Left child value
+//            double cv = a[c];
+//            // Use the right child if it exists and is less
+//            if (c - 1 > n && cv > a[c - 1]) {
+//                cv = a[--c];
+//            }
+//            // Min heap requires parent <= child
+//            if (v <= cv) {
+//                // Less than smallest child - done
+//                break;
+//            }
+//            // Swap and descend
+//            a[p] = cv;
+//            p = c;
+//            c = (p << 1) - offset - 1;
+//        }
+        while (true) {
+            // Right child
+            int c = (p << 1) - offset - 2;
+            if (c < n) {
+                break;
             }
-            // Min heap requires parent <= child
-            if (v <= cv) {
-                // Less than smallest child - done
+            // Use the left child if it is less, or right doesn't exist
+            if (c == n || a[c] > a[c + 1]) {
+                ++c;
+            }
+            if (v <= a[c]) {
+                // Parent less than smallest child - done
                 break;
             }
             // Swap and descend
-            a[p] = cv;
+            a[p] = a[c];
             p = c;
-            c = (p << 1) - offset - 1;
         }
         a[p] = v;
     }
