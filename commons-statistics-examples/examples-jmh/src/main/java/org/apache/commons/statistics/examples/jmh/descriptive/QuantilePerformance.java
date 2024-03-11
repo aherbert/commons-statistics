@@ -1394,8 +1394,8 @@ public class QuantilePerformance {
         /** Parameter to find k. Configured for 'shift' of the length. */
         @Param({"1", "2", "3", "4", "5", "6", "7", "8", "9"})
         private int p;
-        /** Target indices. */
-        private UpdatingInterval[] indices;
+        /** Target indices (as pairs of {@code [ka, kb]}). */
+        private int[][] indices;
 
         /** Define the method used to generated the edge k. */
         public enum Mode {
@@ -1421,11 +1421,12 @@ public class QuantilePerformance {
 
         /**
          * Gets the sample indices for the given {@code index}.
+         * Returns a range to partition {@code [k1, kn]}.
          *
          * @param index Index.
          * @return the target indices
          */
-        public UpdatingInterval getIndices(int index) {
+        public int[] getIndices(int index) {
             // order = (data index) * repeats + repeat
             // repeat = index % repeats; repeats=2 use a mask
             return indices[index & 0x1];
@@ -1463,9 +1464,7 @@ public class QuantilePerformance {
             // Create a single index at both ends
             // TODO - support specifying a range: [ka, kb]
             final int k1 = length - 1 - k;
-            indices = new UpdatingInterval[] {
-                IndexIntervals.interval(k), IndexIntervals.interval(k1)
-            };
+            indices = new int[][] {{k, k}, {k1, k1}};
         }
     }
 
@@ -1866,12 +1865,12 @@ public class QuantilePerformance {
         private String name;
 
         /** The action. */
-        private BiFunction<double[], UpdatingInterval, double[]> function;
+        private BiFunction<double[], int[], double[]> function;
 
         /**
          * @return the function
          */
-        public BiFunction<double[], UpdatingInterval, double[]> getFunction() {
+        public BiFunction<double[], int[], double[]> getFunction() {
             return function;
         }
 
@@ -1884,27 +1883,23 @@ public class QuantilePerformance {
             // Direct use of heapselect
             if ("HeapSelect".equals(name)) {
                 function = (data, indices) -> {
-                    Partition.heapSelectRange(data, 0, data.length - 1, indices.left(), indices.right());
-                    return extractIndices(data, indices.left(), indices.right());
+                    Partition.heapSelectRange(data, 0, data.length - 1, indices[0], indices[1]);
+                    return extractIndices(data, indices[0], indices[1]);
                 };
             // introselect methods - these should be configured to not use heapselect
             } else if (name.startsWith(ISBM)) {
                 final Partition part = createPartition(name, ISBM, 0);
                 function = (data, indices) -> {
-                    final int l = indices.left();
-                    final int r = indices.right();
                     part.introselect(Partition::partitionSBM, data,
-                        0, data.length - 1, indices, 10000);
-                    return extractIndices(data, l, r);
+                        0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
+                    return extractIndices(data, indices[0], indices[1]);
                 };
             } else if (name.startsWith(IDP)) {
                 final Partition part = createPartition(name, IDP, 0);
                 function = (data, indices) -> {
-                    final int l = indices.left();
-                    final int r = indices.right();
                     part.introselect(Partition::partitionDP, data,
-                        0, data.length - 1, indices, 10000);
-                    return extractIndices(data, l, r);
+                        0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
+                    return extractIndices(data, indices[0], indices[1]);
                 };
             } else {
                 throw new IllegalStateException("Unknown edge selector function: " + name);
@@ -2426,7 +2421,7 @@ public class QuantilePerformance {
     @Benchmark
     public void edgeSelect(EdgeFunctionSource function, EdgeSource source, Blackhole bh) {
         final int size = source.size();
-        final BiFunction<double[], UpdatingInterval, double[]> fun = function.getFunction();
+        final BiFunction<double[], int[], double[]> fun = function.getFunction();
         for (int j = -1; ++j < size;) {
             bh.consume(fun.apply(source.getData(j), source.getIndices(j)));
         }
