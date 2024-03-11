@@ -1378,23 +1378,57 @@ public class QuantilePerformance {
      *
      * <p>This is a specialised class to allow benchmarking the switch from using
      * quickselect partitioning to using heapselect.
+     *
+     * <p>This class provides both data to partition and the indices to partition.
+     * The indices and data are created per iteration. The order to process them
+     * is created per invocation.
      */
     @State(Scope.Benchmark)
     public static class EdgeSource extends AbstractDataSource {
         /** Data length. */
         @Param({"1023"})
         private int length;
-        /** Shift applied to the length to find k. */
+        /** Mode. */
+        @Param({"SHIFT"})
+        private Mode mode;
+        /** Parameter to find k. Configured for 'shift' of the length. */
         @Param({"1", "2", "3", "4", "5", "6", "7", "8", "9"})
-        private int shift;
+        private int p;
         /** Target indices. */
-        private SearchableInterval[] indices;
+        private UpdatingInterval[] indices;
+
+        /** Define the method used to generated the edge k. */
+        public enum Mode {
+            /** Create {@code k} using a right-shift {@code >>>} applied to the length. */
+            SHIFT,
+            /** Use the parameter {@code p} as an index. */
+            INDEX;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public int size() {
+            return super.size() * 2;
+        };
+
+        /** {@inheritDoc} */
+        @Override
+        public double[] getData(int index) {
+            // order = (data index) * repeats + repeat
+            // data index = order / repeats; repeats=2 divide by using a shift
+            return super.getDataSample(order[index] >> 1);
+        }
 
         /**
+         * Gets the sample indices for the given {@code index}.
+         *
+         * @param index Index.
          * @return the target indices
          */
-        public SearchableInterval[] getIndices() {
-            return indices;
+        public UpdatingInterval getIndices(int index) {
+            // order = (data index) * repeats + repeat
+            // repeat = index % repeats; repeats=2 use a mask
+            return indices[index & 0x1];
         }
 
         /** {@inheritDoc} */
@@ -1407,20 +1441,30 @@ public class QuantilePerformance {
          * Create the data and check the indices are not at the end.
          */
         @Override
-        @Setup
+        @Setup(Level.Iteration)
         public void setup() {
+            // Data will be randomized per iteration
             super.setup();
             // Error for a bad configuration
-            final int k = length >>> shift;
-            if (k == 0) {
-                throw new IllegalStateException(length + " >>> " + shift + " == 0");
+            int k;
+            if (mode == Mode.SHIFT) {
+                k = length >>> p;
+                if (k == 0) {
+                    throw new IllegalStateException(length + " >>> " + p + " == 0");
+                }
+            } else if (mode == Mode.INDEX) {
+                k = p;
+                if (k <= 0 || k >= length) {
+                    throw new IllegalStateException("Invalid index [0, " + length + "): " + p);
+                }
+            } else {
+                throw new IllegalStateException("Unknown mode: " + mode);
             }
             // Create a single index at both ends
             // TODO - support specifying a range: [ka, kb]
             final int k1 = length - 1 - k;
-            indices = new SearchableInterval[] {
-                ScanningKeyInterval.of(new int[] {k}, 1),
-                ScanningKeyInterval.of(new int[] {k1}, 1),
+            indices = new UpdatingInterval[] {
+                IndexIntervals.interval(k), IndexIntervals.interval(k1)
             };
         }
     }
@@ -1818,16 +1862,16 @@ public class QuantilePerformance {
     public static class EdgeFunctionSource {
         /** Name of the source.
          * For introselect methods this should effectively turn-off heapselect. */
-        @Param({"HeapSelect", ISBM + "_HS20", IDP + "_HS20"})
+        @Param({"HeapSelect", ISBM + "_HC0", IDP + "_HC0"})
         private String name;
 
         /** The action. */
-        private BiFunction<double[], SearchableInterval, double[]> function;
+        private BiFunction<double[], UpdatingInterval, double[]> function;
 
         /**
          * @return the function
          */
-        public BiFunction<double[], SearchableInterval, double[]> getFunction() {
+        public BiFunction<double[], UpdatingInterval, double[]> getFunction() {
             return function;
         }
 
@@ -1841,22 +1885,26 @@ public class QuantilePerformance {
             if ("HeapSelect".equals(name)) {
                 function = (data, indices) -> {
                     Partition.heapSelectRange(data, 0, data.length - 1, indices.left(), indices.right());
-                    return extractIndices(data, indices);
+                    return extractIndices(data, indices.left(), indices.right());
                 };
             // introselect methods - these should be configured to not use heapselect
             } else if (name.startsWith(ISBM)) {
                 final Partition part = createPartition(name, ISBM, 0);
                 function = (data, indices) -> {
+                    final int l = indices.left();
+                    final int r = indices.right();
                     part.introselect(Partition::partitionSBM, data,
-                        0, data.length - 1, indices, indices.left(), indices.right(), 10000);
-                    return extractIndices(data, indices);
+                        0, data.length - 1, indices, 10000);
+                    return extractIndices(data, l, r);
                 };
             } else if (name.startsWith(IDP)) {
                 final Partition part = createPartition(name, IDP, 0);
                 function = (data, indices) -> {
+                    final int l = indices.left();
+                    final int r = indices.right();
                     part.introselect(Partition::partitionDP, data,
-                        0, data.length - 1, indices, indices.left(), indices.right(), 10000);
-                    return extractIndices(data, indices);
+                        0, data.length - 1, indices, 10000);
+                    return extractIndices(data, l, r);
                 };
             } else {
                 throw new IllegalStateException("Unknown edge selector function: " + name);
@@ -1867,12 +1915,11 @@ public class QuantilePerformance {
          * Extract the data at the specified indices.
          *
          * @param data Data.
-         * @param indices Indices.
+         * @param l Lower bound (inclusive).
+         * @param r Upper bound (inclusive).
          * @return the data
          */
-        private static double[] extractIndices(double[] data, SearchableInterval indices) {
-            final int l = indices.left();
-            final int r = indices.right();
+        private static double[] extractIndices(double[] data, int l, int r) {
             final double[] x = new double[r - l + 1];
             for (int i = l; i <= r; i++) {
                 x[i - l] = data[i];
@@ -2379,12 +2426,9 @@ public class QuantilePerformance {
     @Benchmark
     public void edgeSelect(EdgeFunctionSource function, EdgeSource source, Blackhole bh) {
         final int size = source.size();
-        final SearchableInterval[] indices = source.getIndices();
-        final BiFunction<double[], SearchableInterval, double[]> fun = function.getFunction();
+        final BiFunction<double[], UpdatingInterval, double[]> fun = function.getFunction();
         for (int j = -1; ++j < size;) {
-            for (final SearchableInterval i : indices) {
-                bh.consume(fun.apply(source.getData(j), i));
-            }
+            bh.consume(fun.apply(source.getData(j), source.getIndices(j)));
         }
     }
 
