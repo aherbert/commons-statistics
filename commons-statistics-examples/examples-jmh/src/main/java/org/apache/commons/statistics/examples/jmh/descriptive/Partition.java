@@ -109,6 +109,10 @@ final class Partition {
      * <p>This is set at a power of 2. This allows analysis of the indices saturation of
      * the range using compressed indices where compression uses a power of 2. */
     static final int MIN_QUICKSELECT_SIZE = 32;
+    /** Minimum size for a range to process.
+     * Below this switch to insertion sort rather than selection. This is used to avoid
+     * heap select on tiny data. */
+    static final int SMALL_SIZE = 5;
     /** Minimum selection size for single-pivot select (used for single k).
      * Below this switch to insertion sort rather than selection.
      * Changes to this value are only noticeable when the input array is small.
@@ -4460,6 +4464,12 @@ final class Partition {
         int kb = kn;
         final int[] upper = {0};
         while (true) {
+            // Finish small ranges. Handles left == right.
+            if (r - l < SMALL_SIZE) {
+                Sorting.sort(a, l, r);
+                return;
+            }
+
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
@@ -4472,7 +4482,7 @@ final class Partition {
             }
 
             if (r - l < SP_QUICKSELECT_SIZE) {
-                // Full sort of small data
+                // Switch to a sort of small data to avoid partition overhead
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
@@ -4554,6 +4564,12 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
+            // Finish small ranges. Handles left == right.
+            if (r - l < SMALL_SIZE) {
+                Sorting.sort(a, l, r);
+                return;
+            }
+
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
@@ -4566,7 +4582,7 @@ final class Partition {
             }
 
             if (r - l < DP_QUICKSELECT_SIZE) {
-                // Full sort of small data
+                // Switch to a sort of small data to avoid partition overhead
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
