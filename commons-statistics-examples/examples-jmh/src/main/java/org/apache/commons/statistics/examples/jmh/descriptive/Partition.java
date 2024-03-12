@@ -967,8 +967,9 @@ final class Partition {
         double min = data[left];
         int j = left;
         for (int i = left; ++i <= right;) {
-            if (data[i] < min) {
-                min = data[i];
+            final double v = data[i];
+            if (v < min) {
+                min = v;
                 j = i;
             }
         }
@@ -1061,8 +1062,9 @@ final class Partition {
         double max = data[right];
         int j = right;
         for (int i = right; --i >= left;) {
-            if (data[i] > max) {
-                max = data[i];
+            final double v = data[i];
+            if (v > max) {
+                max = v;
                 j = i;
             }
         }
@@ -1218,6 +1220,9 @@ final class Partition {
      */
     static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
         //assert ka <= kb;
+        if (right <= left) {
+            return;
+        }
         // Call the appropriate heap partition function based on
         // building a heap up to 50% of the length
         // |l|-----|ka|--------|kb|------|r|
@@ -3431,11 +3436,10 @@ final class Partition {
                 ka1 = kb1;
             }
             // Recurse middle if required
-            // Check the interval overlaps the middle; and the middle exists.
+            // Check the either k is in the range (p1, p2)
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:      ----kb1                    ka1----
-            if (ka1 < p2 && kb1 > p1 && p2 - p1 > 1) {
+            if ((ka1 < p2 && ka1 > p1) || (kb1 < p2 && kb1 > p1)) {
                 // Advance lower bound
                 l = p1 + 1;
                 ka1 = ka1 < l ? kb1 : ka1;
@@ -3596,8 +3600,17 @@ final class Partition {
             }
             l = p1 + 1;
             r = p2 - 1;
+            // Interval [ka1, kb1] overlaps the middle but there may be nothing in the interval.
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:          ka1                  kb1
+            // Detect this if ka1 is advanced to far.
             if (ka1 < l) {
                 ka1 = k.nextIndex(l);
+                if (ka1 > r) {
+                    // No middle
+                    recursionConsumer.accept(maxDepth);
+                    return;
+                }
             }
             if (r < kb1) {
                 kb1 = k.previousIndex(r);
@@ -3707,20 +3720,23 @@ final class Partition {
             if (ka < p2 && kb > p1 && p2 - p1 > 1) {
                 // Advance lower bound
                 l = p1 + 1;
-                if (ka < l) {
-                    ka = k.updateLeft(l);
-                }
-                if (kb <= p3) {
-                    // Entirely in middle
-                    r = p2 - 1;
-                    if (r < kb) {
-                        kb = k.updateRight(r);
+                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+                // |l|-----------------|P|------------------|P|----|r|
+                // Eliminate:          ka1                  kb1
+                // Detect this if ka must be advanced and passes p2.
+                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
+                    if (kb <= p3) {
+                        // Entirely in middle
+                        r = p2 - 1;
+                        if (r < kb) {
+                            kb = k.updateRight(r);
+                        }
+                        continue;
                     }
-                    continue;
+                    introselect(part, a, l, p2 - 1, k.split(p2, p3), maxDepth);
+                    // Here we must process right
+                    ka = k.left();
                 }
-                introselect(part, a, l, p2 - 1, k.split(p2, p3), maxDepth);
-                // Here we must process right
-                ka = k.left();
             }
             if (kb <= p3) {
                 // No right side
@@ -4624,20 +4640,23 @@ final class Partition {
             if (ka < p2 && kb > p1 && p2 - p1 > 1) {
                 // Advance lower bound
                 l = p1 + 1;
-                if (ka < l) {
-                    ka = k.updateLeft(l);
-                }
-                if (kb <= p3) {
-                    // Entirely in middle
-                    r = p2 - 1;
-                    if (r < kb) {
-                        kb = k.updateRight(r);
+                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+                // |l|-----------------|P|------------------|P|----|r|
+                // Eliminate:          ka1                  kb1
+                // Detect this if ka must be advanced and passes p2.
+                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
+                    if (kb <= p3) {
+                        // Entirely in middle
+                        r = p2 - 1;
+                        if (r < kb) {
+                            kb = k.updateRight(r);
+                        }
+                        continue;
                     }
-                    continue;
+                    select(a, l, p2 - 1, k.split(p2, p3), maxDepth);
+                    // Here we must process right
+                    ka = k.left();
                 }
-                select(a, l, p2 - 1, k.split(p2, p3), maxDepth);
-                // Here we must process right
-                ka = k.left();
             }
             if (kb <= p3) {
                 // No right side
