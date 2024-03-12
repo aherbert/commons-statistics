@@ -1265,10 +1265,11 @@ final class Partition {
 
         // Create a max heap in-place in [left, k], rooted at a[left] = max
         // |l|-max-heap-|k|--------------|
-        // Build the heap using Floyd's heap-construction algorithm
-        // Start at parent of the last element in the heap: (p = end - 1 + root) / 2
+        // Build the heap using Floyd's heap-construction algorithm for heap size n.
+        // Start at parent of the last element in the heap (k),
+        // i.e. start = parent(n-1) : parent(c) = floor((c - 1) / 2) : c = k - left
         int end = k + 1;
-        for (int p = (k + left) >> 1; p >= left; p--) {
+        for (int p = left + ((k - left - 1) >> 1); p >= left; p--) {
             maxHeapSiftDown(a, a[p], p, left, end);
         }
         // Scan the remaining data and insert
@@ -1319,7 +1320,6 @@ final class Partition {
     private static void maxHeapSiftDown(double[] a, double v, int p, int root, int end) {
         // child2 = root + 2 * (parent - root) + 2
         //        = 2 * parent - root + 2
-        // parent = (child1/2 - 1 + root) / 2
         while (true) {
             // Right child
             int c = (p << 1) - root + 2;
@@ -1377,10 +1377,11 @@ final class Partition {
 
         // Create a min heap in-place in [k, right], rooted at a[right] = min
         // |--------------|k|-min-heap-|r|
-        // Build the heap using Floyd's heap-construction algorithm
-        // Start at parent of the last element in the heap: (p = end + 1 + root) / 2
+        // Build the heap using Floyd's heap-construction algorithm for heap size n.
+        // Start at parent of the last element in the heap (k),
+        // i.e. start = parent(n-1) : parent(c) = floor((c - 1) / 2) : c = right - k
         int end = k - 1;
-        for (int p = (k + right) >> 1; p <= right; p++) {
+        for (int p = right - ((right - k - 1) >> 1); p <= right; p++) {
             minHeapSiftDown(a, a[p], p, right, end);
         }
         // Scan the remaining data and insert
@@ -1431,7 +1432,6 @@ final class Partition {
     private static void minHeapSiftDown(double[] a, double v, int p, int root, int end) {
         // child2 = root - 2 * (root - parent) - 2
         //        = 2 * parent - root - 2
-        // parent = (child1/2 + 1 + root) / 2
         while (true) {
             // Right child
             int c = (p << 1) - root - 2;
