@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Formatter;
+import java.util.LinkedList;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1412,6 +1413,81 @@ class PartitionTest {
             }
         }
 
+        return builder.build();
+    }
+
+    /**
+     * This is not a test. It outputs the Bentley and McIlroy test data, optionally
+     * with a single round of partitioning performed. This allows visualising the
+     * change to the data made by the partition algorithm.
+     */
+    @ParameterizedTest
+    @MethodSource
+    @Disabled("Used for testing")
+    void testData(int length, int seed, int partition) {
+        final AbstractDataSource source = new AbstractDataSource() {
+            @Override
+            protected int getLength() {
+                return length;
+            }
+        };
+        source.setRange(0);
+        source.setModification(Modification.COPY);
+        source.setSeed(seed);
+        source.setRngSeed(0xdeadbeef);
+        source.setup();
+
+        // Get the data
+        final double[][] data = IntStream.range(0, source.size())
+            .mapToObj(source::getDataSample).toArray(double[][]::new);
+
+        // Optional: Run a single round of partitioning on the data.
+        final LinkedList<String> pivots = new LinkedList<>();
+        final int left = 0;
+        final int right = length -1;
+        final int[] bounds = new int[3];
+        if (partition == 1) {
+            for (final double[] d : data) {
+                int p = Partition.PIVOTING_STRATEGY.pivotIndex(d, left, right);
+                p = Partition.partitionSBM(d, left, right, p, bounds);
+                pivots.add(formatPivotRange(p, bounds[0]));
+            }
+        } else if (partition == 2) {
+            for (final double[] d : data) {
+                int p = Partition.DUAL_PIVOTING_STRATEGY.pivotIndex(d, left, right, bounds);
+                p = Partition.partitionDP(d, left, right, p, bounds[0], bounds);
+                pivots.add(formatPivotRange(p, bounds[0]) + ":" + formatPivotRange(bounds[1], bounds[2]));
+            }
+        }
+
+        // Print header (distributions are in enum order)
+        TestUtils.printf("m %d%n", seed);
+        TestUtils.printf("i");
+        for (final Distribution d : Distribution.values()) {
+            TestUtils.printf(" %s", d);
+            if (!pivots.isEmpty()) {
+                TestUtils.printf(pivots.pop());
+            }
+        }
+        TestUtils.printf("%n");
+
+        // Sort the data. This will record the recursion depth when a region is complete.
+        for (int j = 0; j < length; j++) {
+            TestUtils.printf("%d", j);
+            for (int i = 0; i < data.length; i++) {
+                TestUtils.printf(" %s", data[i][j]);
+            }
+            TestUtils.printf("%n");
+        }
+    }
+
+    private static String formatPivotRange(int lo, int hi) {
+        return lo == hi ? Integer.toString(lo) : lo + "-" + hi;
+    }
+
+    static Stream<Arguments> testData() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        builder.add(Arguments.of(128, 32, 0));
         return builder.build();
     }
 }
