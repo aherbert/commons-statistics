@@ -109,10 +109,10 @@ final class Partition {
      * <p>This is set at a power of 2. This allows analysis of the indices saturation of
      * the range using compressed indices where compression uses a power of 2. */
     static final int MIN_QUICKSELECT_SIZE = 32;
-    /** Minimum size for a range to process.
+    /** Minimum size for heapselect.
      * Below this switch to insertion sort rather than selection. This is used to avoid
      * heap select on tiny data. */
-    static final int SMALL_SIZE = 5;
+    static final int MIN_HEAPSELECT_SIZE = 5;
     /** Minimum selection size for single-pivot select (used for single k).
      * Below this switch to insertion sort rather than selection.
      * Changes to this value are only noticeable when the input array is small.
@@ -799,86 +799,6 @@ final class Partition {
     }
 
     /**
-     * Move the two smallest values to the start of the range.
-     *
-     * <p>Note: Requires that the range contains no NaN values.
-     * Does not respect the ordering of signed zeros.
-     *
-     * @param data Data.
-     * @param left Lower bound (inclusive).
-     * @param right Upper bound (inclusive).
-     */
-    static void partitionMin2(double[] data, int left, int right) {
-        // Note: This is a duplicate of partitionMin2IgnoreZeros
-        // but with handling of signed partitioning zeros.
-        // This cannot call partitionMin2IgnoreZeros as the
-        // handling of a pair is different.
-        // This is for comparative benchmarking.
-
-        final int len = right - left + 1;
-        if (len <= 1) {
-            return;
-        }
-        int j0 = left;
-        int j1 = left + 1;
-        if (DoubleMath.lessThan(data[j1], data[j0])) {
-            final double v = data[j0];
-            data[j0] = data[j1];
-            data[j1] = v;
-        }
-        if (len == 2) {
-            return;
-        }
-        double min0 = data[j0];
-        double min1 = data[j1];
-
-        for (int i = j1; ++i <= right;) {
-            final double v = data[i];
-            if (v < min1) {
-                if (data[i] < min0) {
-                    j1 = j0;
-                    j0 = i;
-                    min1 = min0;
-                    min0 = v;
-                } else {
-                    j1 = i;
-                    min1 = v;
-                }
-            }
-        }
-
-        // Move two smallest values
-        // Start:
-        // |j0|j1|....................
-        // Possible ends:
-        // |j0|j1|....................  Just overwrite the same values
-        // |j0|  |......|j1|..........  Found 1 value smaller than larger of the original pair
-        // |j1|  |......|j0|..........  Found 1 value smaller than smaller of the original pair **
-        // |  |  |......|j0|....|j1|..  Found multiple smaller values
-        // |  |  |......|j1|....|j0|..  Found multiple smaller values
-        // Take care to not overwrite min values
-        final double v0 = data[left];
-        final double v1 = data[left + 1];
-        data[left] = min0;
-        data[left + 1] = min1;
-        if (j1 == left) {
-            // ** Special case
-            data[j0] = v1;
-        } else {
-            data[j0] = v0;
-            data[j1] = v1;
-        }
-
-        // Edge-case: if min was 0.0, check for a -0.0 above and swap.
-        if (min0 == 0) {
-            minZero(data, left, right);
-        }
-        if (min1 == 0) {
-            minZero(data, left + 1, right);
-        }
-    }
-
-    /**
      * Move the maximum value to the end of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
@@ -984,24 +904,19 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Does not respect the ordering of signed zeros.
      *
+     * <p>Assumes {@code left < right}.
+     *
      * @param data Data.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
     static void partitionMin2IgnoreZeros(double[] data, int left, int right) {
-        final int lengthMinus1 = right - left;
-        if (lengthMinus1 < 1) {
-            return;
-        }
         int j0 = left;
         int j1 = left + 1;
         if (data[j1] < data[j0]) {
             final double v = data[j0];
             data[j0] = data[j1];
             data[j1] = v;
-        }
-        if (lengthMinus1 == 1) {
-            return;
         }
         double min0 = data[j0];
         double min1 = data[j1];
@@ -1079,24 +994,19 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * Does not respect the ordering of signed zeros.
      *
+     * <p>Assumes {@code left < right}.
+     *
      * @param data Data.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
     static void partitionMax2IgnoreZeros(double[] data, int left, int right) {
-        final int lengthMinus1 = right - left;
-        if (lengthMinus1 < 1) {
-            return;
-        }
         int j0 = right;
         int j1 = right - 1;
         if (data[j1] > data[j0]) {
             final double v = data[j0];
             data[j0] = data[j1];
             data[j1] = v;
-        }
-        if (lengthMinus1 == 1) {
-            return;
         }
         double max0 = data[j0];
         double max1 = data[j1];
@@ -1219,8 +1129,9 @@ final class Partition {
      * @see #heapSelect(double[], int, int, int, int)
      */
     static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
-        //assert ka <= kb;
-        if (right <= left) {
+        // Avoid the overhead of heap select on tiny data (supports right <= left).
+        if (right - left < MIN_HEAPSELECT_SIZE) {
+            Sorting.sort(a, left, right);
             return;
         }
         // Call the appropriate heap partition function based on
@@ -3603,7 +3514,7 @@ final class Partition {
             // Interval [ka1, kb1] overlaps the middle but there may be nothing in the interval.
             // |l|-----------------|P|------------------|P|----|r|
             // Eliminate:          ka1                  kb1
-            // Detect this if ka1 is advanced to far.
+            // Detect this if ka1 is advanced too far.
             if (ka1 < l) {
                 ka1 = k.nextIndex(l);
                 if (ka1 > r) {
@@ -4480,12 +4391,6 @@ final class Partition {
         int kb = kn;
         final int[] upper = {0};
         while (true) {
-            // Finish small ranges. Handles left == right.
-            if (r - l < SMALL_SIZE) {
-                Sorting.sort(a, l, r);
-                return;
-            }
-
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
@@ -4499,7 +4404,6 @@ final class Partition {
 
             if (r - l < SP_QUICKSELECT_SIZE) {
                 // Switch to a sort of small data to avoid partition overhead
-                //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
@@ -4580,12 +4484,6 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-            // Finish small ranges. Handles left == right.
-            if (r - l < SMALL_SIZE) {
-                Sorting.sort(a, l, r);
-                return;
-            }
-
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
@@ -4599,7 +4497,6 @@ final class Partition {
 
             if (r - l < DP_QUICKSELECT_SIZE) {
                 // Switch to a sort of small data to avoid partition overhead
-                //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
@@ -4632,41 +4529,80 @@ final class Partition {
                 // Here we must process middle and possibly right
                 ka = k.left();
             }
-            // Recurse middle if required
+            // Recurse right side if required
+            if (kb > p3) {
+                if (ka >= p2) {
+                    // Entirely on right-side
+                    l = p3 + 1;
+                    if (ka < l) {
+                        ka = k.updateLeft(l);
+                    }
+                    continue;
+                }
+                select(a, p3 + 1, r, k.splitRight(p2, p3), maxDepth);
+                // Here we must process middle
+                kb = k.right();
+            }
             // Check the interval overlaps the middle; and the middle exists.
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:      ----kb                    ka----
-            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
-                // Advance lower bound
-                l = p1 + 1;
-                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
-                // |l|-----------------|P|------------------|P|----|r|
-                // Eliminate:          ka1                  kb1
-                // Detect this if ka must be advanced and passes p2.
-                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
-                    if (kb <= p3) {
-                        // Entirely in middle
-                        r = p2 - 1;
-                        if (r < kb) {
-                            kb = k.updateRight(r);
-                        }
-                        continue;
-                    }
-                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
-                    // Here we must process right
-                    ka = k.left();
-                }
-            }
-            if (kb <= p3) {
-                // No right side
+            // Eliminate:     ----kb                    ka----
+            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
+                // No middle
                 return;
             }
-            // Continue right
-            l = p3 + 1;
+            l = p1 + 1;
+            r = p2 - 1;
+            // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+            // |l|-----------------|P|------------------|P|----|r|
+            // Eliminate:          ka                    kb
+            // Detect this if ka is advanced too far.
             if (ka < l) {
                 ka = k.updateLeft(l);
+                if (ka > r) {
+                    // No middle
+                    return;
+                }
             }
+            if (r < kb) {
+                kb = k.updateRight(r);
+            }
+
+//            // Recurse middle if required
+//            // Check the interval overlaps the middle; and the middle exists.
+//            //                    p0 p1                p2 p3
+//            // |l|-----------------|P|------------------|P|----|r|
+//            // Eliminate:      ----kb                    ka----
+//            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
+//                // Advance lower bound
+//                l = p1 + 1;
+//                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+//                // |l|-----------------|P|------------------|P|----|r|
+//                // Eliminate:          ka1                  kb1
+//                // Detect this if ka must be advanced and passes p2.
+//                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
+//                    if (kb <= p3) {
+//                        // Entirely in middle
+//                        r = p2 - 1;
+//                        if (r < kb) {
+//                            kb = k.updateRight(r);
+//                        }
+//                        continue;
+//                    }
+//                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
+//                    // Here we must process right
+//                    ka = k.left();
+//                }
+//            }
+//            if (kb <= p3) {
+//                // No right side
+//                return;
+//            }
+//            // Continue right
+//            l = p3 + 1;
+//            if (ka < l) {
+//                ka = k.updateLeft(l);
+//            }
         }
     }
 
