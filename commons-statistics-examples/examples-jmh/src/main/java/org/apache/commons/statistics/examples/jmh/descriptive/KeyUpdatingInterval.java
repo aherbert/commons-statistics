@@ -129,7 +129,7 @@ final class KeyUpdatingInterval implements UpdatingInterval {
     }
 
     @Override
-    public UpdatingInterval split(int ka, int kb) {
+    public UpdatingInterval splitLeft(int ka, int kb) {
         // left < ka <= kb < right
 
         // Update the current left bound, save the old one

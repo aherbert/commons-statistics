@@ -488,7 +488,7 @@ final class IndexIntervals {
         }
 
         @Override
-        public UpdatingInterval split(int ka, int kb) {
+        public UpdatingInterval splitLeft(int ka, int kb) {
             // Assume left < ka <= kb < right
             throw new UnsupportedOperationException("split should not be called");
         }
@@ -537,7 +537,7 @@ final class IndexIntervals {
         }
 
         @Override
-        public UpdatingInterval split(int ka, int kb) {
+        public UpdatingInterval splitLeft(int ka, int kb) {
             // Assume left < ka <= kb < right
             final int lower = left;
             left = kb + 1;

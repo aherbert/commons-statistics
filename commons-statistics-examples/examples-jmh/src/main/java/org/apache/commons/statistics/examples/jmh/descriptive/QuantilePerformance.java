@@ -2554,7 +2554,7 @@ public class QuantilePerformance {
      *
      * <p>This is similar to
      * {@link #searchableIntervalSplit(SearchableIntervalSource, SplitIndexSource)}. It uses the
-     * {@link UpdatingInterval#split(int, int)} method by recursive division of the indices.
+     * {@link UpdatingInterval#splitLeft(int, int)} method by recursive division of the indices.
      *
      * @param function Source of the interval.
      * @param source Source of the data.
@@ -2586,7 +2586,7 @@ public class QuantilePerformance {
         if (r - l > s) {
             final int middle = (l + r) >>> 1;
             // recurse left
-            split(interval.split(middle, middle), s, bh);
+            split(interval.splitLeft(middle, middle), s, bh);
             // continue on right side
             l = interval.left();
         }

@@ -41,7 +41,7 @@ class UpdatingIntervalTest {
         Assertions.assertEquals(k, interval.right());
         Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateLeft(k));
         Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateRight(k));
-        Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.split(k, k));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.splitLeft(k, k));
     }
 
     @ParameterizedTest
@@ -66,7 +66,7 @@ class UpdatingIntervalTest {
             final int right = interval.right();
             final int m1 = (interval.left() + interval.right()) >>> 1;
             final int m2 = m1 + 1;
-            final UpdatingInterval leftInterval = interval.split(m1, m2);
+            final UpdatingInterval leftInterval = interval.splitLeft(m1, m2);
             Assertions.assertEquals(left, leftInterval.left());
             Assertions.assertEquals(m1 - 1, leftInterval.right());
             Assertions.assertEquals(m2 + 1, interval.left());
@@ -196,7 +196,7 @@ class UpdatingIntervalTest {
     }
 
     /**
-     * Assert the {@link UpdatingInterval#split(int, int)} method.
+     * Assert the {@link UpdatingInterval#splitLeft(int, int)} method.
      * These are tested by successive calls to split the interval around the mid-point.
      *
      * @param constructor Interval constructor.
@@ -238,7 +238,7 @@ class UpdatingIntervalTest {
 
         final int left = interval.left();
         final int right = interval.right();
-        final UpdatingInterval leftInterval = interval.split(m, m);
+        final UpdatingInterval leftInterval = interval.splitLeft(m, m);
         Assertions.assertEquals(left, leftInterval.left());
         Assertions.assertEquals(indices[lo], leftInterval.right());
         Assertions.assertEquals(indices[hi], interval.left());
@@ -268,7 +268,7 @@ class UpdatingIntervalTest {
 
         final int left = interval.left();
         final int right = interval.right();
-        final UpdatingInterval leftInterval = interval.split(indices[m1], indices[m2]);
+        final UpdatingInterval leftInterval = interval.splitLeft(indices[m1], indices[m2]);
         Assertions.assertEquals(left, leftInterval.left());
         Assertions.assertEquals(indices[m1 - 1], leftInterval.right());
         Assertions.assertEquals(indices[m2 + 1], interval.left());

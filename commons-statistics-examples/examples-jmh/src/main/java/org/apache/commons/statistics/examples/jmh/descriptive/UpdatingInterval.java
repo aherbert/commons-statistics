@@ -104,5 +104,31 @@ interface UpdatingInterval {
      * @param kb Split index.
      * @return the left interval
      */
-    UpdatingInterval split(int ka, int kb);
+    UpdatingInterval splitLeft(int ka, int kb);
+
+    /**
+     * Split the interval using two splitting indices. Returns the right interval that occurs
+     * after the specified split index {@code kb}, and updates the current interval right bound
+     * to before the specified split index {@code ka}.
+     *
+     * <p>Note: Requires {@code left < ka <= kb < right}, i.e. there exists a valid interval
+     * above and below the split indices.
+     *
+     * <pre>{@code
+     * l-----------ka-kb----------r
+     *      r1 <--|     |--> l1
+     *
+     * r1 < ka
+     * l1 > kb
+     * }</pre>
+     *
+     * <p>If {@code ka <= left} or {@code kb >= right} the result is undefined.
+     *
+     * @param ka Split index.
+     * @param kb Split index.
+     * @return the right interval
+     */
+    default UpdatingInterval splitRight(int ka, int kb) {
+        throw new UnsupportedOperationException();
+    }
 }
