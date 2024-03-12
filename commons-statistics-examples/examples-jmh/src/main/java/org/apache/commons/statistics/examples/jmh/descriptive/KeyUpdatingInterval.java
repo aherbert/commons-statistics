@@ -30,13 +30,6 @@ final class KeyUpdatingInterval implements UpdatingInterval {
     private int l;
     /** Index of the right key. */
     private int r;
-    /** Left key. Always equal to keys[l]. This is cached here to avoid cache misses
-     * when splitting an interval as the keys may no longer be in cache memory.
-     * This is true for a large keys[] array for the lower side of the split (the
-     * search has ended near the splitting index), and for the upper side of the split
-     * which may be used a long time after the split (since the partition algorithm
-     * uses left-most precedence when processing data). */
-    private int leftKey;
 
     /**
      * Create an instance with the provided {@code indices}.
@@ -45,20 +38,18 @@ final class KeyUpdatingInterval implements UpdatingInterval {
      * @param n Number of indices.
      */
     private KeyUpdatingInterval(int[] indices, int n) {
-        this(indices, 0, n - 1, indices[0]);
+        this(indices, 0, n - 1);
     }
 
     /**
      * @param indices Indices.
      * @param l Index of left key.
      * @param r Index of right key.
-     * @param leftKey Left key (must be equal to indices[l]).
      */
-    private KeyUpdatingInterval(int[] indices, int l, int r, int leftKey) {
+    private KeyUpdatingInterval(int[] indices, int l, int r) {
         keys = indices;
         this.l = l;
         this.r = r;
-        this.leftKey = leftKey;
     }
 
     /**
@@ -94,9 +85,7 @@ final class KeyUpdatingInterval implements UpdatingInterval {
 
     @Override
     public int left() {
-        // Cache key. Useful when the left is used a long time after a split
-        // and keys may not be in cache memory.
-        return leftKey;
+        return keys[l];
     }
 
     @Override
@@ -112,8 +101,8 @@ final class KeyUpdatingInterval implements UpdatingInterval {
         do {
             ++i;
         } while (keys[i] < k);
-        setLeft(i);
-        return leftKey;
+        l = i;
+        return keys[i];
     }
 
     @Override
@@ -125,19 +114,15 @@ final class KeyUpdatingInterval implements UpdatingInterval {
             --i;
         } while (keys[i] > k);
         r = i;
-        return right();
+        return keys[i];
     }
 
     @Override
     public UpdatingInterval splitLeft(int ka, int kb) {
         // left < ka <= kb < right
 
-        // Update the current left bound, save the old one
-        final int lower = l;
-        final int lowerKey = leftKey;
-
         // Find the new left bound for the upper interval.
-        // Switch to a linear scan if (r - l) is small.
+        // Switch to a linear scan if length is small.
         int i;
         if (r - l < SCAN_SIZE) {
             i = r;
@@ -148,24 +133,44 @@ final class KeyUpdatingInterval implements UpdatingInterval {
             // Binary search
             i = Partition.searchLessOrEqual(keys, l, r, kb);
         }
-        setLeft(i + 1);
+        final int lowerLeft = l;
+        l = i + 1;
 
         // Find the new right bound for the lower interval using a scan since a
         // typical use case has ka == kb and this is faster than a second binary search.
         while (keys[i] >= ka) {
             --i;
         }
-        return new KeyUpdatingInterval(keys, lower, i, lowerKey);
+        // return left
+        return new KeyUpdatingInterval(keys, lowerLeft, i);
     }
 
-    /**
-     * Sets the left index and update the cache of the left key.
-     *
-     * @param i Left index.
-     */
-    private void setLeft(int i) {
-        l = i;
-        // Cache the key value
-        leftKey = keys[i];
+    @Override
+    public UpdatingInterval splitRight(int ka, int kb) {
+        // left < ka <= kb < right
+
+        // Find the new left bound for the upper interval.
+        // Switch to a linear scan if length is small.
+        int i;
+        if (r - l < SCAN_SIZE) {
+            i = r;
+            do {
+                --i;
+            } while (keys[i] > kb);
+        } else {
+            // Binary search
+            i = Partition.searchLessOrEqual(keys, l, r, kb);
+        }
+        final int upperLeft = i + 1;
+
+        // Find the new right bound for the lower interval using a scan since a
+        // typical use case has ka == kb and this is faster than a second binary search.
+        while (keys[i] >= ka) {
+            --i;
+        }
+        final int upperRight = r;
+        r = i;
+        // return right
+        return new KeyUpdatingInterval(keys, upperLeft, upperRight);
     }
 }

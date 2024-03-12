@@ -128,7 +128,5 @@ interface UpdatingInterval {
      * @param kb Split index.
      * @return the right interval
      */
-    default UpdatingInterval splitRight(int ka, int kb) {
-        throw new UnsupportedOperationException();
-    }
+    UpdatingInterval splitRight(int ka, int kb);
 }

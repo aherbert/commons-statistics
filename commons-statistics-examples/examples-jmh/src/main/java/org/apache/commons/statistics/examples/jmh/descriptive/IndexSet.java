@@ -1176,5 +1176,13 @@ final class IndexSet implements PivotCache, SearchableInterval, SearchableInterv
             left = nextIndex(kb + 1);
             return new IndexSetUpdatingInterval(lower, previousIndex(ka - 1));
         }
+
+        @Override
+        public UpdatingInterval splitRight(int ka, int kb) {
+            // Assume left < ka <= kb < right
+            final int upper = right;
+            right = previousIndex(ka - 1);
+            return new IndexSetUpdatingInterval(nextIndex(kb + 1), upper);
+        }
     }
 }

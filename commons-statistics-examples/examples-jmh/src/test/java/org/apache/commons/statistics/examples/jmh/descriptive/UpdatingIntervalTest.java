@@ -42,6 +42,7 @@ class UpdatingIntervalTest {
         Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateLeft(k));
         Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.updateRight(k));
         Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.splitLeft(k, k));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> interval.splitRight(k, k));
     }
 
     @ParameterizedTest
@@ -52,15 +53,17 @@ class UpdatingIntervalTest {
         "10, 42",
     })
     void testRangeInterval(int lo, int hi) {
-        final UpdatingInterval interval = IndexIntervals.interval(lo, hi);
+        UpdatingInterval interval = IndexIntervals.interval(lo, hi);
         Assertions.assertEquals(lo, interval.left());
         Assertions.assertEquals(hi, interval.right());
         if (interval.left() < interval.right()) {
             Assertions.assertEquals(lo + 1, interval.updateLeft(lo + 1));
         }
+        interval = IndexIntervals.interval(lo, hi);
         if (interval.left() < interval.right()) {
             Assertions.assertEquals(hi - 1, interval.updateRight(hi - 1));
         }
+        interval = IndexIntervals.interval(lo, hi);
         if (interval.left() + 2 < interval.right()) {
             final int left = interval.left();
             final int right = interval.right();
@@ -71,6 +74,13 @@ class UpdatingIntervalTest {
             Assertions.assertEquals(m1 - 1, leftInterval.right());
             Assertions.assertEquals(m2 + 1, interval.left());
             Assertions.assertEquals(right, interval.right());
+
+            interval = IndexIntervals.interval(lo, hi);
+            final UpdatingInterval rightInterval = interval.splitRight(m1, m2);
+            Assertions.assertEquals(left, interval.left());
+            Assertions.assertEquals(m1 - 1, interval.right());
+            Assertions.assertEquals(m2 + 1, rightInterval.left());
+            Assertions.assertEquals(right, rightInterval.right());
         }
     }
 
@@ -204,9 +214,13 @@ class UpdatingIntervalTest {
      */
     private static void assertSplit(BiFunction<int[], Integer, UpdatingInterval> constructor, int[] indices) {
         assertSplitMedian(constructor.apply(indices, indices.length),
-            indices, 0, indices.length - 1);
+            indices, 0, indices.length - 1, true);
+        assertSplitMedian(constructor.apply(indices, indices.length),
+            indices, 0, indices.length - 1, false);
         assertSplitMiddleIndices(constructor.apply(indices, indices.length),
-            indices, 0, indices.length - 1);
+            indices, 0, indices.length - 1, true);
+        assertSplitMiddleIndices(constructor.apply(indices, indices.length),
+            indices, 0, indices.length - 1, false);
     }
 
     /**
@@ -216,8 +230,10 @@ class UpdatingIntervalTest {
      * @param indices Indices.
      * @param i Low index into the indices (inclusive).
      * @param j High index into the indices (inclusive).
+     * @param splitLeft Use split left, else split right
      */
-    private static void assertSplitMedian(UpdatingInterval interval, int[] indices, int i, int j) {
+    private static void assertSplitMedian(UpdatingInterval interval, int[] indices, int i, int j,
+            boolean splitLeft) {
         if (indices[i] + 1 >= indices[j]) {
             // Cannot split - no value between the low and high points
             return;
@@ -238,15 +254,23 @@ class UpdatingIntervalTest {
 
         final int left = interval.left();
         final int right = interval.right();
-        final UpdatingInterval leftInterval = interval.splitLeft(m, m);
+
+        UpdatingInterval leftInterval;
+        if (splitLeft) {
+            leftInterval = interval.splitLeft(m, m);
+        } else {
+            UpdatingInterval rightInterval = interval.splitRight(m, m);
+            leftInterval = interval;
+            interval = rightInterval;
+        }
         Assertions.assertEquals(left, leftInterval.left());
         Assertions.assertEquals(indices[lo], leftInterval.right());
         Assertions.assertEquals(indices[hi], interval.left());
         Assertions.assertEquals(right, interval.right());
 
         // Recurse
-        assertSplitMedian(leftInterval, indices, i, lo);
-        assertSplitMedian(interval, indices, hi, j);
+        assertSplitMedian(leftInterval, indices, i, lo, splitLeft);
+        assertSplitMedian(interval, indices, hi, j, splitLeft);
     }
 
     /**
@@ -256,8 +280,10 @@ class UpdatingIntervalTest {
      * @param indices Indices.
      * @param i Low index into the indices (inclusive).
      * @param j High index into the indices (inclusive).
+     * @param splitLeft Use split left, else split right
      */
-    private static void assertSplitMiddleIndices(UpdatingInterval interval, int[] indices, int i, int j) {
+    private static void assertSplitMiddleIndices(UpdatingInterval interval, int[] indices, int i, int j,
+            boolean splitLeft) {
         if (i + 3 >= j) {
             // Cannot split - not two indices between low and high index
             return;
@@ -268,15 +294,22 @@ class UpdatingIntervalTest {
 
         final int left = interval.left();
         final int right = interval.right();
-        final UpdatingInterval leftInterval = interval.splitLeft(indices[m1], indices[m2]);
+        UpdatingInterval leftInterval;
+        if (splitLeft) {
+            leftInterval = interval.splitLeft(indices[m1], indices[m2]);
+        } else {
+            UpdatingInterval rightInterval = interval.splitRight(indices[m1], indices[m2]);
+            leftInterval = interval;
+            interval = rightInterval;
+        }
         Assertions.assertEquals(left, leftInterval.left());
         Assertions.assertEquals(indices[m1 - 1], leftInterval.right());
         Assertions.assertEquals(indices[m2 + 1], interval.left());
         Assertions.assertEquals(right, interval.right());
 
         // Recurse
-        assertSplitMiddleIndices(leftInterval, indices, i, m1 - 1);
-        assertSplitMiddleIndices(interval, indices, m2 + 1, j);
+        assertSplitMiddleIndices(leftInterval, indices, i, m1 - 1, splitLeft);
+        assertSplitMiddleIndices(interval, indices, m2 + 1, j, splitLeft);
     }
 
     static Stream<int[]> testIndices() {
