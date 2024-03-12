@@ -745,6 +745,15 @@ public class QuantilePerformance {
         void setSamples(int v) {
             samples = v;
         }
+
+        /**
+         * Sets the seed for the random number gnerator.
+         *
+         * @param v Value.
+         */
+        void setRngSeed(long v) {
+            this.rngSeed = v;
+        }
     }
 
     /**
