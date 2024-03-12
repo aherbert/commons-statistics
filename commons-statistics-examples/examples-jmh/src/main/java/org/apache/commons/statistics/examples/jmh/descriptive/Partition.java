@@ -1076,7 +1076,11 @@ final class Partition {
      * @see #heapSelectRange(double[], int, int, int, int)
      */
     static void heapSelect(double[] a, int left, int right, int ka, int kb) {
-        //assert ka <= kb;
+        // Avoid the overhead of heap select on tiny data (supports right <= left).
+        if (right - left < MIN_HEAPSELECT_SIZE) {
+            Sorting.sort(a, left, right);
+            return;
+        }
         // Call the appropriate heap partition function based on
         // building a heap up to 50% of the length
         // |l|-----|ka|--------|kb|------|r|
