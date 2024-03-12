@@ -1394,7 +1394,7 @@ public class QuantilePerformance {
         /** Parameter to find k. Configured for 'shift' of the length. */
         @Param({"1", "2", "3", "4", "5", "6", "7", "8", "9"})
         private int p;
-        /** Target indices (as pairs of {@code [ka, kb]}). */
+        /** Target indices (as pairs of {@code [ka, kb]} defining a range to select). */
         private int[][] indices;
 
         /** Define the method used to generated the edge k. */
@@ -1428,8 +1428,8 @@ public class QuantilePerformance {
          */
         public int[] getIndices(int index) {
             // order = (data index) * repeats + repeat
-            // repeat = index % repeats; repeats=2 use a mask
-            return indices[index & 0x1];
+            // Directly look-up the indices for this repeat.
+            return indices[order[index]];
         }
 
         /** {@inheritDoc} */
@@ -1446,25 +1446,39 @@ public class QuantilePerformance {
         public void setup() {
             // Data will be randomized per iteration
             super.setup();
-            // Error for a bad configuration
+            // Error for a bad configuration. Allow k=0 but not smaller.
+            // Uses the lower bound on the length.
             int k;
             if (mode == Mode.SHIFT) {
                 k = length >>> p;
-                if (k == 0) {
-                    throw new IllegalStateException(length + " >>> " + p + " == 0");
+                if (k == 0 && length >>> (p - 1) == 0) {
+                    throw new IllegalStateException(length + " >>> (" + p + " - 1) == 0");
                 }
             } else if (mode == Mode.INDEX) {
                 k = p;
-                if (k <= 0 || k >= length) {
+                if (k < 0 || k >= length) {
                     throw new IllegalStateException("Invalid index [0, " + length + "): " + p);
                 }
             } else {
                 throw new IllegalStateException("Unknown mode: " + mode);
             }
-            // Create a single index at both ends
-            // TODO - support specifying a range: [ka, kb]
-            final int k1 = length - 1 - k;
-            indices = new int[][] {{k, k}, {k1, k1}};
+
+            if (indices == null) {
+                // First call, create objects
+                indices = new int[size()][];
+            }
+
+            // Create a single index at both ends.
+            // Note: Data has variable length so we have to compute the upper end for each sample.
+            // Re-use the constant lower but we do not bother to cache repeats of the upper.
+            final int[] lower = {k, k};
+            final int noOfSamples = super.size();
+            for (int i = 0; i < noOfSamples; i++) {
+                final int len = getDataSize(i);
+                final int k1 = len - 1 - k;
+                indices[i << 1] = lower;
+                indices[(i << 1) + 1] = new int[] {k1, k1};
+            }
         }
     }
 
