@@ -3439,7 +3439,7 @@ final class Partition {
             // Check the either k is in the range (p1, p2)
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
-            if ((ka1 < p2 && ka1 > p1) || (kb1 < p2 && kb1 > p1)) {
+            if (ka1 < p2 && ka1 > p1 || kb1 < p2 && kb1 > p1) {
                 // Advance lower bound
                 l = p1 + 1;
                 ka1 = ka1 < l ? kb1 : ka1;
