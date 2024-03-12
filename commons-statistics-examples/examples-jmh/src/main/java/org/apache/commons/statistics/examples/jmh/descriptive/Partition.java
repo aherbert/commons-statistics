@@ -2912,7 +2912,7 @@ final class Partition {
                     }
                     continue;
                 }
-                introselect(part, a, l, p0 - 1, k.split(p0, p1), maxDepth);
+                introselect(part, a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth);
                 ka = k.left();
             }
             if (kb <= p1) {
@@ -3709,7 +3709,7 @@ final class Partition {
                     }
                     continue;
                 }
-                introselect(part, a, l, p0 - 1, k.split(p0, p1), maxDepth);
+                introselect(part, a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth);
                 ka = k.left();
             }
             // Recurse middle if required
@@ -3733,7 +3733,7 @@ final class Partition {
                         }
                         continue;
                     }
-                    introselect(part, a, l, p2 - 1, k.split(p2, p3), maxDepth);
+                    introselect(part, a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
                     // Here we must process right
                     ka = k.left();
                 }
@@ -4628,7 +4628,7 @@ final class Partition {
                     }
                     continue;
                 }
-                select(a, l, p0 - 1, k.split(p0, p1), maxDepth);
+                select(a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth);
                 // Here we must process middle and possibly right
                 ka = k.left();
             }
@@ -4653,7 +4653,7 @@ final class Partition {
                         }
                         continue;
                     }
-                    select(a, l, p2 - 1, k.split(p2, p3), maxDepth);
+                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
                     // Here we must process right
                     ka = k.left();
                 }
