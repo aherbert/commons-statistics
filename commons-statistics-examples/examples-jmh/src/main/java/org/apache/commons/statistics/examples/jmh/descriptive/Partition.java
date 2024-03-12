@@ -936,24 +936,19 @@ final class Partition {
             }
         }
 
-        // Move two smallest values
-        // Start:
-        // |j0|j1|....................
-        // Possible ends:
-        // |j0|j1|....................  Just overwrite the same values
-        // |j0|  |......|j1|..........  Found 1 value below the larger of the original pair
-        // |j1|  |......|j0|..........  Found 1 value below the smaller of the original pair **
-        // |  |  |......|j0|....|j1|..  Found multiple smaller values
-        // |  |  |......|j1|....|j0|..  Found multiple smaller values
-        // Take care to not overwrite min values
+        // Move two smallest values taking care to not overwrite min values
         final double v0 = data[left];
         final double v1 = data[left + 1];
         data[left] = min0;
         data[left + 1] = min1;
         if (j1 == left) {
-            // ** Special case
+            // |j1|  |......|j0|..........  Found 1 value below the smaller of the original pair
             data[j0] = v1;
         } else {
+            // |j0|j1|....................  Just overwrite the same values
+            // |j0|  |......|j1|..........  Found 1 value below the larger of the original pair
+            // |  |  |......|j0|....|j1|..  Found multiple smaller values
+            // |  |  |......|j1|....|j0|..  Found multiple smaller values
             data[j0] = v0;
             data[j1] = v1;
         }
@@ -1026,24 +1021,19 @@ final class Partition {
             }
         }
 
-        // Move two largest values
-        // Start:
-        // ....................|j1|j0|
-        // Possible ends:
-        // ....................|j1|j0|  Just overwrite the same values
-        // ......|j1|..........|  |j0|  Found 1 value above the larger of the original pair
-        // ......|j0|..........|  |j1|  Found 1 value above the smaller of the original pair **
-        // ......|j0|....|j1|..|  |  |  Found multiple larger values
-        // ......|j1|....|j0|..|  |  |  Found multiple larger values
-        // Take care to not overwrite max values
+        // Move two largest values taking care to not overwrite max values
         final double v0 = data[right];
         final double v1 = data[right - 1];
         data[right] = max0;
         data[right - 1] = max1;
         if (j1 == right) {
-            // ** Special case
+            // ......|j0|..........|  |j1|  Found 1 value above the smaller of the original pair
             data[j0] = v1;
         } else {
+            // ....................|j1|j0|  Just overwrite the same values
+            // ......|j1|..........|  |j0|  Found 1 value above the larger of the original pair
+            // ......|j0|....|j1|..|  |  |  Found multiple larger values
+            // ......|j1|....|j0|..|  |  |  Found multiple larger values
             data[j0] = v0;
             data[j1] = v1;
         }
@@ -1061,8 +1051,8 @@ final class Partition {
      */
     static void heapSort(double[] a, int left, int right) {
         // We could make a choice here
-        //partitionMinK(a, left, right, right, right - left);
-        partitionMaxK(a, left, right, left, right - left);
+        partitionMinK(a, left, right, right, right - left);
+        //partitionMaxK(a, left, right, left, right - left);
     }
 
     /**
@@ -4554,15 +4544,10 @@ final class Partition {
             l = p1 + 1;
             r = p2 - 1;
             // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
-            // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:          ka                    kb
             // Detect this if ka is advanced too far.
-            if (ka < l) {
-                ka = k.updateLeft(l);
-                if (ka > r) {
-                    // No middle
-                    return;
-                }
+            if (ka < l && (ka = k.updateLeft(l)) > r) {
+                // No middle
+                return;
             }
             if (r < kb) {
                 kb = k.updateRight(r);
