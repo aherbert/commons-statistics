@@ -159,6 +159,18 @@ class PartitionTest {
         Assertions.assertArrayEquals(sorted, values, "Data destroyed");
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testPartitionMinMax"})
+    void testPartitionMax(double[] values, int from, int to) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        Partition.partitionMax(values, from, to);
+        Assertions.assertEquals(sorted[to], values[to]);
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+    }
+
     static Stream<Arguments> testPartitionMinMax() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
@@ -182,19 +194,77 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionMinMax"})
-    void testPartitionMax(double[] values, int from, int to) {
+    @MethodSource(value = "testPartitionMinMax2")
+    void testPartitionMin2IgnoreZeros(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
-        Partition.partitionMax(values, from, to);
-        Assertions.assertEquals(sorted[to], values[to]);
+        replaceNegativeZeros(values, from, to);
+        Partition.partitionMin2IgnoreZeros(values, from, to);
+        restoreNegativeZeros(values, from, to);
+        Assertions.assertEquals(sorted[from], values[from]);
+        Assertions.assertEquals(sorted[from + 1], values[from + 1]);
         // Check the data is the same
         Arrays.sort(values, from, to + 1);
         Assertions.assertArrayEquals(sorted, values, "Data destroyed");
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionK", "testPartitionMinMax"})
+    @MethodSource(value = "testPartitionMinMax2")
+    void testPartitionMax2IgnoreZeros(double[] values, int from, int to) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        replaceNegativeZeros(values, from, to);
+        Partition.partitionMax2IgnoreZeros(values, from, to);
+        restoreNegativeZeros(values, from, to);
+        Assertions.assertEquals(sorted[to], values[to]);
+        Assertions.assertEquals(sorted[to - 1], values[to - 1]);
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+    }
+
+    static Stream<Arguments> testPartitionMinMax2() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final double[] values = {-0.0, 0.0, 1};
+        final double x = Double.NaN;
+        final double y = 42;
+        for (final double a : values) {
+            for (final double b : values) {
+                builder.add(Arguments.of(new double[] {a, b}, 0, 1));
+                builder.add(Arguments.of(new double[] {x, a, b, y}, 1, 2));
+                for (final double c : values) {
+                    builder.add(Arguments.of(new double[] {a, b, c}, 0, 2));
+                    builder.add(Arguments.of(new double[] {x, a, b, c, y}, 1, 3));
+                    for (final double d : values) {
+                        builder.add(Arguments.of(new double[] {a, b, c, d}, 0, 3));
+                        builder.add(Arguments.of(new double[] {x, a, b, c, d, y}, 1, 4));
+                    }
+                }
+            }
+        }
+        builder.add(Arguments.of(new double[] {-1, -1, -1, 4, 3, 2, 1, y}, 3, 6));
+        builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
+        builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
+        for (final int size : new int[] {5, 10}) {
+            final double[] a = rng.doubles(size).toArray();
+            builder.add(Arguments.of(a.clone(), 0, size - 1));
+            builder.add(Arguments.of(a.clone(), size >>> 1, size - 1));
+            builder.add(Arguments.of(a.clone(), 1, size >>> 1));
+        }
+        builder.add(Arguments.of(new double[] {-0.0, 0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {0.0, -0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {-0.0, -0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {0.0, 0.0}, 0, 1));
+        builder.add(Arguments.of(new double[] {0.0, -0.0, 0.0, -0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0, 0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
+        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
     void testPartitionMinK(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
@@ -239,7 +309,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionK", "testPartitionMinMax"})
+    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
     void testPartitionMaxK(double[] values, int from, int to) {
         final double[] sorted = values.clone();
         Arrays.sort(sorted, from, to + 1);
@@ -293,80 +363,6 @@ class PartitionTest {
         builder.add(Arguments.of(new double[] {-1, 0.0, -0.0, -0.0, 1}, 0, 2));
         builder.add(Arguments.of(new double[] {1, 0.0, -0.0, -0.0, -1}, 0, 4));
         builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 1, 6));
-        return builder.build();
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void testPartitionMin2(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        Partition.partitionMin2(values, from, to);
-        Assertions.assertEquals(sorted[from], values[from]);
-        if (to - from > 1) {
-            Assertions.assertEquals(sorted[from + 1], values[from + 1]);
-        }
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = "testPartitionMin2")
-    void testPartitionMin2IgnoreZeros(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        replaceNegativeZeros(values, from, to);
-        Partition.partitionMin2IgnoreZeros(values, from, to);
-        restoreNegativeZeros(values, from, to);
-        Assertions.assertEquals(sorted[from], values[from]);
-        if (to - from > 1) {
-            Assertions.assertEquals(sorted[from + 1], values[from + 1]);
-        }
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
-    }
-
-    static Stream<Arguments> testPartitionMin2() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
-        final double[] values = {-0.0, 0.0, 1};
-        final double x = Double.NaN;
-        final double y = 42;
-        for (final double a : values) {
-            builder.add(Arguments.of(new double[] {a}, 0, 0));
-            builder.add(Arguments.of(new double[] {x, a, y}, 1, 1));
-            for (final double b : values) {
-                builder.add(Arguments.of(new double[] {a, b}, 0, 1));
-                builder.add(Arguments.of(new double[] {x, a, b, y}, 1, 2));
-                for (final double c : values) {
-                    builder.add(Arguments.of(new double[] {a, b, c}, 0, 2));
-                    builder.add(Arguments.of(new double[] {x, a, b, c, y}, 1, 3));
-                    for (final double d : values) {
-                        builder.add(Arguments.of(new double[] {a, b, c, d}, 0, 3));
-                        builder.add(Arguments.of(new double[] {x, a, b, c, d, y}, 1, 4));
-                    }
-                }
-            }
-        }
-        builder.add(Arguments.of(new double[] {-1, -1, -1, 4, 3, 2, 1, y}, 3, 6));
-        builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
-        builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
-        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create();
-        for (final int size : new int[] {5, 10}) {
-            final double[] a = rng.doubles(size).toArray();
-            builder.add(Arguments.of(a.clone(), 0, size - 1));
-            builder.add(Arguments.of(a.clone(), size >>> 1, size - 1));
-            builder.add(Arguments.of(a.clone(), 1, size >>> 1));
-        }
-        builder.add(Arguments.of(new double[] {-0.0, 0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {0.0, -0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {-0.0, -0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {0.0, 0.0}, 0, 1));
-        builder.add(Arguments.of(new double[] {0.0, -0.0, 0.0, -0.0}, 0, 3));
-        builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0, 0.0}, 0, 3));
-        builder.add(Arguments.of(new double[] {0.0, -0.0, -0.0, 0.0}, 0, 3));
-        builder.add(Arguments.of(new double[] {-0.0, 0.0, 0.0, -0.0}, 0, 3));
         return builder.build();
     }
 
