@@ -1946,6 +1946,66 @@ public class QuantilePerformance {
         }
     }
 
+    // TODO: Create a set of indices and random points within the range to find
+
+    /**
+     * Source of an search function. This is a function that find an index
+     * in a sorted list of indices.
+     */
+    @State(Scope.Benchmark)
+    public static class IndexSearchFunctionSource {
+        /** Name of the source. */
+        @Param({"Binary", "Scan"})
+        private String name;
+
+        /** The action. */
+        private SearchFunction function;
+
+        /**
+         * Define a search function.
+         */
+        public interface SearchFunction {
+            /**
+             * Find the index of the element {@code k}, or the closest index
+             * to the element (implementation definitions may vary).
+             *
+             * @param a Data.
+             * @param k Element.
+             * @return the index
+             */
+            int find(int[] a, int k);
+        }
+
+        /**
+         * @return the function
+         */
+        public SearchFunction getFunction() {
+            return function;
+        }
+
+        /**
+         * Create the function.
+         */
+        @Setup
+        public void setup() {
+            Objects.requireNonNull(name);
+            if ("Binary".equals(name)) {
+                function = (keys, k) -> Partition.searchLessOrEqual(keys, 0, keys.length - 1, k);
+            } else if ("Scan".equals(name)) {
+                function = (keys, k) -> {
+                    // Assume that k >= keys[0]
+                    int i = keys.length;
+                    do {
+                        --i;
+                    } while (keys[i] > k);
+                    return i;
+                };
+            } else {
+                throw new IllegalStateException("Unknown index search function: " + name);
+            }
+        }
+    }
+
     /**
      * Creates the {@link Quantile}.
      * Parameters for the {@link KthSelector} are derived from the {@code name}.
