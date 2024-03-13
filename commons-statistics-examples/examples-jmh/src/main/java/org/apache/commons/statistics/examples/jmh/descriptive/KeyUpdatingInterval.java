@@ -21,8 +21,10 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * An {@link UpdatingInterval} backed by an array of ordered keys.
  */
 final class KeyUpdatingInterval implements UpdatingInterval {
-    /** Size to use a scan of the keys when splitting instead of binary search. */
-    private static final int SCAN_SIZE = 32;
+    /** Size to use a scan of the keys when splitting instead of binary search.
+     * Note binary search has an overhead on small size due to the random left/right
+     * branching per iteration. It is much faster on very large sizes. */
+    private static final int SCAN_SIZE = 256;
 
     /** The ordered keys. */
     private final int[] keys;
