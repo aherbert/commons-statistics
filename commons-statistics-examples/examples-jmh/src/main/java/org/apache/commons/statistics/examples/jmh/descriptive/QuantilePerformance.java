@@ -1088,6 +1088,8 @@ public class QuantilePerformance {
      */
     @State(Scope.Benchmark)
     public static class IndexSource {
+        /** Indices. */
+        protected int[][] indices;
         /** Upper bound (exclusive) on the indices. */
         @Param({"1000", "1000000", "1000000000"})
         private int length;
@@ -1109,9 +1111,6 @@ public class QuantilePerformance {
         /** Minimum separation between keys. */
         @Param({"32"})
         private int separation;
-
-        /** Indices. */
-        private int[][] indices;
 
         /**
          * @return the indices
@@ -1175,7 +1174,9 @@ public class QuantilePerformance {
     }
 
     /**
-     * Source of k-th indices to be searched/split by a {@link SearchableInterval}.
+     * Source of k-th indices to be searched/split.
+     * Can be used to split the same indices multiple times, or split a set of indices
+     * a single time.
      */
     @State(Scope.Benchmark)
     public static class SplitIndexSource extends IndexSource {
@@ -1185,6 +1186,8 @@ public class QuantilePerformance {
 
         /** Search points. */
         private int[][] points;
+        /** The index+point samples. */
+        private long[] samples;
 
         /** Options for the division mode. */
         public enum DivisionMode {
@@ -1199,6 +1202,33 @@ public class QuantilePerformance {
          */
         public int[][] getPoints() {
             return points;
+        }
+
+        /**
+         * @return the sample size
+         */
+        int samples() {
+            return samples.length;
+        }
+
+        /**
+         * Gets the indices for the sample.
+         *
+         * @param index the index
+         * @return the indices
+         */
+        int[] getIndices(int index) {
+            return indices[(int) (samples[index] >>> Integer.SIZE)];
+        }
+
+        /**
+         * Gets the search point for the sample.
+         *
+         * @param index the index
+         * @return the search point
+         */
+        int getPoint(int index) {
+            return (int) samples[index];
         }
 
         /**
@@ -1218,6 +1248,8 @@ public class QuantilePerformance {
 
             // Set the division mode
             final boolean random = Objects.requireNonNull(mode) == DivisionMode.RANDOM;
+
+            int size = 0;
 
             for (int i = points.length; --i >= 0;) {
                 // Get the sorted unique indices
@@ -1242,7 +1274,18 @@ public class QuantilePerformance {
                     final int c = divide(y, 0, unique - 1, p, 0, s);
                     points[i] = Arrays.copyOf(p, c);
                 }
+                size += points[i].length;
             }
+
+            // Create the samples: pack indices index+point into a long
+            samples = new long[size];
+            for (int i = points.length; --i >= 0;) {
+                final long l = ((long) i) << Integer.SIZE;
+                for (final int p : points[i]) {
+                    samples[--size] = l | p;
+                }
+            }
+            shuffle(rng, samples);
         }
 
         /**
@@ -1297,6 +1340,31 @@ public class QuantilePerformance {
          */
         private static void swap(int[] array, int i, int j) {
             final int tmp = array[i];
+            array[i] = array[j];
+            array[j] = tmp;
+        }
+
+        /**
+         * Shuffles the entries of the given array.
+         *
+         * @param rng Source of randomness.
+         * @param array Array whose entries will be shuffled (in-place).
+         */
+        private static void shuffle(UniformRandomProvider rng, long[] array) {
+            for (int i = array.length; i > 1; i--) {
+                swap(array, i - 1, rng.nextInt(i));
+            }
+        }
+
+        /**
+         * Swaps the two specified elements in the array.
+         *
+         * @param array Array.
+         * @param i First index.
+         * @param j Second index.
+         */
+        private static void swap(long[] array, int i, int j) {
+            final long tmp = array[i];
             array[i] = array[j];
             array[j] = tmp;
         }
@@ -1991,8 +2059,6 @@ public class QuantilePerformance {
         }
     }
 
-    // TODO: Create a set of indices and random points within the range to find
-
     /**
      * Source of an search function. This is a function that find an index
      * in a sorted list of indices.
@@ -2000,7 +2066,9 @@ public class QuantilePerformance {
     @State(Scope.Benchmark)
     public static class IndexSearchFunctionSource {
         /** Name of the source. */
-        @Param({"Binary", "Scan"})
+        @Param({"Binary",
+            //"binarySearch",
+            "Scan"})
         private String name;
 
         /** The action. */
@@ -2036,6 +2104,8 @@ public class QuantilePerformance {
             Objects.requireNonNull(name);
             if ("Binary".equals(name)) {
                 function = (keys, k) -> Partition.searchLessOrEqual(keys, 0, keys.length - 1, k);
+            } else if ("binarySearch".equals(name)) {
+                function = (keys, k) -> Arrays.binarySearch(keys, 0, keys.length, k);
             } else if ("Scan".equals(name)) {
                 function = (keys, k) -> {
                     // Assume that k >= keys[0]
@@ -2553,6 +2623,25 @@ public class QuantilePerformance {
         for (int j = -1; ++j < size;) {
             bh.consume(fun.apply(source.getData(j), source.getIndices(j)));
         }
+    }
+
+    /**
+     * Benchmark the search of an ordered set of indices.
+     *
+     * @param function Source of the search.
+     * @param source Source of the data.
+     * @return value to consume
+     */
+    @Benchmark
+    public long indexSearch(IndexSearchFunctionSource function, SplitIndexSource source) {
+        final IndexSearchFunctionSource.SearchFunction fun = function.getFunction();
+        // Ensure we have something to consume during the benchmark
+        long sum = 0;
+        for (int i = source.samples(); --i >= 0;) {
+            // Single point in the range
+            sum += fun.find(source.getIndices(i), source.getPoint(i));
+        }
+        return sum;
     }
 
     /**
