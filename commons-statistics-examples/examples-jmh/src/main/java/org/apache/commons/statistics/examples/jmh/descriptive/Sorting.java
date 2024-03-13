@@ -290,6 +290,57 @@ final class Sorting {
     }
 
     /**
+     * Sorts an array using a paired insertion sort.
+     *
+     * <p>Warning: It is assumed that the value at {@code data[begin - 1]} is sorted.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * @param data Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     */
+    static void sortPairedInternal4(double[] data, int left, int right) {
+        // Assume data[begin - 1] is a pivot and acts as a sentinal on the range.
+        // => no requirement to check j >= left.
+
+        // Paired insertion sort. Move largest of two elements down the array.
+        // When inserted move the smallest of the two elements down the rest of the array.
+
+        // Pairs require an even length so start at left for even or left + 1 for odd.
+        // This will do nothing when right <= left.
+
+        // As above but only move if required
+        for (int i = left + ((right - left + 1) & 0x1), j = i; ++j <= right; i = ++j) {
+            double v1 = data[i];
+            double v2 = data[j];
+            // Sort the pair
+            if (v2 < v1) {
+                v1 = v2;
+                v2 = data[i];
+                // In the event of no moves
+                data[j] = v2;
+                data[i] = v1;
+            }
+            // Move preceding higher elements (if required, only test the smallest)
+            if (v1 < data[i - 1]) {
+                // Move preceding higher elements above the largest value
+                while (v2 < data[--i]) {
+                    data[i + 2] = data[i];
+                }
+                // Insert at i + 2. Update i for the next scan down.
+                data[++i + 1] = v2;
+                // Move preceding higher elements above the smallest value
+                while (v1 < data[--i]) {
+                    data[i + 1] = data[i];
+                }
+                data[i + 1] = v1;
+            }
+        }
+    }
+
+    /**
      * Sorts the given indices in an array using an insertion sort.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
