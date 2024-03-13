@@ -1444,7 +1444,7 @@ class PartitionTest {
         // Optional: Run a single round of partitioning on the data.
         final LinkedList<String> pivots = new LinkedList<>();
         final int left = 0;
-        final int right = length -1;
+        final int right = length - 1;
         final int[] bounds = new int[3];
         if (partition == 1) {
             for (final double[] d : data) {

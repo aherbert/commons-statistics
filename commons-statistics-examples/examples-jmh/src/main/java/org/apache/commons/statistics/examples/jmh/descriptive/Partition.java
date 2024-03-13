@@ -882,11 +882,10 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMinIgnoreZeros(double[] data, int left, int right) {
-        // Sweep forward.
-        // This requires less tracking of the min on (partly) sorted data.
+        // Mitigate worst case performance on descending data by backward sweep
         double min = data[left];
         int j = left;
-        for (int i = left; ++i <= right;) {
+        for (int i = right + 1; --i > left;) {
             final double v = data[i];
             if (v < min) {
                 min = v;
@@ -921,7 +920,8 @@ final class Partition {
         double min0 = data[j0];
         double min1 = data[j1];
 
-        for (int i = j1; ++i <= right;) {
+        // Mitigate worst case performance on descending data by backward sweep
+        for (int i = right + 1, end = j1; --i > end;) {
             final double v = data[i];
             if (v < min1) {
                 if (v < min0) {
@@ -967,11 +967,10 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
-        // Sweep backward.
-        // This requires less tracking of the max on (partly) sorted data.
+        // Mitigate worst case performance on descending data by backward sweep
         double max = data[right];
         int j = right;
-        for (int i = right; --i >= left;) {
+        for (int i = left - 1; ++i < right;) {
             final double v = data[i];
             if (v > max) {
                 max = v;
@@ -1006,7 +1005,8 @@ final class Partition {
         double max0 = data[j0];
         double max1 = data[j1];
 
-        for (int i = j1; --i >= left;) {
+        // Mitigate worst case performance on descending data by backward sweep
+        for (int i = left - 1, end = j1; ++i < end;) {
             final double v = data[i];
             if (v > max1) {
                 if (v > max0) {
@@ -1183,8 +1183,9 @@ final class Partition {
             maxHeapSiftDown(a, a[p], p, left, end);
         }
         // Scan the remaining data and insert
+        // Mitigate worst case performance on descending data by backward sweep
         double max = a[left];
-        for (int i = k; ++i <= right;) {
+        for (int i = right + 1; --i > k;) {
             if (a[i] < max) {
                 maxHeapSiftDown(a, a[i], left, left, end);
                 a[i] = max;
@@ -1295,8 +1296,9 @@ final class Partition {
             minHeapSiftDown(a, a[p], p, right, end);
         }
         // Scan the remaining data and insert
+        // Mitigate worst case performance on descending data by backward sweep
         double min = a[right];
-        for (int i = k; --i >= left;) {
+        for (int i = left - 1; ++i < k;) {
             if (a[i] > min) {
                 minHeapSiftDown(a, a[i], right, right, end);
                 a[i] = min;
