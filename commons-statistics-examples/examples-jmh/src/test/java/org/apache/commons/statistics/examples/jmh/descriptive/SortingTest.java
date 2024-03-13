@@ -77,6 +77,7 @@ class SortingTest {
         assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal1(x, 1, x.length - 1));
         assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal2(x, 1, x.length - 1));
         assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal3(x, 1, x.length - 1));
+        assertDoubleSort(values.clone(), x -> Sorting.sortPairedInternal4(x, 1, x.length - 1));
     }
 
     @ParameterizedTest

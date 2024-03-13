@@ -1659,6 +1659,11 @@ public class QuantilePerformance {
                         x[0] = Double.NEGATIVE_INFINITY;
                         Sorting.sortPairedInternal3(x, 1, x.length - 1);
                     };
+                } else if (name.endsWith("4")) {
+                    function = x -> {
+                        x[0] = Double.NEGATIVE_INFINITY;
+                        Sorting.sortPairedInternal4(x, 1, x.length - 1);
+                    };
                 }
             } else if ("InsertionSortB".equals(name)) {
                 function = x -> {
