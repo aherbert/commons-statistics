@@ -323,6 +323,15 @@ public class QuantilePerformance {
         /**
          * Get the number of data samples.
          *
+         * <p>Note: This data source will create a permutation order per invocation based on
+         * this size. Per-invocation control in JMH is recommended for methods that take
+         * more than 1 millisecond to execute. For very small data and/or fast methods
+         * this may not be achievable. Child classes may override this value to create
+         * a large number of repeats of the same data per invocation. Any class performing
+         * this should also override {@link #getData(int)} to prevent index out of bound errors.
+         * This can be done by mapping the index to the original index using the number of repeats
+         * e.g. {@code original index = index / repeats}.
+         *
          * @return the number of samples
          */
         public int size() {
@@ -943,11 +952,33 @@ public class QuantilePerformance {
         /** Data length. */
         @Param({"1023"})
         private int length;
+        /** Number of repeats. This is used to control the number of times the data is processed
+         * per invocation. Note that each invocation randomises the order. For very small data
+         * and/or fast methods there may not be enough data to achieve the target of 1
+         * millisecond per invocation. Use this value to increase the length of each invocation.
+         * For example the insertion sort on tiny data, or the sort5 methods, may require this
+         * to be 1,000,000 or higher. */
+        @Param({"1"})
+        private int repeats;
 
         /** {@inheritDoc} */
         @Override
         protected int getLength() {
             return length;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public int size() {
+            return super.size() * repeats;
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public double[] getData(int index) {
+            // order = (data index) * repeats + repeat
+            // data index = order / repeats
+            return super.getDataSample(order[index] / repeats);
         }
     }
 
@@ -959,7 +990,10 @@ public class QuantilePerformance {
      * is created per invocation.
      */
     @State(Scope.Benchmark)
-    public static class KSource extends SortSource {
+    public static class KSource extends AbstractDataSource {
+        /** Data length. */
+        @Param({"1023"})
+        private int length;
         /** Number of indices to select. */
         @Param({"1", "2", "3", "5", "10"})
         private int k;
@@ -974,9 +1008,15 @@ public class QuantilePerformance {
 
         /** {@inheritDoc} */
         @Override
+        protected int getLength() {
+            return length;
+        }
+
+        /** {@inheritDoc} */
+        @Override
         public int size() {
             return super.size() * repeats;
-        };
+        }
 
         /** {@inheritDoc} */
         @Override
@@ -1019,13 +1059,13 @@ public class QuantilePerformance {
             int index = 0;
             final int noOfSamples = super.size();
             if (k > 1) {
-                final int length = getLength();
+                final int baseLength = getLength();
                 for (int i = 0; i < noOfSamples; i++) {
                     final int len = getDataSize(i);
                     // Create permutation sampler for the length
-                    PermutationSampler s = samplers[len - length];
+                    PermutationSampler s = samplers[len - baseLength];
                     if (s == null) {
-                        samplers[len - length] = s = new PermutationSampler(rng, len, k);
+                        samplers[len - baseLength] = s = new PermutationSampler(rng, len, k);
                     }
                     for (int j = repeats; --j >= 0;) {
                         indices[index++] = s.sample();
