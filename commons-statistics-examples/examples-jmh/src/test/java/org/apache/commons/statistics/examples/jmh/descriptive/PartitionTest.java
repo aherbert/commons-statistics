@@ -1290,6 +1290,37 @@ class PartitionTest {
         return builder.build();
     }
 
+    @ParameterizedTest
+    @MethodSource
+    void testSelectRange(double[] a, int k1, int kn) {
+        final double[] copy = a.clone();
+        Arrays.sort(copy);
+        Partition.select(a, 0, a.length - 1, k1, kn, 1000000);
+        for (int i = k1; i <= kn; i++) {
+            Assertions.assertEquals(copy[i], a[i]);
+        }
+        Arrays.sort(a);
+        Assertions.assertArrayEquals(copy, a, "data destroyed");
+    }
+
+    static Stream<Arguments> testSelectRange() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        // Reverse data. Makes it simple to detect failed range selection
+        final double[] a = IntStream.range(0, 50).asDoubleStream().toArray();
+        for (int i = -1, j = a.length; ++i < --j;) {
+            final double v = a[i];
+            a[i] = a[j];
+            a[j] = v;
+        }
+        builder.add(Arguments.of(a, 1, 1));
+        builder.add(Arguments.of(a, 1, 2));
+        builder.add(Arguments.of(a, 10, 12));
+        builder.add(Arguments.of(a, 10, 42));
+        builder.add(Arguments.of(a, 1, 48));
+        builder.add(Arguments.of(a, 48, 49));
+        return builder.build();
+    }
+
     /**
      * This is not a test. It runs the introselect algorithm as a full sort on the specified
      * data. A histogram of the level of recursion required to visit all regions is recorded

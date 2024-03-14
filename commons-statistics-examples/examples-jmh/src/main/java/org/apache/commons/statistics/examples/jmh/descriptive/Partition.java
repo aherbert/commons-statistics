@@ -1126,6 +1126,9 @@ final class Partition {
      * @see #heapSelect(double[], int, int, int, int)
      */
     static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
+        // TODO:
+        // If the range is large relative to the left-right length then do an insertion sort.
+
         // Avoid the overhead of heap select on tiny data (supports right <= left).
         if (right - left < MIN_HEAPSELECT_SIZE) {
             Sorting.sort(a, left, right);
@@ -1167,6 +1170,8 @@ final class Partition {
         // Optimise
         if (k - 1 <= left) {
             // TODO - decide if this is worth optimising.
+            // If this is only called with length of 2 then we could drop the optimisation
+            // for k1 if speed on various data is the same.
             if (k == left) {
                 partitionMinIgnoreZeros(a, left, right);
             } else {
@@ -4187,31 +4192,31 @@ final class Partition {
         // for multiple keys.
         // If the keys saturate the range then partitioning -> sorting.
 
-        // Single-pivot quickselect has maximum recursion log2(length) * 2.
         if (n == 1) {
-            select(a, 0, length - 1, k[0], k[0], floorLog2(length) << 1);
-            return;
-        }
-        // If the keys are not separated then they are effectively a single key.
-        if (n == 2 && Math.abs(k[0] - k[1]) < SP_HEAPSELECT_SIZE) {
-            final int k1 = Math.min(k[0], k[1]);
-            final int kn = Math.max(k[0], k[1]);
-            select(a, 0, length - 1, k1, kn, floorLog2(length) << 1);
+            select(a, 0, length - 1, k[0], k[0], singlePivotMaxDepth(length));
             return;
         }
 
+        // If the keys are not separated then they are effectively a single key.
         // TODO:
-        // Use dual-pivot for multiple keys and if keys saturate the range then
-        // increase the threshold to switch to a full sort of small lengths. This
-        // allows the case for multiple keys to approach the speed of a dual-pivot
-        // quicksort.
+        // Change to use a MIN_SEPARATION size (as a power of 2)
+        if (n == 2 && Math.abs(k[0] - k[1]) < SP_HEAPSELECT_SIZE) {
+            final int k1 = Math.min(k[0], k[1]);
+            final int kn = Math.max(k[0], k[1]);
+            select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
+            return;
+        }
+
+        final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
+
+        // TODO:
+        // Do saturation analysis. If saturated then use SP mode as this can do a full sort.
 
         // Ideal dual pivot recursion will take log3(n) steps as data is
         // divided into length (n/3) at each iteration; add contingency
         // by doubling this value.
-        int maxDepth = twiceLog3(length);
+        int maxDepth = dualPivotMaxDepth(length);
 
-        final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
         select(a, 0, length - 1, keys, maxDepth);
     }
 
@@ -4390,7 +4395,7 @@ final class Partition {
         final int[] upper = {0};
         while (true) {
             // heapselect when ka and kb are close to the same end, or too much recursion
-            // |l|-----|ka|--------|kb|------|r|
+            // |l|-----|ka|kkkkkkkk|kb|------|r|
             //  ---------d1----------
             //          ----------d2-----------
             if (maxDepth == 0 ||
@@ -4399,7 +4404,11 @@ final class Partition {
                 return;
             }
 
-//            if (r - l < SP_QUICKSELECT_SIZE) {
+            // TODO
+            // Sort when (ka - l) and (r - kb) are < saturation size (e.g. 8).
+            // Allows switch to full sort for saturated keys. Can then optimise DP
+            // for sparse select of multiple keys.
+//            if (r - l < SP_QUICKSELECT_SIZE && kb - ka < (r - l) >> 1) {
 //                // Switch to a sort of small data to avoid partition overhead
 //                Sorting.sort(a, l, r);
 //                return;
@@ -4414,19 +4423,21 @@ final class Partition {
 
             // Recursion to max depth
             // Note: Here we possibly branch left and right with multiple keys.
-            // It is possible that the partition has split the pair
-            // and the recursion proceeds with a single point.
+            // It is possible that the partition has split the range
+            // and the recursion proceeds with a reduced range in each region.
+            //                   p0 p1
+            // |l|--|ka|kkkkkkkkkk|P|kkkkkkkkk|kb|------|r|
+            //                  kb | ka
             maxDepth--;
             // Recurse left side if required
             if (ka < p0) {
                 if (kb <= p1) {
                     // Entirely on left side
                     r = p0 - 1;
-                    kb = r < kb ? ka : kb;
+                    kb = kb < r ? kb : r;
                     continue;
                 }
-                select(a, l, p0 - 1, ka, ka, maxDepth);
-                ka = kb;
+                select(a, l, p0 - 1, ka, kb < r ? kb : r, maxDepth);
             }
             if (kb <= p1) {
                 // No right side
@@ -4434,7 +4445,7 @@ final class Partition {
             }
             // Continue on the right side
             l = p1 + 1;
-            ka = ka < l ? kb : ka;
+            ka = ka > l ? ka : l;
         }
     }
 
@@ -6261,7 +6272,19 @@ final class Partition {
     }
 
     /**
-     * Compute an approximation to {@code 2 * log3 (x)}.
+     * Compute the maximum recursion depth for single pivot recursion.
+     * Uses {@code 2 * floor(log2 (x))}.
+     *
+     * @param x Value.
+     * @return {@code log3(x))}
+     */
+    static int singlePivotMaxDepth(int x) {
+        return (31 - Integer.numberOfLeadingZeros(x)) << 1;
+    }
+
+    /**
+     * Compute the maximum recursion depth for dual pivot recursion.
+     * This is an approximation to {@code 2 * log3 (x)}.
      *
      * <p>The result is between {@code floor(log3(x))} and {@code ceil(log3(x))}.
      * The result is correctly rounded when {@code x +/- 1} is a power of 3.
@@ -6269,7 +6292,7 @@ final class Partition {
      * @param x Value.
      * @return {@code log3(x))}
      */
-    static int twiceLog3(int x) {
+    static int dualPivotMaxDepth(int x) {
         // log3(2) ~ 1.5849625
         // log3(x) ~ log2(x) * 0.630929753... ~ log2(x) * 323 / 512 (0.630859375)
         // Use (floor(log2(x))+1) * 323 / 256
