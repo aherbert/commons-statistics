@@ -4493,6 +4493,10 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
+            // TODO
+            // Use heapselect for small distance from end (MIN_HEAPSELECT_SIZE) ?
+            // Otherwise favour a sort of small data.
+
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
