@@ -128,8 +128,9 @@ final class Partition {
      * an increase to this threshold will gain full sort performance. */
     static final int DP_QUICKSELECT_SIZE = 27;
     /** Heap select size for single-pivot select (used for single k).
-     * Benchmarking random data in range [96, 192] suggests a value of ~7. */
-    static final int SP_HEAPSELECT_SIZE = 7;
+     * Benchmarking data in range [96, 192] suggests a value of ~15 on a
+     * variety of structured data or random data. */
+    static final int SP_HEAPSELECT_SIZE = 15;
     /** Default length shift for heapselect. On random data this is approximately constant
      * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
      * of the time. On non-random data then the shift has to be larger. This idea is
@@ -4200,7 +4201,7 @@ final class Partition {
         // If the keys are not separated then they are effectively a single key.
         // TODO:
         // Change to use a MIN_SEPARATION size (as a power of 2)
-        if (n == 2 && Math.abs(k[0] - k[1]) < SP_HEAPSELECT_SIZE) {
+        if (n == 2 && Math.abs(k[0] - k[1]) < MIN_HEAPSELECT_SIZE) {
             final int k1 = Math.min(k[0], k[1]);
             final int kn = Math.max(k[0], k[1]);
             select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
