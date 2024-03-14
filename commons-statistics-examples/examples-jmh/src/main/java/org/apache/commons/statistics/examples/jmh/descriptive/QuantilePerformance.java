@@ -1704,7 +1704,7 @@ public class QuantilePerformance {
                     }
                     Partition.select(a, 0, end - 1,
                         IndexIntervals.interval(0, end - 1),
-                        Partition.twiceLog3(a.length));
+                        Partition.dualPivotMaxDepth(a.length));
                     // Restore signed zeros
                     t.postProcess(a);
                 };
