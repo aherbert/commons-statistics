@@ -127,6 +127,9 @@ final class Partition {
      * Dual-pivot sorting requires a value of ~120. If keys are saturated between k1 and kn
      * an increase to this threshold will gain full sort performance. */
     static final int DP_QUICKSELECT_SIZE = 27;
+    /** Heap select size for single-pivot select (used for single k).
+     * Benchmarking random data in range [96, 192] suggests a value of ~7. */
+    static final int SP_HEAPSELECT_SIZE = 7;
     /** Default length shift for heapselect. On random data this is approximately constant
      * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
      * of the time. On non-random data then the shift has to be larger. This idea is
@@ -1163,11 +1166,10 @@ final class Partition {
     static void partitionMinK(double[] a, int left, int right, int k, int count) {
         // Optimise
         if (k - 1 <= left) {
+            // TODO - decide if this is worth optimising.
             if (k == left) {
                 partitionMinIgnoreZeros(a, left, right);
             } else {
-                // TODO - decide if this is worth optimising.
-                // Currently this handles right <= left
                 partitionMin2IgnoreZeros(a, left, right);
             }
             return;
@@ -1276,11 +1278,12 @@ final class Partition {
     static void partitionMaxK(double[] a, int left, int right, int k, int count) {
         // Optimise
         if (k + 1 >= right) {
+            // TODO - decide if this is worth optimising.
+            // If this is only called with length of 2 then we could drop the optimisation
+            // for k1 if speed on various data is the same.
             if (k == right) {
                 partitionMaxIgnoreZeros(a, left, right);
             } else {
-                // TODO - decide if this is worth optimising.
-                // Currently this handles right <= left
                 partitionMax2IgnoreZeros(a, left, right);
             }
             return;
@@ -4190,7 +4193,7 @@ final class Partition {
             return;
         }
         // If the keys are not separated then they are effectively a single key.
-        if (n == 2 && Math.abs(k[0] - k[1]) <= 2) {
+        if (n == 2 && Math.abs(k[0] - k[1]) < SP_HEAPSELECT_SIZE) {
             final int k1 = Math.min(k[0], k[1]);
             final int kn = Math.max(k[0], k[1]);
             select(a, 0, length - 1, k1, kn, floorLog2(length) << 1);
@@ -4361,8 +4364,8 @@ final class Partition {
      * partitioning divides the range.
      *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method by Sedgewick; the fall-back on poor convergence of
-     * the quickselect is a heapselect.
+     * partition method by Sedgewick; switching to heapselect when close to the edge or
+     * poor convergence of quickselect.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
      * destroyed (the mixture updated during partitioning). The caller is responsible for
@@ -4377,7 +4380,6 @@ final class Partition {
      */
     // package-private for benchmarking
     static void select(double[] a, int left, int right, int k1, int kn, int maxDepth) {
-        // Inline code using the defaults.
         // If partitioning splits the interval then recursion is used for the left-most side(s)
         // and the right-most side remains within this function. If partitioning does
         // not split the interval then it remains within this function.
@@ -4387,23 +4389,23 @@ final class Partition {
         int kb = kn;
         final int[] upper = {0};
         while (true) {
-            // It is possible to use heapselect when ka and kb are close to the same end
+            // heapselect when ka and kb are close to the same end, or too much recursion
             // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2----------
-            //          ----------s4-----------
+            //  ---------d1----------
+            //          ----------d2-----------
             if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
-                // Too much recursion, or ka and kb are both close to the same end
+                Math.min(kb - l, r - ka) < SP_HEAPSELECT_SIZE) {
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
 
-            if (r - l < SP_QUICKSELECT_SIZE) {
-                // Switch to a sort of small data to avoid partition overhead
-                Sorting.sort(a, l, r);
-                return;
-            }
+//            if (r - l < SP_QUICKSELECT_SIZE) {
+//                // Switch to a sort of small data to avoid partition overhead
+//                Sorting.sort(a, l, r);
+//                return;
+//            }
 
+            // TODO: move choice of pivot into the partition function
             // Pick a pivot and partition
             final int p0 = partitionSBM(a, l, r,
                 PIVOTING_STRATEGY.pivotIndex(a, l, r),
@@ -4451,7 +4453,7 @@ final class Partition {
      * partitioning divides the range.
      *
      * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
-     * partition method by Vladimir Yaroslavskiy;  the fall-back on poor convergence of
+     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of
      * the quickselect is a heapselect.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
@@ -5173,10 +5175,10 @@ final class Partition {
         j = i++;
 
         // less-equal:
-        //   for (int k = l; k < p; k++):
+        //   for k = l; k < p; k++
         //     swap(data, k, --j)
         // greater-equal:
-        //   for (int k = r; k-- > q; i++) {
+        //   for k = r; k-- > q; i++
         //     swap(data, k, i)
 
         // Move the minimum of less-equal or less-than
