@@ -94,6 +94,8 @@ public class QuantilePerformance {
     private static final String SORT = "Sort";
     /** Baseline for the benchmark. */
     private static final String BASELINE = "Baseline";
+    /** Selection method using a heap. */
+    private static final String HEAP_SELECT = "HeapSelect";
 
     // Second generation partition functions
 
@@ -1540,7 +1542,7 @@ public class QuantilePerformance {
         @Override
         public int size() {
             return super.size() * 2;
-        };
+        }
 
         /** {@inheritDoc} */
         @Override
@@ -1618,6 +1620,7 @@ public class QuantilePerformance {
      */
     @State(Scope.Benchmark)
     public static class SortFunctionSource {
+
         /** Name of the source. */
         @Param({JDK, SP, BM, SBM, DP, DP5,
             SBM2,
@@ -1752,6 +1755,13 @@ public class QuantilePerformance {
                     x[0] = Double.NEGATIVE_INFINITY;
                     Sorting.sortb(x, 1, x.length - 1);
                 };
+            // Not actually a sort. This is used to benchmark the speed of heapselect
+            // against a full sort of small data.
+            } else if (name.startsWith(HEAP_SELECT)) {
+                final char c = name.charAt(name.length() - 1);
+                // This offsets the start by 1 for comparison with insertion sort
+                final int k = Character.isDigit(c) ? Character.digit(c, 10) + 1 : 1;
+                function = x -> Partition.partitionMinK(x, 1, x.length - 1, k, 0);
             }
             if (function == null) {
                 throw new IllegalStateException("Unknown sort function: " + name);
@@ -2011,7 +2021,7 @@ public class QuantilePerformance {
     public static class EdgeFunctionSource {
         /** Name of the source.
          * For introselect methods this should effectively turn-off heapselect. */
-        @Param({"HeapSelect", ISBM + "_HC0", IDP + "_HC0"})
+        @Param({HEAP_SELECT, ISBM + "_HC0", IDP + "_HC0"})
         private String name;
 
         /** The action. */
@@ -2031,7 +2041,7 @@ public class QuantilePerformance {
         public void setup() {
             Objects.requireNonNull(name);
             // Direct use of heapselect
-            if ("HeapSelect".equals(name)) {
+            if (HEAP_SELECT.equals(name)) {
                 function = (data, indices) -> {
                     Partition.heapSelectRange(data, 0, data.length - 1, indices[0], indices[1]);
                     return extractIndices(data, indices[0], indices[1]);
