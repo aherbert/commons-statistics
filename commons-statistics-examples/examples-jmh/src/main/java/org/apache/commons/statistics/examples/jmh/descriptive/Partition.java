@@ -4210,8 +4210,20 @@ final class Partition {
 
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
 
-        // TODO:
-        // Do saturation analysis. If saturated then use SP mode as this can do a full sort.
+//        // TODO:
+//        // Do saturation analysis. If saturated then use SP mode as this can do a full sort.
+//        // Cannot assume keys are BitIndexUpdatingInterval as sorted input keys will
+//        // return a KeyUpdatingInterval.
+//        // Have an DensityAnalysis interface that implementations can implement.
+//        // E.g. saturated(int power). Check for saturation at a given power of 2.
+//        // Make a method:
+//        if (highDensity(keys)) { ...
+//        if (n > 10 && keys instanceof DensityAnalysis) {
+//            // Occurs when keys are high-density.
+//            // If saturated process as a single range.
+//            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
+//            return;
+//        }
 
         // Ideal dual pivot recursion will take log3(n) steps as data is
         // divided into length (n/3) at each iteration; add contingency
@@ -4405,13 +4417,15 @@ final class Partition {
                 return;
             }
 
-            // TODO
-            // Sort when (ka - l) and (r - kb) are < saturation size (e.g. 8).
-            // Allows switch to full sort for saturated keys. Can then optimise DP
-            // for sparse select of multiple keys.
-//            if (r - l < SP_QUICKSELECT_SIZE && kb - ka < (r - l) >> 1) {
-//                // Switch to a sort of small data to avoid partition overhead
-//                Sorting.sort(a, l, r);
+//            // TODO - optimise this
+//            // sort when ka and kb span the range
+//            if ((ka - l) + (r - kb) < 8) {
+//                // Handle small arrays (since we have already processed NaN and signed zeros)
+//                if (r - l < 80) {
+//                    Sorting.sort(a, l, r);
+//                } else {
+//                    Arrays.sort(a, l, r + 1);
+//                }
 //                return;
 //            }
 
