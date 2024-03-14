@@ -225,7 +225,15 @@ public class QuantilePerformance {
             REVERSE_BACK,
             /** sort modification. */
             SORT,
-            /** descending modification (this is an addition to the original suite of B & M). */
+            /** descending modification (this is an addition to the original suite of B & M).
+             * It is useful for testing worst case performance, e.g. insertion sort performs
+             * poorly on descending data. Heapselect using a max heap would perform poorly
+             * if data is processed in the forward direction as all elements must be inserted.
+             *
+             * <p>This is not included in the test suite by default and must be specified.
+             * Note that the Shuffle distribution with a very large seed 'm' is effectively an
+             * ascending sequence and will be reversed to descending as part of the original
+             * suite of data. */
             DESCENDING,
             /** dither modification. */
             DITHER;
@@ -402,11 +410,12 @@ public class QuantilePerformance {
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
                 // m is supported via the seed parameter.
-                // Default seed will create ceil(log2(2*n)) * 5 dist * 7 mods samples:
-                // MAX  = 32 * 5 * 7 * (2^31-1) * 4 bytes == 8959 GiB
-                // HUGE = 31 * 5 * 7 * 2^30 * 4 bytes == 4340 GiB
-                // BIG  = 21 * 5 * 7 * 2^20 * 4 bytes == 2940 MiB  <-- within configured JVM -Xmx
-                // MED  = 11 * 5 * 7 * 2^10 * 4 bytes == 1540 KiB
+                // Default seed will create ceil(log2(2*n)) * 5 dist * 6 mods samples:
+                // MAX  = 32 * 5 * 7 * (2^31-1) * 4 bytes == 7679 GiB
+                // HUGE = 31 * 5 * 7 * 2^30 * 4 bytes == 3719 GiB
+                // BIG  = 21 * 5 * 7 * 2^20 * 4 bytes == 2519 MiB  <-- within configured JVM -Xmx
+                // MED  = 11 * 5 * 7 * 2^10 * 4 bytes == 1318 KiB
+                // (This excludes the descending modification.)
                 // It is possible to create lengths above 2^30 using a single distribution,
                 // modification, and seed:
                 // MAX1 = 1 * 1 * 1 * (2^31-1) * 4 bytes == 8191 MiB
@@ -476,7 +485,12 @@ public class QuantilePerformance {
          * @return the modifications
          */
         private EnumSet<Modification> getModifications() {
-            return getEnumFromParam(Modification.class, modification);
+            final EnumSet<Modification> mod = getEnumFromParam(Modification.class, modification);
+            // Require the descending modification to be explicitly requested.
+            if (ALL.equals(modification)) {
+                mod.remove(Modification.DESCENDING);
+            }
+            return mod;
         }
 
         /**
