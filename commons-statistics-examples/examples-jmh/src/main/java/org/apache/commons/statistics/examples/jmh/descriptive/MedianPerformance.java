@@ -204,7 +204,7 @@ public class MedianPerformance {
         private static Median withPartition(String name, String prefix) {
             return Median.withDefaults()
                 .withOverwrite(true)
-                .withPartition(QuantilePerformance.createPartition(name, prefix, 0));
+                .withPartition(QuantilePerformance.createPartition(name, prefix, 0, 0));
         }
     }
 
