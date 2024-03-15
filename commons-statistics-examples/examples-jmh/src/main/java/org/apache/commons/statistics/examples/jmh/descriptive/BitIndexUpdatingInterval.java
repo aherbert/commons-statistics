@@ -36,10 +36,6 @@ final class BitIndexUpdatingInterval implements UpdatingInterval, IntervalAnalys
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
     private static final int DIVIDE_BY_64 = 6;
-    /** A mask with every 8th bit set. */
-    private static final long MASK_8 = 0b0000000100000001000000010000000100000001000000010000000100000001L;
-    /** A mask with every 16th bit set. */
-    private static final long MASK_16 = 0b0000000000000001000000000000000100000000000000010000000000000001L;
 
     /** Bit indexes. */
     private final long[] data;
@@ -335,35 +331,18 @@ final class BitIndexUpdatingInterval implements UpdatingInterval, IntervalAnalys
      * @return true if saturated
      */
     private boolean saturated3() {
-        // Use an approximation by compressing bits into blocks of 8 using shifts.
-        // Each block should have at least 1 bit, or fail fast.
-
-        // The right end may be truncated so process separately
-        int i = data.length;
-        long x = data[--i];
-        x = x | (x >>> 1);
-        x = x | (x >>> 2);
-        x = x | (x >>> 4);
-        // Ignore impossible to reach bits after right.
-        // Support this by setting them all to 1.
-        // mask = 11111000 = -1L << (index % 64)
-        x |= LONG_MASK << (right - left);
-
-        // mask out the bits that were shifted and test all block bits are set:
-        // MASK_8 = 0000000100000001 ...
-        if ((x & MASK_8) != MASK_8) {
-            return false;
-        }
-        while (--i >= 0) {
-            x = data[i];
+        int c = 0;
+        for (long x : data) {
+            // Shift powers of 2 and mask out the bits that were shifted
             x = x | (x >>> 1);
             x = x | (x >>> 2);
-            x = x | (x >>> 4);
-            if ((x & MASK_8) != MASK_8) {
-                return false;
-            }
+            x = (x | (x >>> 4)) & 0b0000000100000001000000010000000100000001000000010000000100000001L;
+            // Expect a population count intrinsic method
+            // Add [0, 8]
+            c += Long.bitCount(x);
         }
-        return true;
+        // Multiply by 8
+        return c << 3 >= right - left;
     }
 
     /**
@@ -372,36 +351,23 @@ final class BitIndexUpdatingInterval implements UpdatingInterval, IntervalAnalys
      * @return true if saturated
      */
     private boolean saturated4() {
-        // Use an approximation by compressing bits into blocks of 16 using shifts.
-        // Each block should have at least 1 bit, or fail fast.
-
-        // The right end may be truncated so process separately
-        int i = data.length;
-        long x = data[--i];
-        x = x | (x >>> 1);
-        x = x | (x >>> 2);
-        x = x | (x >>> 4);
-        x = x | (x >>> 8);
-        // Ignore impossible to reach bits after right.
-        // Support this by setting them all to 1.
-        // mask = 11111000 = -1L << (index % 64)
-        x |= LONG_MASK << (right - left);
-
-        // mask out the bits that were shifted and test all block bits are set:
-        // MASK_16 = 0000000000000001 ...
-        if ((x & MASK_16) != MASK_16) {
-            return false;
-        }
-        while (--i >= 0) {
-            x = data[i];
+        int c = 0;
+        for (long x : data) {
+            // Shift powers of 2 and mask out the bits that were shifted
             x = x | (x >>> 1);
             x = x | (x >>> 2);
             x = x | (x >>> 4);
-            x = x | (x >>> 8);
-            if ((x & MASK_16) != MASK_16) {
-                return false;
-            }
+            x = (x | (x >>> 8)) & 0b0000000000000001000000000000000100000000000000010000000000000001L;
+            // Count the bits using folding
+            // x = mask:
+            // 0000000000000001000000000000001000000000000000100000000000000010  (x += (x >>> 16))
+            // 0000000100000001000000100000001000000011000000110000010000000100  (x += (x >>> 32))
+            x = x + (x >>> 16); // put count of each 32 bits into their lowest 2 bits
+            x = x + (x >>> 32); // put count of each 64 bits into their lowest 3 bits
+            // Add [0, 4]
+            c += (int) x & 0b111;
         }
-        return true;
+        // Multiply by 16
+        return c << 4 >= right - left;
     }
 }
