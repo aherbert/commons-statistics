@@ -127,10 +127,11 @@ final class Partition {
      * Dual-pivot sorting requires a value of ~120. If keys are saturated between k1 and kn
      * an increase to this threshold will gain full sort performance. */
     static final int DP_QUICKSELECT_SIZE = 27;
-    /** Heap select size for single-pivot select (used for single k).
+    /** Heap select size for the distance of a single k from the edge of the range.
      * Benchmarking data in range [96, 192] suggests a value of ~15 on a
-     * variety of structured data or random data. */
-    static final int SP_HEAPSELECT_SIZE = 15;
+     * variety of structured data or random data. This holds for both single pivot and dual
+     * pivot quickselect. */
+    static final int HEAPSELECT_SIZE = 15;
     /** Default length shift for heapselect. On random data this is approximately constant
      * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
      * of the time. On non-random data then the shift has to be larger. This idea is
@@ -2256,8 +2257,8 @@ final class Partition {
         if (end > 1) {
             // Filter indices invalidated by NaN check
             if (end < a.length) {
-                for (int i = n; i > 0;) {
-                    final int v = k[--i];
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
                     if (v >= end) {
                         // swap(k, i, --n)
                         k[i] = k[--n];
@@ -3091,8 +3092,8 @@ final class Partition {
         if (end > 1) {
             // Filter indices invalidated by NaN check
             if (end < a.length) {
-                for (int i = n; i > 0;) {
-                    final int v = k[--i];
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
                     if (v >= end) {
                         // swap(k, i, --n)
                         k[i] = k[--n];
@@ -4207,8 +4208,8 @@ final class Partition {
         if (end > 1) {
             // Filter indices invalidated by NaN check
             if (end < a.length) {
-                for (int i = n; i > 0;) {
-                    final int v = k[--i];
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
                     if (v >= end) {
                         // swap(k, i, --n)
                         k[i] = k[--n];
@@ -4273,23 +4274,24 @@ final class Partition {
             return;
         }
 
-        // Why is this faster?
-        //new Partition().introselect(Partition::partitionDP, a, 0, length - 1,
-        //    IndexSet.of(k, n).interval(), dualPivotMaxDepth(length));
-
-        final UpdatingInterval keys =
-            IndexIntervals.createUpdatingInterval(k, n);
-            //BitIndexUpdatingInterval.of(k, n);
-            //IndexSet.of(k, n).interval();
-
-        // Saturation analysis is too slow to be practical
-//        if (keysAreSaturated(keys, n)) {
-//            // Use single-pivot mode as a single range as this can do a full sort
-//            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
-//            return;
-//        }
-
+        final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
+//
+//        // Saturation analysis is too slow to be practical
+////        if (keysAreSaturated(keys, n)) {
+////            // Use single-pivot mode as a single range as this can do a full sort
+////            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
+////            return;
+////        }
+//
         // Dual-pivot mode
+        // TODO - average separation analysis
+        // if (kn - k1) < MIN_SEP:
+        //    single-pivot
+        // if (kn - k1) / (n-1) < MIN_SEP:
+        //    dual-pivot with large qs size
+        // else:
+        //    dual-pivot with standard qs size
+        // Turn-off sort when kb == ka
         select(a, 0, length - 1, keys, dualPivotMaxDepth(length));
     }
 
@@ -4472,7 +4474,7 @@ final class Partition {
             //  ---------d1----------
             //          ----------d2-----------
             if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < SP_HEAPSELECT_SIZE) {
+                Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
@@ -4569,22 +4571,48 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-            // TODO
-            // Use heapselect for small distance from end (MIN_HEAPSELECT_SIZE) ?
-            // Otherwise favour a sort of small data.
+
+//            // Switch between heapselect and sort to finish the range [ka, kb].
+//            // Use heapselect when the range of keys is small compared to the data range
+//            // Otherwise favour a sort of small data.
+//            //if ((r - l) >> 3 >= (kb - ka)) {
+//            if (kb - ka <= 1) {
+//                // It is possible to use heapselect when ka and kb are close to the same end
+//                // |l|-----|ka|--------|kb|------|r|
+//                //  ---------s2----------
+//                //          ----------s4-----------
+//                if (Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
+//                    heapSelectRange(a, l, r, ka, kb);
+//                    return;
+//                }
+//            } else if (r - l < DP_QUICKSELECT_SIZE) {
+//                // Switch to a sort of small data to avoid partition overhead
+//                //Sorting.sort(a, l, r, l > 0);
+//                Sorting.sort(a, l, r);
+//                return;
+//            }
+
+            // TODO:
+            // Switch between heapselect and sort to finish the range [ka, kb].
+//            int hs = (r - l) >> 5 >= (kb - ka) ? HEAPSELECT_SIZE : HEAPSELECT_CONSTANT;
+//            int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
+            int hs = (r - l) >> 5 >= (kb - ka) ? HEAPSELECT_SIZE : HEAPSELECT_CONSTANT;
+            //int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
+            int qs = kb - ka > MIN_SEPARATION ? DP_QUICKSELECT_SIZE << 1 : DP_QUICKSELECT_SIZE;
+            qs = kb == ka ? 0 : qs;
 
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2----------
+            //  ---------s2-----------
             //          ----------s4-----------
             if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
+                Math.min(kb - l, r - ka) < hs) {
                 // Too much recursion, or ka and kb are both close to the same end
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
 
-            if (r - l < DP_QUICKSELECT_SIZE) {
+            if (r - l < qs) {
                 // Switch to a sort of small data to avoid partition overhead
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
@@ -4592,8 +4620,6 @@ final class Partition {
             }
 
             // Dual-pivot partitioning
-//            int p0 = DUAL_PIVOTING_STRATEGY.pivotIndex(a, l, r, upper);
-//            p0 = partitionDP(a, l, r, p0, upper[0], upper);
             final int p0 = partitionDP(a, l, r, upper, ka, kb);
             final int p1 = upper[0];
             final int p2 = upper[1];
@@ -4621,74 +4647,74 @@ final class Partition {
                 // Here we must process middle and possibly right
                 ka = k.left();
             }
-            // Recurse right side if required
-            if (kb > p3) {
-                if (ka >= p2) {
-                    // Entirely on right-side
-                    l = p3 + 1;
-                    if (ka < l) {
-                        ka = k.updateLeft(l);
-                    }
-                    continue;
-                }
-                select(a, p3 + 1, r, k.splitRight(p2, p3), maxDepth);
-                // Here we must process middle
-                kb = k.right();
-            }
+            // Recurse middle if required
             // Check the interval overlaps the middle; and the middle exists.
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
             // Eliminate:      ----kb                    ka----
-            if (kb <= p1 || p2 <= ka || p2 <= p1) {
-                // No middle
+            if (ka < p2 && kb > p1 && p2 > p1) {
+                // Advance lower bound
+                l = p1 + 1;
+                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+                // |l|-----------------|P|------------------|P|----|r|
+                // Eliminate:          ka1                  kb1
+                // Detect this if ka must be advanced and passes p2.
+                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
+                    if (kb <= p3) {
+                        // Entirely in middle
+                        r = p2 - 1;
+                        if (r < kb) {
+                            kb = k.updateRight(r);
+                        }
+                        continue;
+                    }
+                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
+                    // Here we must process right
+                    ka = k.left();
+                }
+            }
+            if (kb <= p3) {
+                // No right side
                 return;
             }
-            l = p1 + 1;
-            r = p2 - 1;
-            // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
-            // Detect this if ka is advanced too far.
-            if (ka < l && (ka = k.updateLeft(l)) > r) {
-                // No middle
-                return;
-            }
-            if (r < kb) {
-                kb = k.updateRight(r);
+            // Continue right
+            l = p3 + 1;
+            if (ka < l) {
+                ka = k.updateLeft(l);
             }
 
-//            // Recurse middle if required
+//            // Recurse right side if required
+//            if (kb > p3) {
+//                if (ka >= p2) {
+//                    // Entirely on right-side
+//                    l = p3 + 1;
+//                    if (ka < l) {
+//                        ka = k.updateLeft(l);
+//                    }
+//                    continue;
+//                }
+//                select(a, p3 + 1, r, k.splitRight(p2, p3), maxDepth);
+//                // Here we must process middle
+//                kb = k.right();
+//            }
 //            // Check the interval overlaps the middle; and the middle exists.
 //            //                    p0 p1                p2 p3
 //            // |l|-----------------|P|------------------|P|----|r|
 //            // Eliminate:      ----kb                    ka----
-//            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
-//                // Advance lower bound
-//                l = p1 + 1;
-//                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
-//                // |l|-----------------|P|------------------|P|----|r|
-//                // Eliminate:          ka1                  kb1
-//                // Detect this if ka must be advanced and passes p2.
-//                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
-//                    if (kb <= p3) {
-//                        // Entirely in middle
-//                        r = p2 - 1;
-//                        if (r < kb) {
-//                            kb = k.updateRight(r);
-//                        }
-//                        continue;
-//                    }
-//                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
-//                    // Here we must process right
-//                    ka = k.left();
-//                }
-//            }
-//            if (kb <= p3) {
-//                // No right side
+//            if (kb <= p1 || p2 <= ka || p2 <= p1) {
+//                // No middle
 //                return;
 //            }
-//            // Continue right
-//            l = p3 + 1;
-//            if (ka < l) {
-//                ka = k.updateLeft(l);
+//            l = p1 + 1;
+//            r = p2 - 1;
+//            // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+//            // Detect this if ka is advanced too far.
+//            if (ka < l && (ka = k.updateLeft(l)) > r) {
+//                // No middle
+//                return;
+//            }
+//            if (r < kb) {
+//                kb = k.updateRight(r);
 //            }
         }
     }
