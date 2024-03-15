@@ -2045,7 +2045,19 @@ public class QuantilePerformance {
         public void setup() {
             Objects.requireNonNull(name);
             // Direct use of heapselect. This has variations which use different
-            // optimisations for small heaps
+            // optimisations for small heaps.
+            // Note: Optimisation for small heap size (n=1,2) is not observable on large data.
+            // It requires the use of small data (e.g. len=[16, 32)) to observe differences.
+            // The main overhead is the test for insertion against the current top of the
+            // heap which grows increasingly unlikely as the range is scanned.
+            // Optimisation for n=1 is negligible; for n=2 it is up to 10%. However using only
+            // heapSelectRange2 is not as fast as the non-optimised heapSelectRange0
+            // when the heap is size 1. For n=1 the heap insertion branch prediction
+            // can learn the heap has no children and skip descending the heap, whereas
+            // heap size n=2 can descend 1 level if the child is smaller/bigger. This is not
+            // as fast as dedicated code for the single child case.
+            // This benchmark requires repeating with variable heap size to avoid branch
+            // prediction learning what to do.
             if (HEAP_SELECT.equals(name)) {
                 function = (data, indices) -> {
                     heapSelectRange0(data, 0, data.length - 1, indices[0], indices[1]);
@@ -2093,7 +2105,7 @@ public class QuantilePerformance {
          * <p>Note:
          *
          * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
-         * If removes the use of the optimised versions for a heap of size 1 or 2.
+         * It uses no optimised versions for small heaps.
          *
          * @param a Data array to use to find out the K<sup>th</sup> value.
          * @param left Lower bound (inclusive).
@@ -2120,8 +2132,7 @@ public class QuantilePerformance {
          * <p>Note:
          *
          * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
-         * If removes the use of the optimised versions for a heap of size 2, but keeps
-         * the optimised version for size 1.
+         * It uses no optimised versions for small heap of size 1.
          *
          * @param a Data array to use to find out the K<sup>th</sup> value.
          * @param left Lower bound (inclusive).
@@ -2158,8 +2169,7 @@ public class QuantilePerformance {
          * <p>Note:
          *
          * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
-         * If removes the use of the optimised versions for a heap of size 1, but keeps
-         * the optimised version for size 2.
+         * It uses optimised versions for small heap of size 2.
          *
          * @param a Data array to use to find out the K<sup>th</sup> value.
          * @param left Lower bound (inclusive).
@@ -2196,7 +2206,7 @@ public class QuantilePerformance {
          * <p>Note:
          *
          * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
-         * If maintains the optimised versions for a heap of size 1 or 2.
+         * It uses optimised versions for small heap of size 1 and 2.
          *
          * @param a Data array to use to find out the K<sup>th</sup> value.
          * @param left Lower bound (inclusive).

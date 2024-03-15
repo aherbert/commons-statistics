@@ -899,17 +899,28 @@ final class Partition {
     static void partitionMinIgnoreZeros(double[] data, int left, int right) {
         // Mitigate worst case performance on descending data by backward sweep
         double min = data[left];
-        int j = left;
         for (int i = right + 1; --i > left;) {
             final double v = data[i];
             if (v < min) {
+                data[i] = min;
                 min = v;
-                j = i;
             }
         }
-        //swap(data, left, j)
-        data[j] = data[left];
         data[left] = min;
+
+//        // Mitigate worst case performance on descending data by backward sweep
+//        double min = data[left];
+//        int j = left;
+//        for (int i = right + 1; --i > left;) {
+//            final double v = data[i];
+//            if (v < min) {
+//                min = v;
+//                j = i;
+//            }
+//        }
+//        //swap(data, left, j)
+//        data[j] = data[left];
+//        data[left] = min;
     }
 
     /**
@@ -925,48 +936,68 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMin2IgnoreZeros(double[] data, int left, int right) {
-        int j0 = left;
-        int j1 = left + 1;
-        if (data[j1] < data[j0]) {
-            final double v = data[j0];
-            data[j0] = data[j1];
-            data[j1] = v;
+        double min1 = data[left + 1];
+        if (min1 < data[left]) {
+            min1 = data[left];
+            data[left] = data[left + 1];
         }
-        double min0 = data[j0];
-        double min1 = data[j1];
-
         // Mitigate worst case performance on descending data by backward sweep
-        for (int i = right + 1, end = j1; --i > end;) {
+        for (int i = right + 1, end = left + 1; --i > end;) {
             final double v = data[i];
             if (v < min1) {
-                if (v < min0) {
-                    j1 = j0;
-                    j0 = i;
-                    min1 = min0;
-                    min0 = v;
+                data[i] = min1;
+                if (v < data[left]) {
+                    min1 = data[left];
+                    data[left] = v;
                 } else {
-                    j1 = i;
                     min1 = v;
                 }
             }
         }
-
-        // Move two smallest values taking care to not overwrite min values
-        final double v0 = data[left];
-        final double v1 = data[left + 1];
-        data[left] = min0;
         data[left + 1] = min1;
-        if (j1 == left) {
-            // |j1|  |......|j0|..........  Found 1 value below the smaller of the original pair
-            data[j0] = v1;
-        } else {
-            // |j0|j1|....................  Just overwrite the same values
-            // |j0|  |......|j1|..........  Found 1 value below the larger of the original pair
-            // |  |  |......|j0|....|j1|..  Found multiple smaller values
-            // |  |  |......|j1|....|j0|..  Found multiple smaller values
-            data[j0] = v0;
-            data[j1] = v1;
-        }
+
+//        int j0 = left;
+//        int j1 = left + 1;
+//        if (data[j1] < data[j0]) {
+//            final double v = data[j0];
+//            data[j0] = data[j1];
+//            data[j1] = v;
+//        }
+//        double min0 = data[j0];
+//        double min1 = data[j1];
+//
+//        // Mitigate worst case performance on descending data by backward sweep
+//        for (int i = right + 1, end = j1; --i > end;) {
+//            final double v = data[i];
+//            if (v < min1) {
+//                if (v < min0) {
+//                    j1 = j0;
+//                    j0 = i;
+//                    min1 = min0;
+//                    min0 = v;
+//                } else {
+//                    j1 = i;
+//                    min1 = v;
+//                }
+//            }
+//        }
+//
+//        // Move two smallest values taking care to not overwrite min values
+//        final double v0 = data[left];
+//        final double v1 = data[left + 1];
+//        data[left] = min0;
+//        data[left + 1] = min1;
+//        if (j1 == left) {
+//            // |j1|  |......|j0|..........  Found 1 value below the smaller of the original pair
+//            data[j0] = v1;
+//        } else {
+//            // |j0|j1|....................  Just overwrite the same values
+//            // |j0|  |......|j1|..........  Found 1 value below the larger of the original pair
+//            // |  |  |......|j0|....|j1|..  Found multiple smaller values
+//            // |  |  |......|j1|....|j0|..  Found multiple smaller values
+//            data[j0] = v0;
+//            data[j1] = v1;
+//        }
     }
 
     /**
@@ -984,17 +1015,29 @@ final class Partition {
     static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
         // Mitigate worst case performance on descending data by backward sweep
         double max = data[right];
-        int j = right;
         for (int i = left - 1; ++i < right;) {
             final double v = data[i];
             if (v > max) {
+                data[i] = max;
                 max = v;
-                j = i;
             }
         }
         //swap(data, right, j)
-        data[j] = data[right];
         data[right] = max;
+
+//        // Mitigate worst case performance on descending data by backward sweep
+//        double max = data[right];
+//        int j = right;
+//        for (int i = left - 1; ++i < right;) {
+//            final double v = data[i];
+//            if (v > max) {
+//                max = v;
+//                j = i;
+//            }
+//        }
+//        //swap(data, right, j)
+//        data[j] = data[right];
+//        data[right] = max;
     }
 
     /**
@@ -1010,48 +1053,68 @@ final class Partition {
      * @param right Upper bound (inclusive).
      */
     static void partitionMax2IgnoreZeros(double[] data, int left, int right) {
-        int j0 = right;
-        int j1 = right - 1;
-        if (data[j1] > data[j0]) {
-            final double v = data[j0];
-            data[j0] = data[j1];
-            data[j1] = v;
+        double max1 = data[right - 1];
+        if (max1 > data[right]) {
+            max1 = data[right];
+            data[right] = data[right - 1];
         }
-        double max0 = data[j0];
-        double max1 = data[j1];
-
         // Mitigate worst case performance on descending data by backward sweep
-        for (int i = left - 1, end = j1; ++i < end;) {
+        for (int i = left - 1, end = right - 1; ++i < end;) {
             final double v = data[i];
             if (v > max1) {
-                if (v > max0) {
-                    j1 = j0;
-                    j0 = i;
-                    max1 = max0;
-                    max0 = v;
+                data[i] = max1;
+                if (v > data[right]) {
+                    max1 = data[right];
+                    data[right] = v;
                 } else {
-                    j1 = i;
                     max1 = v;
                 }
             }
         }
-
-        // Move two largest values taking care to not overwrite max values
-        final double v0 = data[right];
-        final double v1 = data[right - 1];
-        data[right] = max0;
         data[right - 1] = max1;
-        if (j1 == right) {
-            // ......|j0|..........|  |j1|  Found 1 value above the smaller of the original pair
-            data[j0] = v1;
-        } else {
-            // ....................|j1|j0|  Just overwrite the same values
-            // ......|j1|..........|  |j0|  Found 1 value above the larger of the original pair
-            // ......|j0|....|j1|..|  |  |  Found multiple larger values
-            // ......|j1|....|j0|..|  |  |  Found multiple larger values
-            data[j0] = v0;
-            data[j1] = v1;
-        }
+
+//        int j0 = right;
+//        int j1 = right - 1;
+//        if (data[j1] > data[j0]) {
+//            final double v = data[j0];
+//            data[j0] = data[j1];
+//            data[j1] = v;
+//        }
+//        double max0 = data[j0];
+//        double max1 = data[j1];
+//
+//        // Mitigate worst case performance on descending data by backward sweep
+//        for (int i = left - 1, end = j1; ++i < end;) {
+//            final double v = data[i];
+//            if (v > max1) {
+//                if (v > max0) {
+//                    j1 = j0;
+//                    j0 = i;
+//                    max1 = max0;
+//                    max0 = v;
+//                } else {
+//                    j1 = i;
+//                    max1 = v;
+//                }
+//            }
+//        }
+//
+//        // Move two largest values taking care to not overwrite max values
+//        final double v0 = data[right];
+//        final double v1 = data[right - 1];
+//        data[right] = max0;
+//        data[right - 1] = max1;
+//        if (j1 == right) {
+//            // ......|j0|..........|  |j1|  Found 1 value above the smaller of the original pair
+//            data[j0] = v1;
+//        } else {
+//            // ....................|j1|j0|  Just overwrite the same values
+//            // ......|j1|..........|  |j0|  Found 1 value above the larger of the original pair
+//            // ......|j0|....|j1|..|  |  |  Found multiple larger values
+//            // ......|j1|....|j0|..|  |  |  Found multiple larger values
+//            data[j0] = v0;
+//            data[j1] = v1;
+//        }
     }
 
     /**
@@ -1138,10 +1201,8 @@ final class Partition {
      * @see #heapSelect(double[], int, int, int, int)
      */
     static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
-        // TODO:
-        // If the range is large relative to the left-right length then do an insertion sort.
-
-        // Avoid the overhead of heap select on tiny data (supports right <= left).
+        // Combine the test for right <= left with
+        // avoiding the overhead of heap select on tiny data.
         if (right - left < MIN_HEAPSELECT_SIZE) {
             Sorting.sort(a, left, right);
             return;
@@ -1151,33 +1212,13 @@ final class Partition {
         // |l|-----|ka|--------|kb|------|r|
         // |---------d1-----------|
         //         |----------d2-----------|
-
-        // TODO - decide if small k is worth optimising.
-        // If this is only called with length of 2 then we could drop the optimisation
-        // for k1 if speed on various data is the same.
-
+        // Note: Optimisation for small heap size (n=1,2) is negligible.
+        // The main overhead is the test for insertion against the current top of the heap
+        // which grows increasingly unlikely as the range is scanned.
         if (kb - left < right - ka) {
-            // Optimise
-            if (kb - 1 <= left) {
-                if (kb == left) {
-                    partitionMinIgnoreZeros(a, left, right);
-                } else {
-                    partitionMin2IgnoreZeros(a, left, right);
-                }
-            } else {
-                partitionMinK(a, left, right, kb, kb - ka);
-            }
+            partitionMinK(a, left, right, kb, kb - ka);
         } else {
-            // Optimise
-            if (ka + 1 >= right) {
-                if (ka == right) {
-                    partitionMaxIgnoreZeros(a, left, right);
-                } else {
-                    partitionMax2IgnoreZeros(a, left, right);
-                }
-            } else {
-                partitionMaxK(a, left, right, ka, kb - ka);
-            }
+            partitionMaxK(a, left, right, ka, kb - ka);
         }
     }
 
@@ -1215,9 +1256,10 @@ final class Partition {
         // Mitigate worst case performance on descending data by backward sweep
         double max = a[left];
         for (int i = right + 1; --i > k;) {
-            if (a[i] < max) {
-                maxHeapSiftDown(a, a[i], left, left, end);
+            final double v = a[i];
+            if (v < max) {
                 a[i] = max;
+                maxHeapSiftDown(a, v, left, left, end);
                 max = a[left];
             }
         }
@@ -1316,9 +1358,10 @@ final class Partition {
         // Mitigate worst case performance on descending data by backward sweep
         double min = a[right];
         for (int i = left - 1; ++i < k;) {
-            if (a[i] > min) {
-                minHeapSiftDown(a, a[i], right, right, end);
+            final double v = a[i];
+            if (v > min) {
                 a[i] = min;
+                minHeapSiftDown(a, v, right, right, end);
                 min = a[right];
             }
         }
