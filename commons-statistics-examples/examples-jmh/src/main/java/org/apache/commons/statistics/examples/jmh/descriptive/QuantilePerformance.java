@@ -2044,10 +2044,26 @@ public class QuantilePerformance {
         @Setup
         public void setup() {
             Objects.requireNonNull(name);
-            // Direct use of heapselect
+            // Direct use of heapselect. This has variations which use different
+            // optimisations for small heaps
             if (HEAP_SELECT.equals(name)) {
                 function = (data, indices) -> {
-                    Partition.heapSelectRange(data, 0, data.length - 1, indices[0], indices[1]);
+                    heapSelectRange0(data, 0, data.length - 1, indices[0], indices[1]);
+                    return extractIndices(data, indices[0], indices[1]);
+                };
+            } else if ((HEAP_SELECT + "1").equals(name)) {
+                function = (data, indices) -> {
+                    heapSelectRange1(data, 0, data.length - 1, indices[0], indices[1]);
+                    return extractIndices(data, indices[0], indices[1]);
+                };
+            } else if ((HEAP_SELECT + "2").equals(name)) {
+                function = (data, indices) -> {
+                    heapSelectRange2(data, 0, data.length - 1, indices[0], indices[1]);
+                    return extractIndices(data, indices[0], indices[1]);
+                };
+            } else if ((HEAP_SELECT + "12").equals(name)) {
+                function = (data, indices) -> {
+                    heapSelectRange12(data, 0, data.length - 1, indices[0], indices[1]);
                     return extractIndices(data, indices[0], indices[1]);
                 };
             // introselect methods - these should be configured to not use heapselect
@@ -2067,6 +2083,154 @@ public class QuantilePerformance {
                 };
             } else {
                 throw new IllegalStateException("Unknown edge selector function: " + name);
+            }
+        }
+
+        /**
+         * Partition the elements between {@code ka} and {@code kb} using a heap select
+         * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+         *
+         * <p>Note:
+         *
+         * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
+         * If removes the use of the optimised versions for a heap of size 1 or 2.
+         *
+         * @param a Data array to use to find out the K<sup>th</sup> value.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param ka Lower index to select.
+         * @param kb Upper index to select.
+         */
+        static void heapSelectRange0(double[] a, int left, int right, int ka, int kb) {
+            if (right - left < Partition.MIN_HEAPSELECT_SIZE) {
+                Sorting.sort(a, left, right);
+                return;
+            }
+            if (kb - left < right - ka) {
+                Partition.partitionMinK(a, left, right, kb, kb - ka);
+            } else {
+                Partition.partitionMaxK(a, left, right, ka, kb - ka);
+            }
+        }
+
+        /**
+         * Partition the elements between {@code ka} and {@code kb} using a heap select
+         * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+         *
+         * <p>Note:
+         *
+         * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
+         * If removes the use of the optimised versions for a heap of size 2, but keeps
+         * the optimised version for size 1.
+         *
+         * @param a Data array to use to find out the K<sup>th</sup> value.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param ka Lower index to select.
+         * @param kb Upper index to select.
+         */
+        static void heapSelectRange1(double[] a, int left, int right, int ka, int kb) {
+            if (right - left < Partition.MIN_HEAPSELECT_SIZE) {
+                Sorting.sort(a, left, right);
+                return;
+            }
+            if (kb - left < right - ka) {
+                // Optimise
+                if (kb == left) {
+                    Partition.partitionMinIgnoreZeros(a, left, right);
+                } else {
+                    Partition.partitionMinK(a, left, right, kb, kb - ka);
+                }
+            } else {
+                // Optimise
+                if (ka == right) {
+                    Partition.partitionMaxIgnoreZeros(a, left, right);
+                } else {
+                    Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                }
+            }
+        }
+
+        /**
+         * Partition the elements between {@code ka} and {@code kb} using a heap select
+         * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+         *
+         * <p>Note:
+         *
+         * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
+         * If removes the use of the optimised versions for a heap of size 1, but keeps
+         * the optimised version for size 2.
+         *
+         * @param a Data array to use to find out the K<sup>th</sup> value.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param ka Lower index to select.
+         * @param kb Upper index to select.
+         */
+        static void heapSelectRange2(double[] a, int left, int right, int ka, int kb) {
+            if (right - left < Partition.MIN_HEAPSELECT_SIZE) {
+                Sorting.sort(a, left, right);
+                return;
+            }
+            if (kb - left < right - ka) {
+                // Optimise
+                if (kb - 1 <= left) {
+                    Partition.partitionMin2IgnoreZeros(a, left, right);
+                } else {
+                    Partition.partitionMinK(a, left, right, kb, kb - ka);
+                }
+            } else {
+                // Optimise
+                if (ka + 1 >= right) {
+                    Partition.partitionMax2IgnoreZeros(a, left, right);
+                } else {
+                    Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                }
+            }
+        }
+
+        /**
+         * Partition the elements between {@code ka} and {@code kb} using a heap select
+         * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+         *
+         * <p>Note:
+         *
+         * <p>This is a copy of {@link Partition#heapSelectRange(double[], int, int, int, int)}.
+         * If maintains the optimised versions for a heap of size 1 or 2.
+         *
+         * @param a Data array to use to find out the K<sup>th</sup> value.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param ka Lower index to select.
+         * @param kb Upper index to select.
+         */
+        static void heapSelectRange12(double[] a, int left, int right, int ka, int kb) {
+            if (right - left < Partition.MIN_HEAPSELECT_SIZE) {
+                Sorting.sort(a, left, right);
+                return;
+            }
+            if (kb - left < right - ka) {
+                // Optimise
+                if (kb - 1 <= left) {
+                    if (kb == left) {
+                        Partition.partitionMinIgnoreZeros(a, left, right);
+                    } else {
+                        Partition.partitionMin2IgnoreZeros(a, left, right);
+                    }
+                } else {
+                    Partition.partitionMinK(a, left, right, kb, kb - ka);
+                }
+            } else {
+                // Optimise
+                if (ka + 1 >= right) {
+                    if (ka == right) {
+                        Partition.partitionMaxIgnoreZeros(a, left, right);
+                    } else {
+                        Partition.partitionMax2IgnoreZeros(a, left, right);
+                    }
+                } else {
+                    Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                }
             }
         }
 

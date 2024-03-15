@@ -1151,10 +1151,33 @@ final class Partition {
         // |l|-----|ka|--------|kb|------|r|
         // |---------d1-----------|
         //         |----------d2-----------|
+
+        // TODO - decide if small k is worth optimising.
+        // If this is only called with length of 2 then we could drop the optimisation
+        // for k1 if speed on various data is the same.
+
         if (kb - left < right - ka) {
-            partitionMinK(a, left, right, kb, kb - ka);
+            // Optimise
+            if (kb - 1 <= left) {
+                if (kb == left) {
+                    partitionMinIgnoreZeros(a, left, right);
+                } else {
+                    partitionMin2IgnoreZeros(a, left, right);
+                }
+            } else {
+                partitionMinK(a, left, right, kb, kb - ka);
+            }
         } else {
-            partitionMaxK(a, left, right, ka, kb - ka);
+            // Optimise
+            if (ka + 1 >= right) {
+                if (ka == right) {
+                    partitionMaxIgnoreZeros(a, left, right);
+                } else {
+                    partitionMax2IgnoreZeros(a, left, right);
+                }
+            } else {
+                partitionMaxK(a, left, right, ka, kb - ka);
+            }
         }
     }
 
@@ -1179,19 +1202,6 @@ final class Partition {
      * @param count Size of range to sort below k.
      */
     static void partitionMinK(double[] a, int left, int right, int k, int count) {
-        // Optimise
-        if (k - 1 <= left) {
-            // TODO - decide if this is worth optimising.
-            // If this is only called with length of 2 then we could drop the optimisation
-            // for k1 if speed on various data is the same.
-            if (k == left) {
-                partitionMinIgnoreZeros(a, left, right);
-            } else {
-                partitionMin2IgnoreZeros(a, left, right);
-            }
-            return;
-        }
-
         // Create a max heap in-place in [left, k], rooted at a[left] = max
         // |l|-max-heap-|k|--------------|
         // Build the heap using Floyd's heap-construction algorithm for heap size n.
@@ -1293,19 +1303,6 @@ final class Partition {
      * @param count Size of range to sort below k.
      */
     static void partitionMaxK(double[] a, int left, int right, int k, int count) {
-        // Optimise
-        if (k + 1 >= right) {
-            // TODO - decide if this is worth optimising.
-            // If this is only called with length of 2 then we could drop the optimisation
-            // for k1 if speed on various data is the same.
-            if (k == right) {
-                partitionMaxIgnoreZeros(a, left, right);
-            } else {
-                partitionMax2IgnoreZeros(a, left, right);
-            }
-            return;
-        }
-
         // Create a min heap in-place in [k, right], rooted at a[right] = min
         // |--------------|k|-min-heap-|r|
         // Build the heap using Floyd's heap-construction algorithm for heap size n.
