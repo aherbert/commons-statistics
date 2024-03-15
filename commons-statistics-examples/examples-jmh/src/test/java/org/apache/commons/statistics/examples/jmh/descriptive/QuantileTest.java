@@ -57,6 +57,40 @@ class QuantileTest {
         Assertions.assertThrows(NullPointerException.class, () -> m.withKthSelector(null));
     }
 
+    @Test
+    void testProbabiiltiesThrows() {
+        for (final int n : new int[] {-1, -42, Integer.MIN_VALUE}) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(n));
+            Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(n, 0.5, 0.75));
+        }
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, -0.5, 0.75));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, 0.5, 1.75));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, 0.75, 0.75));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, 0.75, 0.5));
+        final double nan = Double.NaN;
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, nan, 0.5));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, 0.5, nan));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(1, nan, nan));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testProbabilities"})
+    void testProbabilities(int n, double p1, double p2, double[] expected) {
+        Assertions.assertArrayEquals(expected, Quantile.probabilities(n, p1, p2), 1e-10);
+    }
+
+    static Stream<Arguments> testProbabilities() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        builder.add(Arguments.of(1, 0.0, 1.0, new double[] {0.5}));
+        builder.add(Arguments.of(2, 0.0, 1.0, new double[] {1.0 / 3, 2.0 / 3}));
+        builder.add(Arguments.of(5, 0.0, 1.0, new double[] {1.0 / 6, 2.0 / 6, 3.0 / 6, 4.0 / 6, 5.0 / 6}));
+        builder.add(Arguments.of(1, 0.25, 0.75, new double[] {0.5}));
+        builder.add(Arguments.of(2, 0.25, 0.75, new double[] {0.25 + 1.0 / 6, 0.25 + 2.0 / 6}));
+        builder.add(Arguments.of(1, 0.0, 0.5, new double[] {0.25}));
+        builder.add(Arguments.of(2, 0.0, 0.5, new double[] {1.0 / 6, 2.0 / 6}));
+        return builder.build();
+    }
+
     @ParameterizedTest
     @MethodSource(value = {"testQuantile"})
     void testQuantileSPH(double[] values, double[] p, double[][] expected, double delta) {
