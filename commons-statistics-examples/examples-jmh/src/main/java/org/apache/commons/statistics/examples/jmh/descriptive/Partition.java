@@ -163,6 +163,17 @@ final class Partition {
     private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
     /** Message for an unsupported introselect configuration. */
     private static final String UNSUPPORTED_INTROSELECT = "Unsupported introselect: ";
+    /** Number of keys for saturation analysis. */
+    private static final int SATURATION_ANALYSIS_COUNT = 10;
+    /** Separation distance for saturation analysis, expressed as log2(distance). */
+    private static final int MIN_SEPARATION = 3;
+    /** Separation distance for saturation analysis. */
+    private static final int MIN_SEPARATION_DISTANCE = 1 << MIN_SEPARATION;
+    /** Size to use internal sort implementation; otherwise delegate to JDK's Arrays sort.
+     * This threshold avoids calling {@link Arrays#sort(double[], int, int)} when
+     * the size is small. In this case an insertion sort will likely be used by the JDK.
+     * It avoids all NaN and signed zero processing being repeated by the JDK method. */
+    private static final int JDK_SORT_SIZE = 80;
 
     /** Transformer factory for double data with the behaviour of a JDK sort.
      * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
@@ -1733,7 +1744,7 @@ final class Partition {
     static boolean keysAreSaturated(int size, int[] k, int n, int minKeys,
         int compression, double saturation) {
         // Check if the number of keys are small, or if they could saturated the range
-        if (k.length < Math.max(minKeys, n >>> compression)) {
+        if (k.length < Math.max(minKeys, size >>> compression)) {
             return false;
         }
         // Keys could cover the entire data.
@@ -1759,6 +1770,22 @@ final class Partition {
         // Estimate number of indices to be sorted
         final long target = (long) keys.cardinality() << compression;
         return target >= limit;
+    }
+
+    /**
+     * Test if the {@code keys} are saturated.
+     *
+     * @param keys Keys.
+     * @param n Count of indices.
+     * @return true if saturated
+     */
+    private static boolean keysAreSaturated(UpdatingInterval keys, int n) {
+        // Only perform saturation analysis if is possible to saturate the range
+        if (!(keys instanceof IntervalAnalysis) ||
+            n < Math.max(SATURATION_ANALYSIS_COUNT, (keys.right() - keys.left()) >>> MIN_SEPARATION)) {
+            return false;
+        }
+        return ((IntervalAnalysis) keys).saturated(MIN_SEPARATION);
     }
 
     /**
@@ -4199,9 +4226,7 @@ final class Partition {
         }
 
         // If the keys are not separated then they are effectively a single key.
-        // TODO:
-        // Change to use a MIN_SEPARATION size (as a power of 2)
-        if (n == 2 && Math.abs(k[0] - k[1]) < MIN_HEAPSELECT_SIZE) {
+        if (n == 2 && Math.abs(k[0] - k[1]) < MIN_SEPARATION_DISTANCE) {
             final int k1 = Math.min(k[0], k[1]);
             final int kn = Math.max(k[0], k[1]);
             select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
@@ -4210,27 +4235,14 @@ final class Partition {
 
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
 
-//        // TODO:
-//        // Do saturation analysis. If saturated then use SP mode as this can do a full sort.
-//        // Cannot assume keys are BitIndexUpdatingInterval as sorted input keys will
-//        // return a KeyUpdatingInterval.
-//        // Have an DensityAnalysis interface that implementations can implement.
-//        // E.g. saturated(int power). Check for saturation at a given power of 2.
-//        // Make a method:
-//        if (highDensity(keys)) { ...
-//        if (n > 10 && keys instanceof DensityAnalysis) {
-//            // Occurs when keys are high-density.
-//            // If saturated process as a single range.
-//            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
-//            return;
-//        }
+        if (keysAreSaturated(keys, n)) {
+            // Use single-pivot mode as a single range as this can do a full sort
+            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
+            return;
+        }
 
-        // Ideal dual pivot recursion will take log3(n) steps as data is
-        // divided into length (n/3) at each iteration; add contingency
-        // by doubling this value.
-        int maxDepth = dualPivotMaxDepth(length);
-
-        select(a, 0, length - 1, keys, maxDepth);
+        // Dual-pivot mode
+        select(a, 0, length - 1, keys, dualPivotMaxDepth(length));
     }
 
 //    /**
@@ -4417,17 +4429,17 @@ final class Partition {
                 return;
             }
 
-//            // TODO - optimise this
-//            // sort when ka and kb span the range
-//            if ((ka - l) + (r - kb) < 8) {
-//                // Handle small arrays (since we have already processed NaN and signed zeros)
-//                if (r - l < 80) {
-//                    Sorting.sort(a, l, r);
-//                } else {
-//                    Arrays.sort(a, l, r + 1);
-//                }
-//                return;
-//            }
+            // TODO - optimise this
+            // sort when ka and kb span the range
+            if ((ka - l) + (r - kb) < MIN_SEPARATION_DISTANCE) {
+                // Handle small arrays (since we have already processed NaN and signed zeros)
+                if (r - l < JDK_SORT_SIZE) {
+                    Sorting.sort(a, l, r);
+                } else {
+                    Arrays.sort(a, l, r + 1);
+                }
+                return;
+            }
 
             // TODO: move choice of pivot into the partition function
             // Pick a pivot and partition
