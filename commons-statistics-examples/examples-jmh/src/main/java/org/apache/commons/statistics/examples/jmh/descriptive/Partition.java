@@ -4233,7 +4233,14 @@ final class Partition {
             return;
         }
 
-        final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
+        // Why is this faster?
+        //new Partition().introselect(Partition::partitionDP, a, 0, length - 1,
+        //    IndexSet.of(k, n).interval(), dualPivotMaxDepth(length));
+
+        final UpdatingInterval keys =
+            IndexIntervals.createUpdatingInterval(k, n);
+            //BitIndexUpdatingInterval.of(k, n);
+            //IndexSet.of(k, n).interval();
 
         // Saturation analysis is too slow to be practical
 //        if (keysAreSaturated(keys, n)) {
@@ -4539,11 +4546,14 @@ final class Partition {
 
             if (r - l < DP_QUICKSELECT_SIZE) {
                 // Switch to a sort of small data to avoid partition overhead
+                //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
 
             // Dual-pivot partitioning
+//            int p0 = DUAL_PIVOTING_STRATEGY.pivotIndex(a, l, r, upper);
+//            p0 = partitionDP(a, l, r, p0, upper[0], upper);
             final int p0 = partitionDP(a, l, r, upper, ka, kb);
             final int p1 = upper[0];
             final int p2 = upper[1];
@@ -4588,8 +4598,8 @@ final class Partition {
             // Check the interval overlaps the middle; and the middle exists.
             //                    p0 p1                p2 p3
             // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:     ----kb                    ka----
-            if (kb <= p1 || p2 <= ka || p2 - p1 <= 2) {
+            // Eliminate:      ----kb                    ka----
+            if (kb <= p1 || p2 <= ka || p2 <= p1) {
                 // No middle
                 return;
             }
