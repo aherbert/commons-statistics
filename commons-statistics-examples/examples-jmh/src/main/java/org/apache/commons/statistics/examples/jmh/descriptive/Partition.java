@@ -2329,11 +2329,11 @@ final class Partition {
             introselect(part, a, 0, right, k, 0, unique - 1, maxDepth);
         } else if (keyStrategy == KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final ScanningKeyInterval keys = ScanningKeyInterval.of(k, unique);
+            final SearchableInterval keys = ScanningKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final BinarySearchKeyInterval keys = BinarySearchKeyInterval.of(k, unique);
+            final SearchableInterval keys = BinarySearchKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_SET) {
             // Note: Here we do not have to sort keys.
@@ -2345,14 +2345,14 @@ final class Partition {
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.KEY_UPDATING_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final KeyUpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
+            final UpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET_UPDATING_INTERVAL) {
             final UpdatingInterval keys = IndexSet.of(k, n).interval();
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
-            final KeyIndexIterator keys = KeyIndexIterator.of(k, unique);
+            final IndexIterator keys = KeyIndexIterator.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_ITERATOR) {
             final IndexIterator keys = CompressedIndexSet.iterator(compression, k, n);
@@ -3165,11 +3165,11 @@ final class Partition {
             throw new IllegalStateException(UNSUPPORTED_INTROSELECT + keyStrategy);
         } else if (keyStrategy == KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final ScanningKeyInterval keys = ScanningKeyInterval.of(k, unique);
+            final SearchableInterval keys = ScanningKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final BinarySearchKeyInterval keys = BinarySearchKeyInterval.of(k, unique);
+            final SearchableInterval keys = BinarySearchKeyInterval.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_SET) {
             // Note: Here we do not have to sort keys.
@@ -3177,18 +3177,18 @@ final class Partition {
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET) {
             // Note: Here we do not have to sort keys.
-            final IndexSet keys = IndexSet.of(k, n);
+            final SearchableInterval keys = IndexSet.of(k, n);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.KEY_UPDATING_INTERVAL) {
             final int unique = Sorting.sortIndices(k, n);
-            final KeyUpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
+            final UpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET_UPDATING_INTERVAL) {
             final UpdatingInterval keys = IndexSet.of(k, n).interval();
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
-            final KeyIndexIterator keys = KeyIndexIterator.of(k, unique);
+            final IndexIterator keys = KeyIndexIterator.of(k, unique);
             introselect(part, a, 0, right, keys, keys.left(), keys.right(), maxDepth);
         } else if (keyStrategy == KeyStrategy.COMPRESSED_INDEX_ITERATOR) {
             final IndexIterator keys = CompressedIndexSet.iterator(compression, k, n);
@@ -4235,11 +4235,12 @@ final class Partition {
 
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
 
-        if (keysAreSaturated(keys, n)) {
-            // Use single-pivot mode as a single range as this can do a full sort
-            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
-            return;
-        }
+        // Saturation analysis is too slow to be practical
+//        if (keysAreSaturated(keys, n)) {
+//            // Use single-pivot mode as a single range as this can do a full sort
+//            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
+//            return;
+//        }
 
         // Dual-pivot mode
         select(a, 0, length - 1, keys, dualPivotMaxDepth(length));
@@ -4429,17 +4430,18 @@ final class Partition {
                 return;
             }
 
-            // TODO - optimise this
-            // sort when ka and kb span the range
-            if ((ka - l) + (r - kb) < MIN_SEPARATION_DISTANCE) {
-                // Handle small arrays (since we have already processed NaN and signed zeros)
-                if (r - l < JDK_SORT_SIZE) {
-                    Sorting.sort(a, l, r);
-                } else {
-                    Arrays.sort(a, l, r + 1);
-                }
-                return;
-            }
+            // Saturation analysis is too slow to be practical
+//            // TODO - optimise this
+//            // sort when ka and kb span the range
+//            if ((ka - l) + (r - kb) < MIN_SEPARATION_DISTANCE) {
+//                // Handle small arrays (since we have already processed NaN and signed zeros)
+//                if (r - l < JDK_SORT_SIZE) {
+//                    Sorting.sort(a, l, r);
+//                } else {
+//                    Arrays.sort(a, l, r + 1);
+//                }
+//                return;
+//            }
 
             // TODO: move choice of pivot into the partition function
             // Pick a pivot and partition
