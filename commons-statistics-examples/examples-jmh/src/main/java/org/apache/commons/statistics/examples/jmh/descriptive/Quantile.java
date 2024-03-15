@@ -72,6 +72,8 @@ public final class Quantile {
     private static final String INVALID_SIZE = "Invalid size: ";
     /** Message when the number of quantiles in a range is not valid. */
     private static final String INVALID_NUMBER_OF_QUANTILES = "Invalid number of quantiles: ";
+    /** Message when the number of probabilities in a range is not valid. */
+    private static final String INVALID_NUMBER_OF_PROBABILITIES = "Invalid number of probabilities: ";
 
     /** Default instance.
      * Note: Numpy and R use method 7 as default. Method 8 is recommended by Hyndman and Fan. */
@@ -243,6 +245,56 @@ public final class Quantile {
      */
     public Quantile with(EstimationMethod v) {
         return new Quantile(overwrite, nanPolicy, kthSelector, partition, Objects.requireNonNull(v));
+    }
+
+    /**
+     * Generate {@code n} evenly spaced probabilities in the range {@code [0, 1]}.
+     *
+     * <pre>
+     * 1/(n + 1), 2/(n + 1), ..., n/(n + 1)
+     * </pre>
+     *
+     * @param n Number of probabilities.
+     * @return the probabilities
+     * @throws IllegalArgumentException if {@code n < 1}
+     */
+    public static double[] probabilities(int n) {
+        checkNumberOfProbabilities(n);
+        final double c1 = n + 1.0;
+        final double[] p = new double[n];
+        for (int i = 0; i < n; i++) {
+            p[i] = (i + 1.0) / c1;
+        }
+        return p;
+    }
+
+    /**
+     * Generate {@code n} evenly spaced probabilities in the range {@code [p1, p2]}.
+     *
+     * <pre>
+     * w = p2 - p1
+     * p1 + w/(n + 1), p1 + 2w/(n + 1), ..., p1 + nw/(n + 1)
+     * </pre>
+     *
+     * @param n Number of probabilities.
+     * @param p1 Lower probability.
+     * @param p2 Upper probability.
+     * @return the probabilities
+     * @throws IllegalArgumentException if {@code n < 1}; if the probabilities are not in the
+     * range {@code [0, 1]}; or {@code p2 <= p1}.
+     */
+    public static double[] probabilities(int n, double p1, double p2) {
+        checkQuantile(p1);
+        checkQuantile(p2);
+        // Logic negation will detect NaN
+        if (!(p2 > p1)) {
+            throw new IllegalArgumentException("Invalid range: [" + p1 + ", " + p2 + "]");
+        }
+        final double[] p = probabilities(n);
+        for (int i = 0; i < n; i++) {
+            p[i] = (1 - p[i]) * p1 + p[i] * p2;
+        }
+        return p;
     }
 
     /**
@@ -1545,12 +1597,24 @@ public final class Quantile {
     /**
      * Check the number of quantile {@code n} is strictly positive.
      *
-     * @param c Number of quantiles.
+     * @param n Number of quantiles.
      * @throws IllegalArgumentException if {@code c < 1}
      */
-    private static void checkQuantileRange(int c) {
-        if (c < 1) {
-            throw new IllegalArgumentException(INVALID_NUMBER_OF_QUANTILES + c);
+    private static void checkQuantileRange(int n) {
+        if (n < 1) {
+            throw new IllegalArgumentException(INVALID_NUMBER_OF_QUANTILES + n);
+        }
+    }
+
+    /**
+     * Check the number of probabilities {@code n} is strictly positive.
+     *
+     * @param n Number of probabilities.
+     * @throws IllegalArgumentException if {@code c < 1}
+     */
+    private static void checkNumberOfProbabilities(int n) {
+        if (n < 1) {
+            throw new IllegalArgumentException(INVALID_NUMBER_OF_PROBABILITIES + n);
         }
     }
 
