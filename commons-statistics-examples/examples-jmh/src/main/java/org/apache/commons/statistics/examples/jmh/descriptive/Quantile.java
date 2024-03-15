@@ -64,14 +64,12 @@ public final class Quantile {
     // To allow changes to the classes performing the partitioning and
     // the estimation, methods for index selection are not public.
 
-    /** Message when the quantile is not in the range {@code [0, 1]}. */
-    private static final String INVALID_QUANTILE = "Invalid quantile: ";
-    /** Message when no quantiles are provided for the varargs method. */
-    private static final String NO_QUANTILES_SPECIFIED = "No quantiles specified";
+    /** Message when the probability is not in the range {@code [0, 1]}. */
+    private static final String INVALID_PROBABILITY = "Invalid probability: ";
+    /** Message when no probabilities are provided for the varargs method. */
+    private static final String NO_PROBABILITIES_SPECIFIED = "No probabilities specified";
     /** Message when the size is not valid. */
     private static final String INVALID_SIZE = "Invalid size: ";
-    /** Message when the number of quantiles in a range is not valid. */
-    private static final String INVALID_NUMBER_OF_QUANTILES = "Invalid number of quantiles: ";
     /** Message when the number of probabilities in a range is not valid. */
     private static final String INVALID_NUMBER_OF_PROBABILITIES = "Invalid number of probabilities: ";
 
@@ -284,8 +282,8 @@ public final class Quantile {
      * range {@code [0, 1]}; or {@code p2 <= p1}.
      */
     public static double[] probabilities(int n, double p1, double p2) {
-        checkQuantile(p1);
-        checkQuantile(p2);
+        checkProbability(p1);
+        checkProbability(p2);
         // Logic negation will detect NaN
         if (!(p2 > p1)) {
             throw new IllegalArgumentException("Invalid range: [" + p1 + ", " + p2 + "]");
@@ -298,7 +296,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -313,15 +311,15 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateSPH(double[] values, double p) {
         // Implicit NPE
         final int n = values.length;
-        checkQuantile(p);
+        checkProbability(p);
         // Special cases
         if (n <= 1) {
             return n == 0 ? Double.NaN : values[0];
@@ -334,7 +332,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -343,15 +341,15 @@ public final class Quantile {
      * Same as the method in Commons Math (but without the unnecessary heap for a single pass).
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateSPH(double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -371,7 +369,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -382,15 +380,15 @@ public final class Quantile {
      * The data coupling is undesirable.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateSPE(double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -426,7 +424,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -439,15 +437,15 @@ public final class Quantile {
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     private double evaluate(PartitionFunction part, double[] values, double p) {
         // Implicit NPE
         final int n = values.length;
-        checkQuantile(p);
+        checkProbability(p);
         // Special cases
         if (n <= 1) {
             return n == 0 ? Double.NaN : values[0];
@@ -468,22 +466,22 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     private double[] evaluate(PartitionFunction part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -524,7 +522,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -537,13 +535,13 @@ public final class Quantile {
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     private double evaluate2(PartitionFunction2 part, double[] values, double p) {
-        checkQuantile(p);
+        checkProbability(p);
         // Implicit NPE
         final int n = values.length;
         // Special cases
@@ -566,20 +564,20 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     private double[] evaluate2(PartitionFunction2 part, double[] values, double... p) {
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Implicit NPE
         final int n = values.length;
         // Special cases
@@ -623,7 +621,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -638,13 +636,13 @@ public final class Quantile {
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     private double evaluate3(PartitionFunction3 part, double[] values, double p) {
-        checkQuantile(p);
+        checkProbability(p);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -665,7 +663,7 @@ public final class Quantile {
         if (pos > i) {
             final int[] k = new int[] {i, i + 1};
             if (i < len) {
-                final int kn = i <= len ? 2 : 1;
+                final int kn = i + 1 < len ? 2 : 1;
                 part.partition(x, len, k, kn);
                 t.postProcess(x, k, kn);
             } else {
@@ -684,7 +682,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -693,13 +691,13 @@ public final class Quantile {
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     private double[] evaluate3(PartitionFunction3 part, double[] values, double... p) {
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -752,7 +750,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -764,13 +762,13 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluate(double[], double...)
      */
     public double evaluate(double[] values, double p) {
-        checkQuantile(p);
+        checkProbability(p);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -791,7 +789,7 @@ public final class Quantile {
         if (pos > i) {
             final int[] k = new int[] {i, i + 1};
             if (i < len) {
-                final int kn = i <= len ? 2 : 1;
+                final int kn = i + 1 < len ? 2 : 1;
                 Partition.select(x, len, k, kn);
                 t.postProcess(x, k, kn);
             } else {
@@ -810,19 +808,19 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluate(double[] values, double... p) {
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -876,6 +874,7 @@ public final class Quantile {
 
     /**
      * Evaluate {@code c} evenly spaced quantiles of the {@code values}.
+     * Uses the cumulative probabilities:
      *
      * <pre>
      * 1/(c + 1), 2/(c + 1), ..., c/(c + 1)
@@ -890,7 +889,7 @@ public final class Quantile {
      * @throws IllegalArgumentException if {@code c < 1}
      */
     public double[] evaluateRange(double[] values, int c) {
-        checkQuantileRange(c);
+        checkNumberOfProbabilities(c);
         // Floating-point data handling
         final DoubleDataTransformer t = transformer.get();
         final double[] x = t.preProcess(values);
@@ -947,7 +946,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>This method can be used when the values of known size are already sorted.
      *
@@ -959,14 +958,14 @@ public final class Quantile {
      *
      * @param n Size of the values.
      * @param values Values function.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if {@code size < 0}; or if the quantile {@code p} is
+     * @throws IllegalArgumentException if {@code size < 0}; or if the probability {@code p} is
      * not in the range {@code [0, 1]}
      */
     public double evaluate(int n, IntToDoubleFunction values, double p) {
         checkSize(n);
-        checkQuantile(p);
+        checkProbability(p);
         // Special case
         if (n <= 1) {
             return n == 0 ? Double.NaN : values.applyAsDouble(0);
@@ -982,7 +981,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>This method can be used when the values of known size are already sorted.
      *
@@ -994,14 +993,14 @@ public final class Quantile {
      *
      * @param n Size of the values.
      * @param values Values function.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if {@code size < 0}; if any quantile {@code p} is
-     * not in the range {@code [0, 1]}; or no quantiles are specified.
+     * @throws IllegalArgumentException if {@code size < 0}; if any probability {@code p} is
+     * not in the range {@code [0, 1]}; or no probabilities are specified.
      */
     public double[] evaluate(int n, IntToDoubleFunction values, double... p) {
         checkSize(n);
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Special case
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -1024,6 +1023,7 @@ public final class Quantile {
 
     /**
      * Evaluate {@code c} evenly spaced quantiles of the {@code values}.
+     * Uses the cumulative probabilities:
      *
      * <pre>
      * 1/(c + 1), 2/(c + 1), ..., c/(c + 1)
@@ -1045,7 +1045,7 @@ public final class Quantile {
      */
     public double[] evaluateRange(int n, IntToDoubleFunction values, int c) {
         checkSize(n);
-        checkQuantileRange(c);
+        checkNumberOfProbabilities(c);
         // Special cases
         final double[] q = new double[c];
         if (n <= 1) {
@@ -1068,22 +1068,22 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param part Partition function.
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluatePaired(PartitionFunction part, double[] values, double... p) {
         // Implicit NPE
         final int n = values.length;
-        checkQuantiles(p);
+        checkProbabilities(p);
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
@@ -1124,7 +1124,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1138,9 +1138,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateSP(double[] values, double p) {
@@ -1148,7 +1148,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1156,17 +1156,17 @@ public final class Quantile {
      * <p>Uses a single-pivot partition method.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateSP(double[] values, double... p) {
         return evaluate(kthSelector::partitionSP, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1180,9 +1180,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateBM(double[] values, double p) {
@@ -1190,7 +1190,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1198,17 +1198,17 @@ public final class Quantile {
      * <p>Uses a Bentley-McIlroy quicksort partition method.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateBM(double[] values, double... p) {
         return evaluate(kthSelector::partitionBM, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1222,9 +1222,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateSBM(double[] values, double p) {
@@ -1232,7 +1232,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1240,17 +1240,17 @@ public final class Quantile {
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateSBM(double[] values, double... p) {
         return evaluate(kthSelector::partitionSBM, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1264,9 +1264,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateDP(double[] values, double p) {
@@ -1274,7 +1274,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1282,17 +1282,17 @@ public final class Quantile {
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateDP(double[] values, double... p) {
         return evaluate(kthSelector::partitionDP, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1306,9 +1306,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateDP5(double[] values, double p) {
@@ -1316,7 +1316,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1324,17 +1324,17 @@ public final class Quantile {
      * <p>Uses a dual-pivot quicksort method by Vladimir Yaroslavskiy.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateDP5(double[] values, double... p) {
         return evaluate(kthSelector::partitionDP5, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1348,9 +1348,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateSBM2(double[] values, double p) {
@@ -1358,7 +1358,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1366,17 +1366,17 @@ public final class Quantile {
      * <p>Uses a Bentley-McIlroy quicksort partition method from Sedgewick.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateSBM2(double[] values, double... p) {
         return evaluate2(partition::partitionSBM, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1391,9 +1391,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateISP(double[] values, double p) {
@@ -1401,7 +1401,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1410,17 +1410,17 @@ public final class Quantile {
      * heapselect if quickselect convergence is slow.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateISP(double[] values, double... p) {
         return evaluate3(partition::partitionISP, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1435,9 +1435,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateIBM(double[] values, double p) {
@@ -1445,7 +1445,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1454,17 +1454,17 @@ public final class Quantile {
      * handling equal keys; switching to heapselect if quickselect convergence is slow.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateIBM(double[] values, double... p) {
         return evaluate3(partition::partitionIBM, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1480,9 +1480,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateISBM(double[] values, double p) {
@@ -1490,7 +1490,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1500,17 +1500,17 @@ public final class Quantile {
      * is slow.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateISBM(double[] values, double... p) {
         return evaluate3(partition::partitionISBM, values, p);
     }
 
     /**
-     * Evaluate the {@code p}th quantile of the values.
+     * Evaluate the {@code p}-th quantile of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1525,9 +1525,9 @@ public final class Quantile {
      * which provides better performance.
      *
      * @param values Values.
-     * @param p Quantile.
+     * @param p Probability for the quantile to compute.
      * @return the quantile
-     * @throws IllegalArgumentException if the quantile {@code p} is not in the range {@code [0, 1]}
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
      * @see #evaluateSP(double[], double...)
      */
     public double evaluateIDP(double[] values, double p) {
@@ -1535,7 +1535,7 @@ public final class Quantile {
     }
 
     /**
-     * Evaluate the {@code p}th quantiles of the values.
+     * Evaluate the {@code p}-th quantiles of the values.
      *
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
@@ -1544,41 +1544,41 @@ public final class Quantile {
      * switching to heapselect if quickselect convergence is slow.
      *
      * @param values Values.
-     * @param p Quantiles.
+     * @param p Probabilities for the quantiles to compute.
      * @return the quantiles
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
     public double[] evaluateIDP(double[] values, double... p) {
         return evaluate3(partition::partitionIDP, values, p);
     }
 
     /**
-     * Check the quantile {@code p} is in the range {@code [0, 1]}.
+     * Check the probability {@code p} is in the range {@code [0, 1]}.
      *
-     * @param p Quantile.
-     * @throws IllegalArgumentException if the quantile is not in the range {@code [0, 1]}
+     * @param p Probability for the quantile to compute.
+     * @throws IllegalArgumentException if the probability is not in the range {@code [0, 1]}
      */
-    private static void checkQuantile(double p) {
+    private static void checkProbability(double p) {
         // Logic negation will detect NaN
         if (!(p >= 0 && p <= 1)) {
-            throw new IllegalArgumentException(INVALID_QUANTILE + p);
+            throw new IllegalArgumentException(INVALID_PROBABILITY + p);
         }
     }
 
     /**
-     * Check the quantiles {@code p} are in the range {@code [0, 1]}.
+     * Check the probabilities {@code p} are in the range {@code [0, 1]}.
      *
-     * @param p Quantiles.
-     * @throws IllegalArgumentException if any quantile {@code p} is not in the range {@code [0, 1]};
-     * or no quantiles are specified.
+     * @param p Probabilities for the quantiles to compute.
+     * @throws IllegalArgumentException if any probabilities {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
      */
-    private static void checkQuantiles(double... p) {
+    private static void checkProbabilities(double... p) {
         if (p.length == 0) {
-            throw new IllegalArgumentException(NO_QUANTILES_SPECIFIED);
+            throw new IllegalArgumentException(NO_PROBABILITIES_SPECIFIED);
         }
         for (final double pp : p) {
-            checkQuantile(pp);
+            checkProbability(pp);
         }
     }
 
@@ -1591,18 +1591,6 @@ public final class Quantile {
     private static void checkSize(int n) {
         if (n < 0) {
             throw new IllegalArgumentException(INVALID_SIZE + n);
-        }
-    }
-
-    /**
-     * Check the number of quantile {@code n} is strictly positive.
-     *
-     * @param n Number of quantiles.
-     * @throws IllegalArgumentException if {@code c < 1}
-     */
-    private static void checkQuantileRange(int n) {
-        if (n < 1) {
-            throw new IllegalArgumentException(INVALID_NUMBER_OF_QUANTILES + n);
         }
     }
 
