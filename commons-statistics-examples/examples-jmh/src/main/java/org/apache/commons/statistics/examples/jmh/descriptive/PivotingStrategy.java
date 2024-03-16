@@ -283,22 +283,22 @@ enum PivotingStrategy {
      * @param a Value.
      * @param b Value.
      * @param c Value.
-     * @param i Index of a.
-     * @param j Index of b.
-     * @param k Index of c.
+     * @param ia Index of a.
+     * @param ib Index of b.
+     * @param ic Index of c.
      * @return the median index
      */
-    private static int med3(double a, double b, double c, int i, int j, int k) {
+    private static int med3(double a, double b, double c, int ia, int ib, int ic) {
         if (a < b) {
             if (b < c) {
-                return j;
+                return ib;
             }
-            return a < c ? k : i;
+            return a < c ? ic : ia;
         }
         if (b > c) {
-            return j;
+            return ib;
         }
-        return a > c ? k : i;
+        return a > c ? ic : ia;
     }
 
     /**
@@ -320,22 +320,22 @@ enum PivotingStrategy {
      * @param a Value.
      * @param b Value.
      * @param c Value.
-     * @param i Index of a.
-     * @param j Index of b.
-     * @param k Index of c.
+     * @param ia Index of a.
+     * @param ib Index of b.
+     * @param ic Index of c.
      * @return the median index
      */
-    private static int med3(int a, int b, int c, int i, int j, int k) {
+    private static int med3(int a, int b, int c, int ia, int ib, int ic) {
         if (a < b) {
             if (b < c) {
-                return j;
+                return ib;
             }
-            return a < c ? k : i;
+            return a < c ? ic : ia;
         }
         if (b > c) {
-            return j;
+            return ib;
         }
-        return a > c ? k : i;
+        return a > c ? ic : ia;
     }
 
     /**
