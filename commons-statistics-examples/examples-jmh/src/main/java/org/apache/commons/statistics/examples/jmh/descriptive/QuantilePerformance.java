@@ -1016,6 +1016,17 @@ public class QuantilePerformance {
         /** Number of repeats. */
         @Param({"10"})
         private int repeats;
+        /** Distribution mode. K can be distributed randomly or uniformly. */
+        @Param({"random"})
+        private String mode;
+        /** Separation. K can be single indices (s=0) or paired (s!=0). Paired indices are
+         * separated using the specified separation. When running in paired mode the
+         * number of k is doubled and duplicates may occur. This method is used for
+         * testing sparse or uniform distributions of paired indices that may occur when
+         * interpolating quantiles. Since the separation is allowed to be above 1 it also
+         * allows testing configurations for close indices. */
+        @Param({"0"})
+        private int s;
 
         /** Indices. */
         private int[][] indices;
@@ -1060,6 +1071,9 @@ public class QuantilePerformance {
         @Override
         @Setup(Level.Iteration)
         public void setup() {
+            if (s < 0 || s >= getLength()) {
+                throw new IllegalStateException("Invalid separation: " + s);
+            }
             super.setup();
             // Data will be randomized per iteration
             if (indices == null) {
@@ -1072,28 +1086,68 @@ public class QuantilePerformance {
                 }
             }
 
+            // Create indices in the data sample length.
+            // If a separation is provided then the length is reduced by the separation
+            // to make space for a second index.
+
             int index = 0;
             final int noOfSamples = super.size();
-            if (k > 1) {
-                final int baseLength = getLength();
-                for (int i = 0; i < noOfSamples; i++) {
-                    final int len = getDataSize(i);
-                    // Create permutation sampler for the length
-                    PermutationSampler s = samplers[len - baseLength];
-                    if (s == null) {
-                        samplers[len - baseLength] = s = new PermutationSampler(rng, len, k);
+            if ("random".equals(mode)) {
+                // random mode creates a permutation of k indices in the length
+                if (k > 1) {
+                    final int baseLength = getLength();
+                    for (int i = 0; i < noOfSamples; i++) {
+                        final int len = getDataSize(i);
+                        // Create permutation sampler for the length
+                        PermutationSampler sampler = samplers[len - baseLength];
+                        if (sampler == null) {
+                            // Reduce length by the separation
+                            final int n = len - s;
+                            samplers[len - baseLength] = sampler = new PermutationSampler(rng, n, k);
+                        }
+                        for (int j = repeats; --j >= 0;) {
+                            indices[index++] = sampler.sample();
+                        }
                     }
+                } else {
+                    // k=1: No requirement for a permutation
+                    for (int i = 0; i < noOfSamples; i++) {
+                        // Reduce length by the separation
+                        final int n = getDataSize(i) - s;
+                        for (int j = repeats; --j >= 0;) {
+                            indices[index++] = new int[] {rng.nextInt(n)};
+                        }
+                    }
+                }
+            } else if ("uniform".equals(mode)) {
+                // uniform indices with a random start
+                for (int i = 0; i < noOfSamples; i++) {
+                    // Reduce length by the separation
+                    final int n = getDataSize(i) - s;
+                    final int step = Math.max(1, (int) Math.round((double) n / k));
                     for (int j = repeats; --j >= 0;) {
-                        indices[index++] = s.sample();
+                        final int[] k1 = new int[k];
+                        int p = rng.nextInt(n);
+                        for (int m = 0; m < k; m++) {
+                            p = (p + step) % n;
+                            k1[m] = p;
+                        }
+                        indices[index++] = k1;
                     }
                 }
             } else {
-                // k=1: No requirement for a permutation
-                for (int i = 0; i < noOfSamples; i++) {
-                    final int len = getDataSize(i);
-                    for (int j = repeats; --j >= 0;) {
-                        indices[index++] = new int[] {rng.nextInt(len)};
+                throw new IllegalStateException("Unknown index mode: " + mode);
+            }
+            // Add paired indices
+            if (s > 0) {
+                for (int i = 0; i < indices.length; i++) {
+                    final int[] k1 = indices[i];
+                    final int[] k2 = new int[k1.length << 1];
+                    for (int j = 0; j < k1.length; j++) {
+                        k2[j << 1] = k1[j];
+                        k2[(j << 1) + 1] = k1[j] + s;
                     }
+                    indices[i] = k2;
                 }
             }
         }

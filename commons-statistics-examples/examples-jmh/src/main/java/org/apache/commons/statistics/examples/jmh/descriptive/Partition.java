@@ -4596,26 +4596,40 @@ final class Partition {
             // Switch between heapselect and sort to finish the range [ka, kb].
 //            int hs = (r - l) >> 5 >= (kb - ka) ? HEAPSELECT_SIZE : HEAPSELECT_CONSTANT;
 //            int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
-            int hs = (r - l) >> 5 >= (kb - ka) ? HEAPSELECT_SIZE : HEAPSELECT_CONSTANT;
-            //int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
-            int qs = kb - ka > MIN_SEPARATION ? DP_QUICKSELECT_SIZE << 1 : DP_QUICKSELECT_SIZE;
-            qs = kb == ka ? 0 : qs;
+            // DP quickselect on a single index finishing with a sort has a threshold around
+            // length 27 to avoid partition overhead. When finishing using
+            // heapselect the threshold is around 15 from the edge of the data.
+            // Heapselect should still be used when the length is large to collect
+            // indices close to the edge. Here we do a sort if the keys are separated,
+            // or turn off sorting when there is 1 effective index.
+            // If kb - ka is very large then use the configured sort threshold. This is
+            // based on the expected density of indices.
+            // If kb - ka < 8 then use the 2 * heapselect size (approx 27) to prevent excess
+            // sorting but prefer sort to heapselect even if heapselect was possible.
+            // If kb - ka <= 1 then this is used as 1 index and switch exclusively to heapselect.
 
-            // It is possible to use heapselect when ka and kb are close to the same end
-            // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2-----------
-            //          ----------s4-----------
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < hs) {
-                // Too much recursion, or ka and kb are both close to the same end
-                heapSelectRange(a, l, r, ka, kb);
-                return;
-            }
+            // Approximate speed: heapselect(n/4) == sort(n)
+            //int hs = Math.min((r - l) >> 2, HEAPSELECT_SIZE);
+            //int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
+            int qs = kb - ka > MIN_SEPARATION_DISTANCE ? HEAPSELECT_SIZE << 2 : HEAPSELECT_SIZE << 1;
+            qs = kb - ka <= 1 ? 0 : qs;
 
             if (r - l < qs) {
                 // Switch to a sort of small data to avoid partition overhead
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
+                return;
+            }
+
+            // Could not sort, or only 1 effective key.
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2-----------
+            //          ----------s4-----------
+            if (maxDepth == 0 ||
+                Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
+                // Too much recursion, or ka and kb are both close to the same end
+                heapSelectRange(a, l, r, ka, kb);
                 return;
             }
 
