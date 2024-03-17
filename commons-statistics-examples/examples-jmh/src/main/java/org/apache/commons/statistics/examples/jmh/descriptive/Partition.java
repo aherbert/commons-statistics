@@ -127,11 +127,6 @@ final class Partition {
      * Dual-pivot sorting requires a value of ~120. If keys are saturated between k1 and kn
      * an increase to this threshold will gain full sort performance. */
     static final int DP_QUICKSELECT_SIZE = 27;
-    /** Heap select size for the distance of a single k from the edge of the range.
-     * Benchmarking data in range [96, 192] suggests a value of ~15 on a
-     * variety of structured data or random data. This holds for both single pivot and dual
-     * pivot quickselect. */
-    static final int HEAPSELECT_SIZE = 15;
     /** Default length shift for heapselect. On random data this is approximately constant
      * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
      * of the time. On non-random data then the shift has to be larger. This idea is
@@ -160,21 +155,39 @@ final class Partition {
     static final int RECURSION_CONSTANT = 0;
     /** Default compression. */
     static final int COMPRESSION_LEVEL = 1;
+
+    /** Heap select size for the distance of a single k from the edge of the range.
+     * Benchmarking data in range [96, 192] suggests a value of ~15 on a
+     * variety of structured data or random data. This holds for both single pivot and dual
+     * pivot quickselect. */
+    static final int HEAPSELECT_SIZE = 15;
+    /** Sort select size for the dual-pivot select (used for multiple k).
+     * Benchmarking random data in range [162, 486] suggests a value of ~27 for n=1.
+     * For n=2 with keys separated at a fixed distance the value is increasing larger with
+     * small separation, then reduces as separation is large enough that the partition algorithm
+     * may create sections between indices to ignore. Optimal value for a full sort is ~120.
+     *
+     * <p>This value is set at a small level and is increased as the density of keys increases.
+     * See {@link #dualPivotSortSelectSize(int, int, int)}.
+     *
+     * <p>Note: single-pivot select only uses heapselect to finish. Use of sort select
+     * is slower for n=1. */
+    static final int SORTSELECT_SIZE = 30;
+    /** Separation distance to reduce initial dual-pivot sort select size. The initial size
+     * is based on the density of keys. When indices are no longer dense then the sort size
+     * can be reduced. This threshold is set at a value where dual-pivot partitioning just above
+     * the default dual-pivot sort size will likely partition all indices into a single third.
+     * Note: Key density analysis assumes uniform spacing of keys. This threshold allows the
+     * partition algorithm to adapt to varying density of indices; or identify if partitioning
+     * cut indices into single values. */
+    private static final int MIN_SEPARATION_DISTANCE = 8;
+
     /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
     private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
     /** Message for an unsupported introselect configuration. */
     private static final String UNSUPPORTED_INTROSELECT = "Unsupported introselect: ";
     /** Number of keys for saturation analysis. */
     private static final int SATURATION_ANALYSIS_COUNT = 10;
-    /** Separation distance for saturation analysis, expressed as log2(distance). */
-    private static final int MIN_SEPARATION = 3;
-    /** Separation distance for saturation analysis. */
-    private static final int MIN_SEPARATION_DISTANCE = 1 << MIN_SEPARATION;
-    /** Size to use internal sort implementation; otherwise delegate to JDK's Arrays sort.
-     * This threshold avoids calling {@link Arrays#sort(double[], int, int)} when
-     * the size is small. In this case an insertion sort will likely be used by the JDK.
-     * It avoids all NaN and signed zero processing being repeated by the JDK method. */
-    private static final int JDK_SORT_SIZE = 80;
 
     /** Transformer factory for double data with the behaviour of a JDK sort.
      * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
@@ -1823,10 +1836,10 @@ final class Partition {
     private static boolean keysAreSaturated(UpdatingInterval keys, int n) {
         // Only perform saturation analysis if is possible to saturate the range
         if (!(keys instanceof IntervalAnalysis) ||
-            n < Math.max(SATURATION_ANALYSIS_COUNT, (keys.right() - keys.left()) >>> MIN_SEPARATION)) {
+            n < Math.max(SATURATION_ANALYSIS_COUNT, (keys.right() - keys.left()) >>> 3)) {
             return false;
         }
-        return ((IntervalAnalysis) keys).saturated(MIN_SEPARATION);
+        return ((IntervalAnalysis) keys).saturated(3);
     }
 
     /**
@@ -4266,33 +4279,26 @@ final class Partition {
             return;
         }
 
+//        if (n == 2 && Math.abs(k[0] - k[1]) < MIN_SEPARATION_DISTANCE) {
+//            final int k1 = Math.min(k[0], k[1]);
+//            final int kn = Math.max(k[0], k[1]);
+//            select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
+//            return;
+//        }
+
+        final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
+        final int k1 = keys.left();
+        final int kn = keys.right();
         // If the keys are not separated then they are effectively a single key.
-        if (n == 2 && Math.abs(k[0] - k[1]) < MIN_SEPARATION_DISTANCE) {
-            final int k1 = Math.min(k[0], k[1]);
-            final int kn = Math.max(k[0], k[1]);
+        if (kn - k1 < MIN_SEPARATION_DISTANCE) {
             select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
             return;
         }
 
-        final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
-//
-//        // Saturation analysis is too slow to be practical
-////        if (keysAreSaturated(keys, n)) {
-////            // Use single-pivot mode as a single range as this can do a full sort
-////            select(a, 0, length - 1, keys.left(), keys.right(), singlePivotMaxDepth(length));
-////            return;
-////        }
-//
-        // Dual-pivot mode
-        // TODO - average separation analysis
-        // if (kn - k1) < MIN_SEP:
-        //    single-pivot
-        // if (kn - k1) / (n-1) < MIN_SEP:
-        //    dual-pivot with large qs size
-        // else:
-        //    dual-pivot with standard qs size
-        // Turn-off sort when kb == ka
-        select(a, 0, length - 1, keys, dualPivotMaxDepth(length));
+        // Dual-pivot mode.
+        // Finishes using sortselect for high density keys; or heapselect for sparse keys.
+        select(a, 0, length - 1, keys, dualPivotMaxDepth(length),
+            dualPivotSortSelectSize(k1, kn, n));
     }
 
 //    /**
@@ -4471,32 +4477,14 @@ final class Partition {
         while (true) {
             // heapselect when ka and kb are close to the same end, or too much recursion
             // |l|-----|ka|kkkkkkkk|kb|------|r|
-            //  ---------d1----------
-            //          ----------d2-----------
             if (maxDepth == 0 ||
                 Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
 
-            // Saturation analysis is too slow to be practical
-//            // TODO - optimise this
-//            // sort when ka and kb span the range
-//            if ((ka - l) + (r - kb) < MIN_SEPARATION_DISTANCE) {
-//                // Handle small arrays (since we have already processed NaN and signed zeros)
-//                if (r - l < JDK_SORT_SIZE) {
-//                    Sorting.sort(a, l, r);
-//                } else {
-//                    Arrays.sort(a, l, r + 1);
-//                }
-//                return;
-//            }
-
-            // TODO: move choice of pivot into the partition function
-            // Pick a pivot and partition
-            final int p0 = partitionSBM(a, l, r,
-                PIVOTING_STRATEGY.pivotIndex(a, l, r),
-                upper);
+            // Single-pivot partitioning handling equal values
+            final int p0 = partitionSBM(a, l, r, upper);
             final int p1 = upper[0];
 
             // Recursion to max depth
@@ -4554,9 +4542,10 @@ final class Partition {
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
      * @param k Interval of indices to partition (ordered).
      * @param maxDepth Maximum depth for recursion.
+     * @param ss Sort select size.
      */
     // package-private for benchmarking
-    static void select(double[] a, int left, int right, UpdatingInterval k, int maxDepth) {
+    static void select(double[] a, int left, int right, UpdatingInterval k, int maxDepth, int ss) {
         // Inline code using the defaults.
         // Branching uses left/middle/right.
         // This allows branch prediction to track that after a split then the next section
@@ -4571,64 +4560,27 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-
-//            // Switch between heapselect and sort to finish the range [ka, kb].
-//            // Use heapselect when the range of keys is small compared to the data range
-//            // Otherwise favour a sort of small data.
-//            //if ((r - l) >> 3 >= (kb - ka)) {
-//            if (kb - ka <= 1) {
-//                // It is possible to use heapselect when ka and kb are close to the same end
-//                // |l|-----|ka|--------|kb|------|r|
-//                //  ---------s2----------
-//                //          ----------s4-----------
-//                if (Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
-//                    heapSelectRange(a, l, r, ka, kb);
-//                    return;
-//                }
-//            } else if (r - l < DP_QUICKSELECT_SIZE) {
-//                // Switch to a sort of small data to avoid partition overhead
-//                //Sorting.sort(a, l, r, l > 0);
-//                Sorting.sort(a, l, r);
-//                return;
-//            }
-
             // TODO:
-            // Switch between heapselect and sort to finish the range [ka, kb].
-//            int hs = (r - l) >> 5 >= (kb - ka) ? HEAPSELECT_SIZE : HEAPSELECT_CONSTANT;
-//            int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
-            // DP quickselect on a single index finishing with a sort has a threshold around
-            // length 27 to avoid partition overhead. When finishing using
-            // heapselect the threshold is around 15 from the edge of the data.
-            // Heapselect should still be used when the length is large to collect
-            // indices close to the edge. Here we do a sort if the keys are separated,
-            // or turn off sorting when there is 1 effective index.
-            // If kb - ka is very large then use the configured sort threshold. This is
-            // based on the expected density of indices.
-            // If kb - ka < 8 then use the 2 * heapselect size (approx 27) to prevent excess
-            // sorting but prefer sort to heapselect even if heapselect was possible.
-            // If kb - ka <= 1 then this is used as 1 index and switch exclusively to heapselect.
+            // Switch between sort and heapselect to finish the range [ka, kb].
+            // Dynamically adapt the sort select size.
+            //ss = kb - ka < MIN_SEPARATION_DISTANCE ? SORTSELECT_SIZE : ss;
+            //ss = kb - ka <= 1 ? 0 : ss;
 
+            //if (r - l < ss) {
+
+            // TODO - test this condition...
             // Approximate speed: heapselect(n/4) == sort(n)
-            //int hs = Math.min((r - l) >> 2, HEAPSELECT_SIZE);
-            //int qs = kb != ka ? DP_QUICKSELECT_SIZE : 0;
-            int qs = kb - ka > MIN_SEPARATION_DISTANCE ? HEAPSELECT_SIZE << 2 : HEAPSELECT_SIZE << 1;
-            qs = kb - ka <= 1 ? 0 : qs;
-
-            if (r - l < qs) {
+            if (r - l < ((kb - ka) << 2 > (r - l) ? ss : 0)) {
                 // Switch to a sort of small data to avoid partition overhead
                 //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
 
-            // Could not sort, or only 1 effective key.
-            // It is possible to use heapselect when ka and kb are close to the same end
+            // heapselect when ka and kb are close to the same end, or too much recursion
             // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2-----------
-            //          ----------s4-----------
             if (maxDepth == 0 ||
                 Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
-                // Too much recursion, or ka and kb are both close to the same end
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
@@ -4657,7 +4609,7 @@ final class Partition {
                     }
                     continue;
                 }
-                select(a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth);
+                select(a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth, ss);
                 // Here we must process middle and possibly right
                 ka = k.left();
             }
@@ -4682,7 +4634,7 @@ final class Partition {
                         }
                         continue;
                     }
-                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
+                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth, ss);
                     // Here we must process right
                     ka = k.left();
                 }
@@ -5332,6 +5284,215 @@ final class Partition {
 
         // Equal in [lower, upper]
         return lower;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
+     *
+     * <p>This method is similar to {@link #partitionSBM(double[], int, int, int, int[])}
+     * with the following changes:
+     * <ul>
+     * <li>Selection of the pivots is performed in this method.
+     * </ul>
+     *
+     * @param data Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    static int partitionSBM(double[] data, int l, int r, int[] upper) {
+        // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
+        //
+        // Partition data using pivot P into less-than, greater-than or equal.
+        // P is placed at the end to act as a sentinel.
+        // k traverses the unknown region ??? and values moved if equal (l) or greater (g):
+        //
+        // left    p       i            j         q    right
+        // |  ==P  |  <P   |     ???    |   >P    | ==P  |P|
+        //
+        // At the end P and additional equal values are swapped back to the centre.
+        //
+        // |         <P        | ==P |            >P        |
+        //
+        // Adapted from Sedgewick "Quicksort is optimal"
+        // https://sedgewick.io/wp-content/themes/sedgewick/talks/2002QuicksortIsOptimal.pdf
+        //
+        // Note: The difference between this and the original BM partition is the use of
+        // < or > rather than <= and >=. This allows the pivot to act as a sentinal and removes
+        // the requirement for checks on i; and j can be checked against an unlikely condition.
+        // This method will swap runs of equal values.
+        //
+        // The algorithm has been changed so that:
+        // - A pivot point must be provided.
+        // - An edge case where the search meets in the middle is handled.
+        // - Equal value data is not swapped to the end. Since the value is fixed then
+        //   only the less than / greater than value must be moved from the end inwards.
+        //   The end is then assumed to be the equal value. This would not work with
+        //   object references. Equivalent swap calls are commented.
+        // - Added a fast-forward over initial range containing the pivot.
+        // - Changed the final move to perform the minimum moves.
+
+        // Median of 9 pivot selection using the median of 3 medians:
+        // 1 4 7
+        // x y z --> med(x,y,z) identifies pivot as 4th - 6th of 9 sorted values
+        // 3 6 9
+        // Bentley and McIlroy (1993) switch to median of 3 below size 40.
+        // Heapselect edge distance is 15 so partitioning is limited to size 30
+        // and we choose to always use this pivot selection.
+        final int s = (r - l) >>> 3;
+        final int m = (l + r) >>> 1;
+        final int x = med3(data, l, l + s, l + (s << 1));
+        final double a = data[x];
+        final int y = med3(data, m - s, m, m + s);
+        final double b = data[y];
+        final int z = med3(data, r - (s << 1), r - s, r);
+        final int pivot = med3(a, b, data[z], x, y, z);
+
+        // Use the pivot index to set the upper sentinel value
+        final double v = data[pivot];
+        data[pivot] = data[r];
+        data[r] = v;
+
+        int p = l;
+        int q = r;
+
+        // Fast-forward over equal regions to reduce swaps
+        while (data[p] == v) {
+            if (++p == q) {
+                // Edge-case: constant value
+                upper[0] = r;
+                return l;
+            }
+        }
+        // Cannot overrun as the prior scan using p stopped before the end
+        while (data[q - 1] == v) {
+            q--;
+        }
+
+        int i = p - 1;
+        int j = q;
+
+        for (;;) {
+            do {
+                ++i;
+            } while (data[i] < v);
+            while (v < data[--j]) {
+                // Cannot use j == i in the event that i == q (already passed j)
+                if (j == l) {
+                    break;
+                }
+            }
+            if (i >= j) {
+                // Edge-case if search met on an internal pivot value
+                // (not at the greater equal region, i.e. i < q).
+                // Move this to the lower-equal region.
+                if (i == j && v == data[i]) {
+                    //swap(data, i++, p++)
+                    data[i] = data[p];
+                    data[p] = v;
+                    i++;
+                    p++;
+                }
+                break;
+            }
+            //swap(data, i, j)
+            final double vi = data[j];
+            final double vj = data[i];
+            data[i] = vi;
+            data[j] = vj;
+            // Move the equal values to the ends
+            if (vi == v) {
+                //swap(data, i, p++)
+                data[i] = data[p];
+                data[p] = v;
+                p++;
+            }
+            if (vj == v) {
+                //swap(data, j, --q)
+                data[j] = data[--q];
+                data[q] = v;
+            }
+        }
+        // i is at the end (exclusive) of the less-than region
+
+        // Place pivot value in centre
+        //swap(data, r, i)
+        data[r] = data[i];
+        data[i] = v;
+
+        // Move equal regions to the centre.
+        // Set the pivot range [j, i) and move this outward for equal values.
+        j = i++;
+
+        // less-equal:
+        //   for k = l; k < p; k++
+        //     swap(data, k, --j)
+        // greater-equal:
+        //   for k = r; k-- > q; i++
+        //     swap(data, k, i)
+
+        // Move the minimum of less-equal or less-than
+        int move = Math.min(p - l, j - p);
+        final int lower = j - (p - l);
+        for (int k = l; --move >= 0; k++) {
+            data[k] = data[--j];
+            data[j] = v;
+        }
+        // Move the minimum of greater-equal or greater-than
+        move = Math.min(r - q, q - i);
+        upper[0] = i + (r - q) - 1;
+        for (int k = r; --move >= 0; i++) {
+            data[--k] = data[i];
+            data[i] = v;
+        }
+
+        // Equal in [lower, upper]
+        return lower;
+    }
+
+    /**
+     * Find the median index of 3.
+     *
+     * @param data Values.
+     * @param i Index.
+     * @param j Index.
+     * @param k Index.
+     * @return the median index
+     */
+    private static int med3(double[] data, int i, int j, int k) {
+        return med3(data[i], data[j], data[k], i, j, k);
+    }
+
+    /**
+     * Find the median index of 3 values.
+     *
+     * @param a Value.
+     * @param b Value.
+     * @param c Value.
+     * @param ia Index of a.
+     * @param ib Index of b.
+     * @param ic Index of c.
+     * @return the median index
+     */
+    private static int med3(double a, double b, double c, int ia, int ib, int ic) {
+        if (a < b) {
+            if (b < c) {
+                return ib;
+            }
+            return a < c ? ic : ia;
+        }
+        if (b > c) {
+            return ib;
+        }
+        return a > c ? ic : ia;
     }
 
     /**
@@ -6422,6 +6583,85 @@ final class Partition {
         // This result is always between 2 * floor(log3(x)) and 2 * ceil(log3(x)).
         // It is correctly rounded when x +/- 1 is a power of 3.
         return ((32 - Integer.numberOfLeadingZeros(x)) * 323) >>> 8;
+    }
+
+    /**
+     * Configure the sort select size for dual pivot partitioning.
+     *
+     * @param k1 First key of interest.
+     * @param kn Last key of interest.
+     * @param n Number of indices (must be above 1).
+     * @return the sort select size.
+     */
+    static int dualPivotSortSelectSize(int k1, int kn, int n) {
+        // Configure the sort select size based on the index density
+        // sortselect is preferred over heapselect when the range of indices is over a set
+        // fraction of the range of data:
+        // l---k1---k---k-----k--k------kn----r
+        // (kb - ka) > f * (r - l)
+        // i.e. it is faster to do a sort of small data than heapselect of a range of the data.
+        //
+        // Thus we set a minimum limit where sortselect performance is good on a
+        // pair of neighbour indices: (i, i+1).
+        //
+        // When the indices are high density then partitioning is likely
+        // to created indices in each third:
+        // l---k1---kr
+        //             lk-----k--kr
+        //                          l---kn----r
+        // Thus we can increase the sort select size to closer to the value
+        // used for optimised dual-pivot sort (~120).
+        // High density is where an ideal dual-pivot partition into thirds will
+        // create indices in adjacent thirds. If split indices are in thirds
+        // 1 and 3 then partitioning has allowed the centre to be skipped.
+        //
+        // Express the average separation with respect to the minimum expected
+        // size to perform partitioning of a single index: 2 * HEAPSELECT_SIZE = 30
+        //
+        // Average separation        Density
+        // ~ 1/3 partition length    High
+        // ~ 2/3 partition length    Sparse
+        //
+        // Transition from a default sortselect size to a large sortselect size
+        // using a linear ramp from 1/6 to 5/6 of the partition length.
+        //
+        // This sets a maximum sortselect size of 90. However note that sort select
+        // is only used when the range (kb - ka) is a substantial fraction of the
+        // current range (r - l).
+        // Thus ranges with a single index or indices separated by a few places will
+        // not use a very large sort, and will default to heapselect.
+        // This allows dynamic switching between sorting expected high density
+        // indices and performing quickselect using a heapselect to finish.
+        //
+        // This will be sub-optimal for high density indices at one end of a range
+        // of indices and then a large separation to another index:
+        // ---kkkk-k-k-------------------k--------------k
+        // As the data range becomes increasingly large then the partition time
+        // dominates and the cost of the final sort is insignificant.
+
+        // TODO - test on many use cases with quantiles/indices that can be specified.
+
+        int ss = 2 * HEAPSELECT_SIZE;
+        final double averageSeparation = (double) (kn - k1) / (n - 1) / ss;
+        int max = 3 * ss;
+        if (averageSeparation < 0.16666) {
+            return max;
+        }
+        if (averageSeparation > 0.83333) {
+            return ss;
+        }
+        return (int) Math.round(max - ss * 2 * (averageSeparation - 0.16666) / 0.66666);
+
+//        if (averageSeparation < SORTSELECT_SIZE / 3) {
+//            return SORTSELECT_SIZE * 3;
+//        }
+//        if (averageSeparation < 2 * SORTSELECT_SIZE / 3) {
+//            return SORTSELECT_SIZE * 2;
+//        }
+//        if (averageSeparation < SORTSELECT_SIZE) {
+//            return SORTSELECT_SIZE + SORTSELECT_SIZE / 2;
+//        }
+//        return SORTSELECT_SIZE;
     }
 
     /**

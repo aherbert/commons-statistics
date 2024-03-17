@@ -921,7 +921,7 @@ class PartitionTest {
                 return;
             }
             replaceNegativeZeros(a, 0, right);
-            Partition.select(a, 0, right, IndexIntervals.interval(0, right), 100);
+            Partition.select(a, 0, right, IndexIntervals.interval(0, right), 100, Partition.SORTSELECT_SIZE);
             restoreNegativeZeros(a, 0, right);
         });
     }
