@@ -66,6 +66,28 @@ class PartitionTest {
     /**
      * Partition function. Used to test different implementations.
      */
+    private interface DoubleRangePartitionFunction {
+        /**
+         * Partition the array such that range of indices {@code [ka, kb]} correspond to
+         * their correctly sorted value in the equivalent fully sorted array. For all
+         * indices {@code k} and any index {@code i}:
+         *
+         * <pre>{@code
+         * data[i < k] <= data[k] <= data[k < i]
+         * }</pre>
+         *
+         * @param a Data array to use to find out the K<sup>th</sup> value.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param ka Lower index to select.
+         * @param kb Upper index to select.
+         */
+        void partition(double[] a, int left, int right, int ka, int kb);
+    }
+
+    /**
+     * Partition function. Used to test different implementations.
+     */
     private interface DoublePartitionFunction {
         /**
          * Partition the array such that indices {@code k} correspond to their correctly
@@ -108,8 +130,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource
     void testSortNaN(double[] values) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted);
+        final double[] sorted = sort(values);
         final int last = Partition.sortNaN(values);
         // index of last non-NaN
         int i = sorted.length;
@@ -151,25 +172,17 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartitionMinMax"})
     void testPartitionMin(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        Partition.partitionMin(values, from, to);
-        Assertions.assertEquals(sorted[from], values[from]);
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+        assertRangePartition(sort(values, from, to),
+            (a, l, r, ka, kb) -> Partition.partitionMin(values, from, to),
+            values, from, to, from, from);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartitionMinMax"})
     void testPartitionMax(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        Partition.partitionMax(values, from, to);
-        Assertions.assertEquals(sorted[to], values[to]);
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+        assertRangePartition(sort(values, from, to),
+            (a, l, r, ka, kb) -> Partition.partitionMax(values, from, to),
+            values, from, to, to, to);
     }
 
     static Stream<Arguments> testPartitionMinMax() {
@@ -197,31 +210,25 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = "testPartitionMinMax2")
     void testPartitionMin2IgnoreZeros(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        replaceNegativeZeros(values, from, to);
-        Partition.partitionMin2IgnoreZeros(values, from, to);
-        restoreNegativeZeros(values, from, to);
-        Assertions.assertEquals(sorted[from], values[from]);
-        Assertions.assertEquals(sorted[from + 1], values[from + 1]);
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+        assertRangePartition(sort(values, from, to),
+            (a, l, r, ka, kb) -> {
+                replaceNegativeZeros(values, from, to);
+                Partition.partitionMin2IgnoreZeros(values, from, to);
+                restoreNegativeZeros(values, from, to);
+            },
+            values, from, to, from, from + 1);
     }
 
     @ParameterizedTest
     @MethodSource(value = "testPartitionMinMax2")
     void testPartitionMax2IgnoreZeros(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        replaceNegativeZeros(values, from, to);
-        Partition.partitionMax2IgnoreZeros(values, from, to);
-        restoreNegativeZeros(values, from, to);
-        Assertions.assertEquals(sorted[to], values[to]);
-        Assertions.assertEquals(sorted[to - 1], values[to - 1]);
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+        assertRangePartition(sort(values, from, to),
+            (a, l, r, ka, kb) -> {
+                replaceNegativeZeros(values, from, to);
+                Partition.partitionMax2IgnoreZeros(values, from, to);
+                restoreNegativeZeros(values, from, to);
+            },
+            values, from, to, to - 1, to);
     }
 
     static Stream<Arguments> testPartitionMinMax2() {
@@ -267,43 +274,24 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
     void testPartitionMinK(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
+        final double[] sorted = sort(values, from, to);
+
+        final double[] x = values.clone();
+        replaceNegativeZeros(x, from, to);
+        final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
+            Partition.partitionMinK(a, l, r, kb, kb - ka);
+            restoreNegativeZeros(a, l, r);
+        };
+
         for (int k = from; k <= to; k++) {
-            final int target = k;
-            double[] x = values.clone();
-            replaceNegativeZeros(x, from, to);
-            Partition.partitionMinK(x, from, to, k, 0);
-            restoreNegativeZeros(x, from, to);
-            Assertions.assertEquals(sorted[k], x[k], () -> Integer.toString(target));
-            // Check the data is the same
-            Arrays.sort(x, from, to + 1);
-            Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
             if (k > from) {
                 // Sort an extra 1
-                x = values.clone();
-                replaceNegativeZeros(x, from, to);
-                Partition.partitionMinK(x, from, to, k, 1);
-                restoreNegativeZeros(x, from, to);
-                for (int i = k - 1; i <= k; i++) {
-                    Assertions.assertEquals(sorted[i], x[i], () -> (target - 1) + " to " + target);
-                }
-                // Check the data is the same
-                Arrays.sort(x, from, to + 1);
-                Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                assertRangePartition(sorted, fun, x.clone(), from, to, k - 1, k);
                 if (k > from + 1) {
                     // Sort all
-                    x = values.clone();
-                    replaceNegativeZeros(x, from, to);
-                    // Test clipping with size of range below k too large: it should be k - from
-                    Partition.partitionMinK(x, from, to, k, k - from + 42);
-                    restoreNegativeZeros(x, from, to);
-                    for (int i = from; i <= k; i++) {
-                        Assertions.assertEquals(sorted[i], x[i], () -> "Full sort to " + Integer.toString(target));
-                    }
-                    // Check the data is the same
-                    Arrays.sort(x, from, to + 1);
-                    Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                    // Test clipping with k < from
+                    assertRangePartition(sorted, fun, x.clone(), from, to, from - 23, k);
                 }
             }
         }
@@ -312,43 +300,24 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
     void testPartitionMaxK(double[] values, int from, int to) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
+        final double[] sorted = sort(values, from, to);
+
+        final double[] x = values.clone();
+        replaceNegativeZeros(x, from, to);
+        final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
+            Partition.partitionMaxK(a, l, r, ka, kb - ka);
+            restoreNegativeZeros(a, l, r);
+        };
+
         for (int k = from; k <= to; k++) {
-            final int target = k;
-            double[] x = values.clone();
-            replaceNegativeZeros(x, from, to);
-            Partition.partitionMaxK(x, from, to, k, 0);
-            restoreNegativeZeros(x, from, to);
-            Assertions.assertEquals(sorted[k], x[k], () -> Integer.toString(target));
-            // Check the data is the same
-            Arrays.sort(x, from, to + 1);
-            Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
             if (k < to) {
                 // Sort an extra 1
-                x = values.clone();
-                replaceNegativeZeros(x, from, to);
-                Partition.partitionMaxK(x, from, to, k, 1);
-                restoreNegativeZeros(x, from, to);
-                for (int i = k; i <= k + 1; i++) {
-                    Assertions.assertEquals(sorted[i], x[i], () -> target + " to " + (target + 1));
-                }
-                // Check the data is the same
-                Arrays.sort(x, from, to + 1);
-                Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                assertRangePartition(sorted, fun, x.clone(), from, to, k, k + 1);
                 if (k < to - 1) {
                     // Sort all
-                    x = values.clone();
-                    replaceNegativeZeros(x, from, to);
-                    // Test clipping with size of range above k too large: it should be to - k
-                    Partition.partitionMaxK(x, from, to, k, to - k + 42);
-                    restoreNegativeZeros(x, from, to);
-                    for (int i = k; i <= to; i++) {
-                        Assertions.assertEquals(sorted[i], x[i], () -> "Full sort from " + Integer.toString(target));
-                    }
-                    // Check the data is the same
-                    Arrays.sort(x, from, to + 1);
-                    Assertions.assertArrayEquals(sorted, x, "Data destroyed");
+                    // Test clipping with k > to
+                    assertRangePartition(sorted, fun, x.clone(), from, to, k, to + 23);
                 }
             }
         }
@@ -369,9 +338,8 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource
-    void testHeapSelect(double[] values, int from, int to, int k1, int k2) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
+    void testHeapSelectPair(double[] values, int from, int to, int k1, int k2) {
+        final double[] sorted = sort(values, from, to);
         Partition.heapSelect(values, from, to, k1, k2);
         Assertions.assertEquals(sorted[k1], values[k1]);
         Assertions.assertEquals(sorted[k2], values[k2]);
@@ -380,7 +348,7 @@ class PartitionTest {
         Assertions.assertArrayEquals(sorted, values, "Data destroyed");
     }
 
-    static Stream<Arguments> testHeapSelect() {
+    static Stream<Arguments> testHeapSelectPair() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 1, 2));
         builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 2, 2));
@@ -393,15 +361,8 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource
     void testHeapSelectRange(double[] values, int from, int to, int k1, int k2) {
-        final double[] sorted = values.clone();
-        Arrays.sort(sorted, from, to + 1);
-        Partition.heapSelectRange(values, from, to, k1, k2);
-        for (int i = k1; i <= k2; i++) {
-            Assertions.assertEquals(sorted[i], values[i]);
-        }
-        // Check the data is the same
-        Arrays.sort(values, from, to + 1);
-        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
+        assertRangePartition(sort(values, from, to),
+            Partition::heapSelectRange, values, from, to, k1, k2);
     }
 
     static Stream<Arguments> testHeapSelectRange() {
@@ -413,6 +374,119 @@ class PartitionTest {
         builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 0, 3));
         builder.add(Arguments.of(new double[] {-1, 2, -3, 4, -4, 3, -2, 1}, 0, 7, 4, 7));
         return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
+    void testSortMinK(double[] values, int from, int to) {
+        final double[] sorted = sort(values, from, to);
+
+        final double[] x = values.clone();
+        replaceNegativeZeros(x, from, to);
+        final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
+            Partition.sortMinK(a, l, r, kb);
+            restoreNegativeZeros(a, l, r);
+        };
+
+        for (int k = from; k <= to; k++) {
+            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
+            if (k > from) {
+                // Sort an extra 1
+                assertRangePartition(sorted, fun, x.clone(), from, to, k - 1, k);
+                if (k > from + 1) {
+                    // Sort all
+                    // Test clipping with k < from
+                    assertRangePartition(sorted, fun, x.clone(), from, to, from - 23, k);
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
+    void testSortMaxK(double[] values, int from, int to) {
+        final double[] sorted = sort(values, from, to);
+
+        final double[] x = values.clone();
+        replaceNegativeZeros(x, from, to);
+        final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
+            Partition.sortMaxK(a, l, r, ka);
+            restoreNegativeZeros(a, l, r);
+        };
+
+        for (int k = from; k <= to; k++) {
+            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
+            if (k < to) {
+                // Sort an extra 1
+                assertRangePartition(sorted, fun, x.clone(), from, to, k, k + 1);
+                if (k < to - 1) {
+                    // Sort all
+                    // Test clipping with k > to
+                    assertRangePartition(sorted, fun, x.clone(), from, to, k, to + 23);
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testHeapSelectRange"})
+    void testSortSelectRange(double[] values, int from, int to, int k1, int k2) {
+        assertRangePartition(sort(values, from, to),
+            Partition::sortSelectRange, values, from, to, k1, k2);
+    }
+
+    /**
+     * Return a copy of the {@code values} sorted.
+     *
+     * @param values Values.
+     * @return the copy
+     */
+    private static double[] sort(double[] values) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted);
+        return sorted;
+    }
+
+    /**
+     * Return a copy of the {@code values} sorted in the range {@code [from, to]}.
+     *
+     * @param values Values.
+     * @param from From (inclusive).
+     * @param to To (inclusive).
+     * @return the copy
+     */
+    private static double[] sort(double[] values, int from, int to) {
+        final double[] sorted = values.clone();
+        Arrays.sort(sorted, from, to + 1);
+        return sorted;
+    }
+
+    /**
+     * Assert the function correctly partitions the range.
+     *
+     * @param sorted Expected sort result.
+     * @param fun Partition function.
+     * @param values Values.
+     * @param from From (inclusive).
+     * @param to To (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     */
+    private static void assertRangePartition(double[] sorted,
+            DoubleRangePartitionFunction fun,
+            double[] values, int from, int to, int ka, int kb) {
+        Arrays.sort(sorted, from, to + 1);
+        fun.partition(values, from, to, ka, kb);
+        // Clip
+        ka = ka < from ? from : ka;
+        kb = kb > to ? to : kb;
+        for (int i = ka; i <= kb; i++) {
+            final int index = i;
+            Assertions.assertEquals(sorted[i], values[i], () -> "index: " + index);
+        }
+        // Check the data is the same
+        Arrays.sort(values, from, to + 1);
+        Assertions.assertArrayEquals(sorted, values, "Data destroyed");
     }
 
     @Test

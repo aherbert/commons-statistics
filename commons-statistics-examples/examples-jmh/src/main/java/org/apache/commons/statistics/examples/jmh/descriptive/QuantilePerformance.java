@@ -96,6 +96,8 @@ public class QuantilePerformance {
     private static final String BASELINE = "Baseline";
     /** Selection method using a heap. */
     private static final String HEAP_SELECT = "HeapSelect";
+    /** Selection method using a sort. */
+    private static final String SORT_SELECT = "SortSelect";
 
     // Second generation partition functions
 
@@ -2081,7 +2083,11 @@ public class QuantilePerformance {
     public static class EdgeFunctionSource {
         /** Name of the source.
          * For introselect methods this should effectively turn-off heapselect. */
-        @Param({HEAP_SELECT, ISBM + "_HC0", IDP + "_HC0"})
+        @Param({HEAP_SELECT, ISBM + "_HC0", IDP + "_HC0",
+            // Only use for small length as sort insertion is Order(k)
+            // vs Order(log(k)) for the heap.
+            //SORT_SELECT
+            })
         private String name;
 
         /** The action. */
@@ -2132,6 +2138,12 @@ public class QuantilePerformance {
             } else if ((HEAP_SELECT + "12").equals(name)) {
                 function = (data, indices) -> {
                     heapSelectRange12(data, 0, data.length - 1, indices[0], indices[1]);
+                    return extractIndices(data, indices[0], indices[1]);
+                };
+            // Only use on small edge as insertion is Order(k)
+            } else if (SORT_SELECT.equals(name)) {
+                function = (data, indices) -> {
+                    Partition.sortSelectRange(data, 0, data.length - 1, indices[0], indices[1]);
                     return extractIndices(data, indices[0], indices[1]);
                 };
             // introselect methods - these should be configured to not use heapselect
@@ -2883,6 +2895,11 @@ public class QuantilePerformance {
             bh.consume(fun.apply(source.getData(j), source.getIndices(j)));
         }
     }
+
+    // TODO
+    // Benchmark for EdgeFunctionSource and KSource to be used with k=1 and length
+    // 6 to test the various versions of heapselect with a random index. This prevents
+    // branch prediction learning the heap size (as is possible with the EdgeSource).
 
     /**
      * Benchmark the search of an ordered set of indices.
