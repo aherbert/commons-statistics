@@ -136,6 +136,8 @@ public class QuantilePerformance {
     private static final Pattern HC_PATTERN = Pattern.compile("HC(\\d+)");
     /** Pattern for the heapselect mask shift. */
     private static final Pattern MS_PATTERN = Pattern.compile("MS(\\d+)");
+    /** Pattern for the sortselect constant. */
+    private static final Pattern SC_PATTERN = Pattern.compile("SC(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
     private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+\\.?\\d*)");
     /** Pattern for the recursion constant. */
@@ -1725,25 +1727,25 @@ public class QuantilePerformance {
                 function = createKthSelector(name, DNF, qs)::sortDNF;
             // 2nd generation partition functions
             } else if (name.startsWith(SBM2)) {
-                function = createPartition(name, SBM2, qs, 0)::sortSBM;
+                function = createPartition(name, SBM2, qs, 0, 0)::sortSBM;
             // Introsort
             } else if (name.startsWith(ISP)) {
-                function = createPartition(name, ISP, qs, 0)::sortISP;
+                function = createPartition(name, ISP, qs, 0, 0)::sortISP;
             } else if (name.startsWith(IBM)) {
-                function = createPartition(name, IBM, qs, 0)::sortIBM;
+                function = createPartition(name, IBM, qs, 0, 0)::sortIBM;
             } else if (name.startsWith(ISBM)) {
-                function = createPartition(name, ISBM, qs, 0)::sortISBM;
+                function = createPartition(name, ISBM, qs, 0, 0)::sortISBM;
             } else if (name.startsWith(IDNF)) {
                 // 3 variants
                 if (name.startsWith(IDNF + "3")) {
-                    function = createPartition(name, IDNF + "3", qs, 0)::sortIDNF3;
+                    function = createPartition(name, IDNF + "3", qs, 0, 0)::sortIDNF3;
                 } else if (name.startsWith(IDNF + "2")) {
-                    function = createPartition(name, IDNF + "2", qs, 0)::sortIDNF2;
+                    function = createPartition(name, IDNF + "2", qs, 0, 0)::sortIDNF2;
                 } else if (name.startsWith(IDNF + "1")) {
-                    function = createPartition(name, IDNF + "1", qs, 0)::sortIDNF1;
+                    function = createPartition(name, IDNF + "1", qs, 0, 0)::sortIDNF1;
                 }
             } else if (name.startsWith(IDP)) {
-                function = createPartition(name, IDP, qs, 0)::sortIDP;
+                function = createPartition(name, IDP, qs, 0, 0)::sortIDP;
             } else if (name.startsWith(SELECT)) {
                 // Sort by selection of the entire range.
                 final Supplier<DoubleDataTransformer> transformerFactory =
@@ -1905,6 +1907,10 @@ public class QuantilePerformance {
         @Param({"0"})
         private int hc;
 
+        /** Override of minimum sortselect constant. */
+        @Param({"0"})
+        private int sc;
+
         /** The action. */
         private BiFunction<double[], int[], double[]> function;
 
@@ -1928,20 +1934,20 @@ public class QuantilePerformance {
             } else  if (name.startsWith(SORT)) {
                 // Sort variants (do not clone the keys)
                 if (name.contains(ISBM)) {
-                    final Partition part = createPartition(name.substring(SORT.length()), ISBM, qs, hc);
+                    final Partition part = createPartition(name.substring(SORT.length()), ISBM, qs, hc, sc);
                     function = (data, indices) -> {
                         part.sortISBM(data);
                         return extractIndices(data, indices);
                     };
                 } else if (name.contains(IDP)) {
-                    final Partition part = createPartition(name.substring(SORT.length()), IDP, qs, hc);
+                    final Partition part = createPartition(name.substring(SORT.length()), IDP, qs, hc, sc);
                     function = (data, indices) -> {
                         part.sortIDP(data);
                         return extractIndices(data, indices);
                     };
                 } else if (name.contains(IDNF + "3")) {
                     // Only support IDNF3
-                    final Partition part = createPartition(name.substring(SORT.length()), IDNF + "3", qs, hc);
+                    final Partition part = createPartition(name.substring(SORT.length()), IDNF + "3", qs, hc, sc);
                     function = (data, indices) -> {
                         part.sortIDNF3(data);
                         return extractIndices(data, indices);
@@ -2008,38 +2014,38 @@ public class QuantilePerformance {
                 };
             // Second generation partition functions
             } else if (name.startsWith(SBM2)) {
-                final Partition part = createPartition(name, SBM2, qs, hc);
+                final Partition part = createPartition(name, SBM2, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Introselect implementations
             } else if (name.startsWith(ISP)) {
-                final Partition part = createPartition(name, ISP, qs, hc);
+                final Partition part = createPartition(name, ISP, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionISP(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(IBM)) {
-                final Partition part = createPartition(name, IBM, qs, hc);
+                final Partition part = createPartition(name, IBM, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionIBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(ISBM)) {
-                final Partition part = createPartition(name, ISBM, qs, hc);
+                final Partition part = createPartition(name, ISBM, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionISBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(IDNF)) {
-                final Partition part = createPartition(name, IDNF, qs, hc);
+                final Partition part = createPartition(name, IDNF, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionIDNF(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(IDP)) {
-                final Partition part = createPartition(name, IDP, qs, hc);
+                final Partition part = createPartition(name, IDP, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionIDP(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -2148,14 +2154,14 @@ public class QuantilePerformance {
                 };
             // introselect methods - these should be configured to not use heapselect
             } else if (name.startsWith(ISBM)) {
-                final Partition part = createPartition(name, ISBM, 0, 0);
+                final Partition part = createPartition(name, ISBM, 0, 0, 0);
                 function = (data, indices) -> {
                     part.introselect(Partition::partitionSBM, data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
                     return extractIndices(data, indices[0], indices[1]);
                 };
             } else if (name.startsWith(IDP)) {
-                final Partition part = createPartition(name, IDP, 0, 0);
+                final Partition part = createPartition(name, IDP, 0, 0, 0);
                 function = (data, indices) -> {
                     part.introselect(Partition::partitionDP, data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
@@ -2422,7 +2428,7 @@ public class QuantilePerformance {
         return Quantile.withDefaults()
             .with(EstimationMethod.HF6)
             .withOverwrite(true)
-            .withPartition(createPartition(name, prefix, 0, 0));
+            .withPartition(createPartition(name, prefix, 0, 0, 0));
     }
 
     /**
@@ -2462,9 +2468,10 @@ public class QuantilePerformance {
      * @param prefix Method prefix.
      * @param qs Minimum quickselect size (if non-zero).
      * @param hc Minimum heapselect constant (if non-zero).
+     * @param sc Minimum sortselect constant (if non-zero).
      * @return the {@link Partition} instance
      */
-    static Partition createPartition(String name, String prefix, int qs, int hc) {
+    static Partition createPartition(String name, String prefix, int qs, int hc, int sc) {
         final String[] s = {name};
         final PivotingStrategy sp = getPivotStrategy(s);
         final DualPivotingStrategy dp = getDualPivotStrategy(s);
@@ -2472,6 +2479,7 @@ public class QuantilePerformance {
         final int heapSelectShift = getHeapSelectShift(s);
         final int heapSelectConstant = hc != 0 ? hc : getHeapSelectConstant(s);
         final int heapSelectMaskShift = getHeapSelectMaskShift(s);
+        final int sortSelectConstant = sc != 0 ? sc : getSortSelectConstant(s);
         final KeyStrategy keyStartegy = getKeyStrategy(s);
         final PairedKeyStrategy pairedKeyStartegy = getPairedKeyStrategy(s);
         final double recursionMultiple = getRecursionMultiple(s);
@@ -2485,7 +2493,8 @@ public class QuantilePerformance {
             }
         }
         final Partition p = new Partition(sp, dp, minQuickSelectSize,
-            heapSelectShift, heapSelectConstant, heapSelectMaskShift);
+            heapSelectShift, heapSelectConstant, heapSelectMaskShift,
+            sortSelectConstant);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(keyStartegy);
@@ -2561,6 +2570,22 @@ public class QuantilePerformance {
             return i;
         }
         return Partition.HEAPSELECT_MASK_SHIFT;
+    }
+
+    /**
+     * Gets the constant for the sortselect distance-from-end computation.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @return the sortselect constant
+     */
+    static int getSortSelectConstant(String[] name) {
+        final Matcher m = SC_PATTERN.matcher(name[0]);
+        if (m.find()) {
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
+        }
+        return Partition.SORTSELECT_CONSTANT;
     }
 
     /**

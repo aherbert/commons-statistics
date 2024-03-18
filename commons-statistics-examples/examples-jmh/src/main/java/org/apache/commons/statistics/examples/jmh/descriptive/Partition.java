@@ -114,12 +114,12 @@ final class Partition {
      * heap select on tiny data. */
     static final int MIN_HEAPSELECT_SIZE = 5;
     /** Minimum selection size for single-pivot select (used for single k).
-     * Below this switch to insertion sort rather than selection.
+     * Below this switch to sort selection.
      * Changes to this value are only noticeable when the input array is small.
      * Benchmarking random data in range [96, 192] suggests a value of ~16. */
     static final int SP_QUICKSELECT_SIZE = 16;
     /** Minimum selection size for dual-pivot select (used for multiple k).
-     * Below this switch to insertion sort rather than selection.
+     * Below this switch to sort selection.
      * Changes to this value are only noticeable for select when the input array is small.
      * Benchmarking random data in range [162, 486] suggests a value of ~27 for n=1 and
      * increasing with higher n in the same range.
@@ -145,6 +145,9 @@ final class Partition {
      * It is a very small number of cases where heapselect is useful
      * (see {@link #heapSelectEdgeDistanceDP(int)}). */
     static final int HEAPSELECT_MASK_SHIFT = 31;
+    /** Default selection constant for sortselect. Off by default as heapselect is used
+     * in the default configuration for indices close to the edge. */
+    static final int SORTSELECT_CONSTANT = 0;
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
     /** Default 1 or 2 key strategy. */
@@ -207,7 +210,7 @@ final class Partition {
     private final DualPivotingStrategy dualPivotingStrategy;
 
     /** Minimum size for quickselect. Below this threshold partitioning using quickselect
-     * is stopped and a full sort is performed. */
+     * is stopped and a sort selection is performed. */
     private final int minQuickSelectSize;
     /** Length shift for heapselect. Heapselect runs when k is within d of the end of
      * length n using {@code d = (n >>> shift) + c}.
@@ -222,6 +225,11 @@ final class Partition {
      * then the dynamic threshold is ignored. If {@link Integer#MAX_VALUE} then the dynamic
      * threshold is always used. */
     private final int heapSelectDynamicMask;
+    /** Constant for sortselect. Sortselect runs when k is within c of the end of
+     * length n. Unlike heapselect, sortselect has no length dependent configuration
+     * as insertion sort scales poorly with larger size (insertion is Order(n) vs
+     * Order(log(n)) for a heap. */
+    private final int sortSelectConstant;
 
     // Use final for settings used to configure partitioning functions
 
@@ -628,7 +636,8 @@ final class Partition {
      */
     Partition() {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, MIN_QUICKSELECT_SIZE,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
+            SORTSELECT_CONSTANT);
     }
 
     /**
@@ -640,7 +649,8 @@ final class Partition {
      */
     Partition(int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
+            SORTSELECT_CONSTANT);
     }
 
     /**
@@ -653,7 +663,8 @@ final class Partition {
      */
     Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize) {
         this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
+            SORTSELECT_CONSTANT);
     }
 
     /**
@@ -666,7 +677,8 @@ final class Partition {
      */
     Partition(DualPivotingStrategy dualPivotingStrategy, int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT);
+            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
+            SORTSELECT_CONSTANT);
     }
 
     /**
@@ -677,14 +689,15 @@ final class Partition {
      * @param pivotingStrategy Pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
-     * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @param heapSelectConstant Length constant used for heap select distance from end threshold.
+     * @param sortSelectConstant Length constant used for sort select distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant) {
+        int heapSelectConstant, int sortSelectConstant) {
         this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, heapSelectShift, heapSelectConstant,
-            HEAPSELECT_MASK_SHIFT);
+            HEAPSELECT_MASK_SHIFT, sortSelectConstant);
     }
 
     /**
@@ -695,15 +708,17 @@ final class Partition {
      * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
-     * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @param heapSelectConstant Length constant used for heap select distance from end threshold.
      * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
+     * @param sortSelectConstant Length constant used for sort select distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(DualPivotingStrategy dualPivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant, int heapSelectMaskShift) {
+        int heapSelectConstant, int heapSelectMaskShift,
+        int sortSelectConstant) {
         this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, heapSelectShift,
-            heapSelectConstant, heapSelectMaskShift);
+            heapSelectConstant, heapSelectMaskShift, sortSelectConstant);
     }
 
     /**
@@ -719,13 +734,15 @@ final class Partition {
      * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
-     * @param heapSelectConstant Length shift used for heap select distance from end threshold.
+     * @param heapSelectConstant Length constant used for heap select distance from end threshold.
      * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
+     * @param sortSelectConstant Length constant used for sort select distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant, int heapSelectMaskShift) {
+        int heapSelectConstant, int heapSelectMaskShift,
+        int sortSelectConstant) {
         // Shift only uses lowest 5 bits. It should use [0, 31].
         // If bits outside this are set the shift is invalid.
         if ((heapSelectShift & ~31) != 0) {
@@ -737,6 +754,7 @@ final class Partition {
         this.heapSelectShift = heapSelectShift;
         this.heapSelectConstant = heapSelectConstant;
         this.heapSelectDynamicMask = Integer.MAX_VALUE >>> heapSelectMaskShift;
+        this.sortSelectConstant = sortSelectConstant;
     }
 
     /**
@@ -1176,15 +1194,15 @@ final class Partition {
         // Call the appropriate heap partition function based on
         // building a heap up to 50% of the length
         // |l|-----|ka|--------|kb|------|r|
-        //  ---s1----
-        //                      -----s3----
-        //  ---------s2----------
-        //          ----------s4-----------
-        final int s1 = ka - left;
-        final int s2 = kb - left;
-        final int s3 = right - kb;
-        final int s4 = right - ka;
-        if (s1 + s3 < Math.min(s2, s4)) {
+        //  ---d1----
+        //                      -----d3----
+        //  ---------d2----------
+        //          ----------d4-----------
+        final int d1 = ka - left;
+        final int d2 = kb - left;
+        final int d3 = right - kb;
+        final int d4 = right - ka;
+        if (d1 + d3 < Math.min(d2, d4)) {
             // Partition both ends.
             // Note: Not possible if ka == kb.
             // s1 + s3 == r - l and >= than the smallest
@@ -1192,7 +1210,7 @@ final class Partition {
             partitionMinK(a, left, right, ka, 0);
             // Repeat for the other side above ka
             partitionMaxK(a, ka + 1, right, kb, 0);
-        } else if (s2 < s4) {
+        } else if (d2 < d4) {
             partitionMinK(a, left, right, kb, kb - ka);
         } else {
             // s4
@@ -2269,7 +2287,8 @@ final class Partition {
         while (true) {
             // Full sort of small data
             if (r - l < minQuickSelectSize) {
-                Sorting.sort(a, l, r, l > 0);
+                //Sorting.sort(a, l, r, l > 0);
+                Sorting.sort(a, l, r);
                 return;
             }
             if (maxDepth == 0) {
@@ -2581,22 +2600,22 @@ final class Partition {
 
             // It is possible to use heapselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
-            //  ---s1----
-            //                      -----s3----
-            final int s1 = k - l;
-            final int s3 = r - k;
-            if (maxDepth == 0 || Math.min(s1, s3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+            //  ---d1----
+            //                      -----d2----
+            final int d1 = k - l;
+            final int d2 = r - k;
+            if (maxDepth == 0 || Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or k is close to the end
                 heapSelect(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
-                // Since r+1 is a pivot, then k+1 is sorted
-                return l;
+            if (n < minQuickSelectSize || Math.min(d1, d2) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
             }
 
             // Pick a pivot and partition
@@ -2665,24 +2684,25 @@ final class Partition {
 
             // It is possible to use heapselect when ka1 and kb1 are close to the ends
             // |l|-----|ka1|--------|kb1|------|r|
-            //  ---s1----
-            //                       -----s3----
-            //  ---------s2-----------
-            //          ----------s4-----------
-            final int s1 = ka1 - l;
-            final int s2 = kb1 - l;
-            final int s3 = r - kb1;
-            final int s4 = r - ka1;
+            //  ---d1----
+            //                       -----d3----
+            //  ---------d2-----------
+            //          ----------d4-----------
+            final int d1 = ka1 - l;
+            final int d2 = kb1 - l;
+            final int d3 = r - kb1;
+            final int d4 = r - ka1;
             if (maxDepth == 0 ||
-                Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                Math.min(d1 + d3, Math.min(d2, d4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
                 heapSelect(a, l, r, ka1, kb1);
                 return;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(d2, d4) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                //Sorting.sort(a, l, r, l > 0);
                 return;
             }
 
@@ -2791,9 +2811,10 @@ final class Partition {
                 return;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(kb - l, r - ka) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                //Sorting.sort(a, l, r, l > 0);
                 return;
             }
 
@@ -2894,7 +2915,7 @@ final class Partition {
             //  ---------s2----------
             //          ----------s4-----------
             if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
+                Math.min(kb1 - l, r - ka1) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
                     heapSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
                 // Too much recursion, or ka1 and kb1 are both close to the same end
                 heapSelectRange(a, l, r, ka1, kb1);
@@ -2902,9 +2923,10 @@ final class Partition {
                 return;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(kb1 - l, r - ka1) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                //Sorting.sort(a, l, r, l > 0);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -3005,9 +3027,10 @@ final class Partition {
                 return;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(kb - l, r - ka) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                //Sorting.sort(a, l, r, l > 0);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -3145,7 +3168,7 @@ final class Partition {
                 }
             }
 
-            // If interval is close to both ends then sort
+            // If interval is close to both ends then full sort
             // |l|-----|lo|--------|hi|------|right|
             //  ---d1----
             //                       ----d2--------
@@ -3156,7 +3179,10 @@ final class Partition {
                 // will also pre-process the data for NaN and signed
                 // zeros which is an overhead to avoid.
                 if (n < minQuickSelectSize) {
-                    Sorting.sort(a, l, right, l > 0);
+                    // Must not use sortSelectRange in [lo, hi] as the iterator
+                    // has not been advanced to check after hi
+                    sortMaxK(a, l, right, lo);
+                    //Sorting.sort(a, l, right, l > 0);
                 } else {
                     // Note: This disregards the current level of recursion
                     // but can exploit the JDK's more advanced sort algorithm.
@@ -3417,20 +3443,21 @@ final class Partition {
 
             // It is possible to use heapselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
-            //  ---s1----
-            //                      -----s3----
-            final int s1 = k - l;
-            final int s3 = r - k;
-            if (maxDepth == 0 || Math.min(s1, s3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+            //  ---d1----
+            //                      -----d3----
+            final int d1 = k - l;
+            final int d3 = r - k;
+            if (maxDepth == 0 || Math.min(d1, d3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or k is close to the end
                 heapSelect(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(d1, d3) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                //Sorting.sort(a, l, r, l > 0);
                 // Since r+1 is a pivot, then k+1 is sorted
                 return l;
             }
@@ -3529,9 +3556,10 @@ final class Partition {
                 return;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(s2, s4) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                //Sorting.sort(a, l, r, l > 0);
                 return;
             }
 
@@ -3663,9 +3691,10 @@ final class Partition {
 //                return;
 //            }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(kb1 - l, r - ka1) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                //Sorting.sort(a, l, r, l > 0);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -3800,9 +3829,10 @@ final class Partition {
                 return;
             }
 
-            if (n < minQuickSelectSize) {
-                // Full sort of small data
-                Sorting.sort(a, l, r, l > 0);
+            if (n < minQuickSelectSize || Math.min(kb - l, r - ka) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                //Sorting.sort(a, l, r, l > 0);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -4427,140 +4457,6 @@ final class Partition {
         select(a, 0, length - 1, keys, dualPivotMaxDepth(length),
             dualPivotSortSelectSize(k1, kn, n));
     }
-
-//    /**
-//     * Partition the array such that indices {@code k} correspond to their
-//     * correctly sorted value in the equivalent fully sorted array.
-//     *
-//     * <p>For all indices {@code k} and any index {@code i}:
-//     *
-//     * <pre>{@code
-//     * data[i < k] <= data[k] <= data[k < i]
-//     * }</pre>
-//     *
-//     *
-//     * <p>This function accepts a {@link SearchableInterval} of indices {@code k} and the
-//     * first index {@code k1} and last index {@code kn} that define the range of indices
-//     * to partition. The {@link SearchableInterval} is used to search for keys in {@code [k1, kn]}
-//     * to create {@code [k1, kb]} and {@code [ka, kn]} if partitioning splits the range.
-//     *
-//     * <pre>{@code
-//     * left <= k1 <= kn <= right
-//     * }</pre>
-//     *
-//     * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
-//     * partition method by Vladimir Yaroslavskiy;  the fall-back on poor convergence of
-//     * the quickselect is a heapselect.
-//     *
-//     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
-//     * destroyed (the mixture updated during partitioning). The caller is responsible for
-//     * counting a mixture of signed zeros and restoring them if required.
-//     *
-//     * @param a Values.
-//     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
-//     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-//     * @param k Interval of indices to partition (ordered).
-//     * @param k1 First key.
-//     * @param kn Last key.
-//     * @param maxDepth Maximum depth for recursion.
-//     */
-//    // package-private for benchmarking
-//    private static void select(double[] a, int left, int right,
-//        SearchableInterval k, int k1, int kn, int maxDepth) {
-//        // Inline code using the defaults.
-//        // Changes branching from left/right/middle to left/middle/right.
-//        // This allows branch prediction to track that after a split then the next section
-//        // should execute (since a split is used when there are indices after a pivot).
-//
-//        // If partitioning splits the interval then recursion is used for the left-most side(s)
-//        // and the right-most side remains within this function. If partitioning does
-//        // not split the interval then it remains within this function.
-//        int l = left;
-//        int r = right;
-//        int ka = k1;
-//        int kb = kn;
-//        final int[] upper = {0, 0, 0};
-//        while (true) {
-//            // It is possible to use heapselect when ka and kb are close to the same end
-//            // |l|-----|ka|--------|kb|------|r|
-//            //  ---------s2----------
-//            //          ----------s4-----------
-//            if (maxDepth == 0 ||
-//                Math.min(kb - l, r - ka) < HEAPSELECT_CONSTANT) {
-//                // Too much recursion, or ka and kb are both close to the same end
-//                heapSelectRange(a, l, r, ka, kb);
-//                return;
-//            }
-//
-//            if (r - l < MIN_QUICKSELECT_SIZE) {
-//                // Full sort of small data
-//                //Sorting.sort(a, l, r, l > 0);
-//                Sorting.sort(a, l, r);
-//                return;
-//            }
-//
-//            // Dual-pivot partitioning
-//            final int p0 = partitionDP(a, l, r, upper, ka, kb);
-//            final int p1 = upper[0];
-//            final int p2 = upper[1];
-//            final int p3 = upper[2];
-//
-//            // Recursion to max depth
-//            // Note: Here we possibly branch left, middle and right with multiple keys.
-//            // It is possible that the partition has split the keys
-//            // and the recursion proceeds with a reduced set in each region.
-//            //                    p0 p1              p2 p3
-//            // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
-//            //                 kb  |      ka
-//            maxDepth--;
-//            // Recurse left side if required
-//            if (ka < p0) {
-//                if (kb <= p1) {
-//                    // Entirely on left side
-//                    r = p0 - 1;
-//                    if (r < kb) {
-//                        kb = k.previousIndex(r);
-//                    }
-//                    continue;
-//                }
-//                select(a, l, p0 - 1, k, ka, k.split(p0, p1, upper), maxDepth);
-//                // Here we must process middle and possibly right
-//                ka = upper[0];
-//            }
-//            // Recurse middle if required
-//            // Check the interval overlaps the middle; and the middle exists.
-//            //                    p0 p1                p2 p3
-//            // |l|-----------------|P|------------------|P|----|r|
-//            // Eliminate:      ----kb                    ka----
-//            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
-//                // Advance lower bound
-//                l = p1 + 1;
-//                if (ka < l) {
-//                    ka = k.nextIndex(l);
-//                }
-//                if (kb <= p3) {
-//                    // Entirely in middle
-//                    r = p2 - 1;
-//                    if (r < kb) {
-//                        kb = k.previousIndex(r);
-//                    }
-//                    continue;
-//                }
-//                select(a, l, p2 - 1, k, ka, k.split(p2, p3, upper), maxDepth);
-//                // Here we must process right
-//                ka = upper[0];
-//            }
-//            if (kb <= p3) {
-//                // No right side
-//                return;
-//            }
-//            // Continue right
-//            l = p3 + 1;
-//            if (ka < l) {
-//                ka = k.nextIndex(l);
-//            }
-//        }
-//    }
 
     /**
      * Partition the array such that indices {@code k} correspond to their
