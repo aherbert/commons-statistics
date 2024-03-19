@@ -4594,10 +4594,13 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
+            // TODO: dynamic ss threshold is not working. It is too high.
+            // Q. How to determine what the threshold should be...
+
             // select when ka and kb are close to the same end,
             // or the entire range is small
             // |l|-----|ka|--------|kb|------|r|
-            if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE || r - l < ss) {
+            if (r - l < ss || Math.min(kb - l, r - ka) < SORTSELECT_SIZE) {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
@@ -6688,16 +6691,17 @@ final class Partition {
 
     // TODO - Fix this...
     static int dualPivotSortSelectSize(int k1, int kn, int n) {
-        int ss = 2 * SORTSELECT_SIZE;
-        final double averageSeparation = (double) (kn - k1) / (n - 1) / ss;
-        int max = 2 * ss;
-        if (averageSeparation < 0.16666) {
-            return max;
-        }
-        if (averageSeparation > 0.83333) {
-            return ss;
-        }
-        return (int) Math.round(max - ss * (averageSeparation - 0.16666) / 0.66666);
+//        int ss = 2 * SORTSELECT_SIZE;
+//        final double averageSeparation = (double) (kn - k1) / (n - 1) / ss;
+//        int max = 2 * ss;
+//        if (averageSeparation < 0.16666) {
+//            return max;
+//        }
+//        if (averageSeparation > 0.83333) {
+//            return ss;
+//        }
+//        return (int) Math.round(max - ss * (averageSeparation - 0.16666) / 0.66666);
+        return MIN_QUICKSELECT_SIZE;
     }
 
     /**
