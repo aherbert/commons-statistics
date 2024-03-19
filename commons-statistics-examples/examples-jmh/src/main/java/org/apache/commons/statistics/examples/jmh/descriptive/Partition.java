@@ -159,30 +159,34 @@ final class Partition {
     /** Default compression. */
     static final int COMPRESSION_LEVEL = 1;
 
-    /** Heap select size for the distance of a single k from the edge of the range.
-     * Benchmarking data in range [96, 192] suggests a value of ~15 on a
-     * variety of structured data or random data. This holds for both single pivot and dual
-     * pivot quickselect. */
-    static final int HEAPSELECT_SIZE = 15;
-    /** Sort select size for the dual-pivot select (used for multiple k).
-     * Benchmarking random data in range [162, 486] suggests a value of ~27 for n=1.
-     * For n=2 with keys separated at a fixed distance the value is increasing larger with
-     * small separation, then reduces as separation is large enough that the partition algorithm
-     * may create sections between indices to ignore. Optimal value for a full sort is ~120.
+    /**
+     * Sort select size for the the distance of a single k from the edge of the range
+     * length n. Benchmarking single-pivot in range [64+32, 128+64] and dual-pivot in
+     * range [81+81, 243+243] suggests a value of ~20 (or higher on some hardware). Ranges
+     * are chosen based on half-interval spacing between powers of 2 for single pivot, or
+     * third interval spacing between powers of 3 for dual pivot.
      *
-     * <p>This value is set at a small level and is increased as the density of keys increases.
-     * See {@link #dualPivotSortSelectSize(int, int, int)}.
+     * <p>Sort select is faster at this small size than heap select. Note insertion into a
+     * sorted array is Order(k) vs a heap which is Order(log2(k)) but has higher
+     * complexity and non-local memory usage traversing the heap in jumps. At larger k the
+     * heapselect is significantly faster.
      *
-     * <p>Note: single-pivot select only uses heapselect to finish. Use of sort select
-     * is slower for n=1. */
-    static final int SORTSELECT_SIZE = 30;
-    /** Separation distance to reduce initial dual-pivot sort select size. The initial size
-     * is based on the density of keys. When indices are no longer dense then the sort size
-     * can be reduced. This threshold is set at a value where dual-pivot partitioning just above
-     * the default dual-pivot sort size will likely partition all indices into a single third.
-     * Note: Key density analysis assumes uniform spacing of keys. This threshold allows the
-     * partition algorithm to adapt to varying density of indices; or identify if partitioning
-     * cut indices into single values. */
+     * <p>On random data heap select can be used for small lengths when k ~ n / 2^6; this
+     * ratio grows with length due to the log2(k) insertion cost. However on structured
+     * data (ascending runs; repeat elements) quickselect can be dramatically faster
+     * invalidating this relationship. Thus it is more robust on a variety of data input
+     * to use quickselect until the distance from the edge is small. Heap select is
+     * reserved for when quickselect fails to converge as expected.
+     *
+     * <p>A second advantage of sort select over heap select is that all indices closer to
+     * the edge than the target index are also sorted. This allows selection of multiple
+     * close indices to be performed with effectively the same speed. High density indices
+     * can trigger use of sort select for small lengths to achieve a speed comparable to
+     * quicksort. See {@link #dualPivotSortSelectSize(int, int, int)}.
+     */
+    static final int SORTSELECT_SIZE = 20;
+    /** Separation distance to identify a range of indices as a single index. This allows
+     * switching to an implementation optimised for a single target index. */
     private static final int MIN_SEPARATION_DISTANCE = 8;
 
     /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
@@ -1217,6 +1221,10 @@ final class Partition {
             partitionMaxK(a, left, right, ka, kb - ka);
         }
     }
+
+    // TODO
+    // Rename: heapSelectLeft/Right : sortSelectLeft/Right
+    // heapSelectPair
 
     /**
      * Partition the elements between {@code ka} and {@code kb} using a heap select
@@ -4452,8 +4460,7 @@ final class Partition {
             return;
         }
 
-        // Dual-pivot mode.
-        // Finishes using sortselect for high density keys; or heapselect for sparse keys.
+        // Dual-pivot mode with small range sort length configured using index density
         select(a, 0, length - 1, keys, dualPivotMaxDepth(length),
             dualPivotSortSelectSize(k1, kn, n));
     }
@@ -4498,10 +4505,14 @@ final class Partition {
         int kb = kn;
         final int[] upper = {0};
         while (true) {
-            // heapselect when ka and kb are close to the same end, or too much recursion
+            // select when ka and kb are close to the same end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
+            if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE) {
+                sortSelectRange(a, l, r, ka, kb);
+                return;
+            }
+            if (maxDepth == 0) {
+                // Excess recursion, switch to heap select
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
@@ -4565,7 +4576,7 @@ final class Partition {
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
      * @param k Interval of indices to partition (ordered).
      * @param maxDepth Maximum depth for recursion.
-     * @param ss Sort select size.
+     * @param ss Sort select size for the length {@code right - left}.
      */
     // package-private for benchmarking
     static void select(double[] a, int left, int right, UpdatingInterval k, int maxDepth, int ss) {
@@ -4583,32 +4594,44 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-            // TODO:
-            // Switch between sort and heapselect to finish the range [ka, kb].
-            // Dynamically adapt the sort select size.
-            //ss = kb - ka < MIN_SEPARATION_DISTANCE ? SORTSELECT_SIZE : ss;
-            //ss = kb - ka <= 1 ? 0 : ss;
-
-            //if (r - l < ss) {
-
-            // TODO - test this condition...
-            // sortselect when [ka, kb] is a significant part of [l, r], and the size is small
-            // Approximate speed: heapselect(n/4) == sort(n)
-            if (r - l < ((kb - ka) << 2 > (r - l) ? ss : 0)) {
-                // Switch to a sort of small data to avoid partition overhead
-                //Sorting.sort(a, l, r, l > 0);
-                //Sorting.sort(a, l, r);
+            // select when ka and kb are close to the same end,
+            // or the entire range is small
+            // |l|-----|ka|--------|kb|------|r|
+            if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE || r - l < ss) {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
-
-            // heapselect when ka and kb are close to the same end, or too much recursion
-            // |l|-----|ka|--------|kb|------|r|
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
+            if (maxDepth == 0) {
+                // Excess recursion, switch to heap select
                 heapSelectRange(a, l, r, ka, kb);
                 return;
             }
+//            // TODO:
+//            // Switch between sort and heapselect to finish the range [ka, kb].
+//            // Dynamically adapt the sort select size.
+//            //ss = kb - ka < MIN_SEPARATION_DISTANCE ? SORTSELECT_SIZE : ss;
+//            //ss = kb - ka <= 1 ? 0 : ss;
+//
+//            //if (r - l < ss) {
+//
+//            // TODO - test this condition...
+//            // sortselect when [ka, kb] is a significant part of [l, r], and the size is small
+//            // Approximate speed: heapselect(n/4) == sort(n)
+//            if (r - l < ((kb - ka) << 2 > (r - l) ? ss : 0)) {
+//                // Switch to a sort of small data to avoid partition overhead
+//                //Sorting.sort(a, l, r, l > 0);
+//                //Sorting.sort(a, l, r);
+//                sortSelectRange(a, l, r, ka, kb);
+//                return;
+//            }
+//
+//            // heapselect when ka and kb are close to the same end, or too much recursion
+//            // |l|-----|ka|--------|kb|------|r|
+//            if (maxDepth == 0 ||
+//                Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
+//                heapSelectRange(a, l, r, ka, kb);
+//                return;
+//            }
 
             // Dual-pivot partitioning
             final int p0 = partitionDP(a, l, r, upper, ka, kb);
@@ -6618,75 +6641,63 @@ final class Partition {
      * @param n Number of indices (must be above 1).
      * @return the sort select size.
      */
+    // Configure the sort select size based on the index density
+    // sortselect is preferred over heapselect when the range of indices is over a set
+    // fraction of the range of data:
+    // l---k1---k---k-----k--k------kn----r
+    // (kb - ka) > f * (r - l)
+    // i.e. it is faster to do a sort of small data than heapselect of a range of the data.
+    //
+    // Thus we set a minimum limit where sortselect performance is good on a
+    // pair of neighbour indices: (i, i+1).
+    //
+    // When the indices are high density then partitioning is likely
+    // to created indices in each third:
+    // l---k1---kr
+    //             lk-----k--kr
+    //                          l---kn----r
+    // Thus we can increase the sort select size to closer to the value
+    // used for optimised dual-pivot sort (~120).
+    // High density is where an ideal dual-pivot partition into thirds will
+    // create indices in adjacent thirds. If split indices are in thirds
+    // 1 and 3 then partitioning has allowed the centre to be skipped.
+    //
+    // Express the average separation with respect to the minimum expected
+    // size to perform partitioning of a single index: 2 * HEAPSELECT_SIZE = 30
+    //
+    // Average separation        Density
+    // ~ 1/3 partition length    High
+    // ~ 2/3 partition length    Sparse
+    //
+    // Transition from a default sortselect size to a large sortselect size
+    // using a linear ramp from 1/6 to 5/6 of the partition length.
+    //
+    // This sets a maximum sortselect size of 90. However note that sort select
+    // is only used when the range (kb - ka) is a substantial fraction of the
+    // current range (r - l).
+    // Thus ranges with a single index or indices separated by a few places will
+    // not use a very large sort, and will default to heapselect.
+    // This allows dynamic switching between sorting expected high density
+    // indices and performing quickselect using a heapselect to finish.
+    //
+    // This will be sub-optimal for high density indices at one end of a range
+    // of indices and then a large separation to another index:
+    // ---kkkk-k-k-------------------k--------------k
+    // As the data range becomes increasingly large then the partition time
+    // dominates and the cost of the final sort is insignificant.
+
+    // TODO - Fix this...
     static int dualPivotSortSelectSize(int k1, int kn, int n) {
-        // Configure the sort select size based on the index density
-        // sortselect is preferred over heapselect when the range of indices is over a set
-        // fraction of the range of data:
-        // l---k1---k---k-----k--k------kn----r
-        // (kb - ka) > f * (r - l)
-        // i.e. it is faster to do a sort of small data than heapselect of a range of the data.
-        //
-        // Thus we set a minimum limit where sortselect performance is good on a
-        // pair of neighbour indices: (i, i+1).
-        //
-        // When the indices are high density then partitioning is likely
-        // to created indices in each third:
-        // l---k1---kr
-        //             lk-----k--kr
-        //                          l---kn----r
-        // Thus we can increase the sort select size to closer to the value
-        // used for optimised dual-pivot sort (~120).
-        // High density is where an ideal dual-pivot partition into thirds will
-        // create indices in adjacent thirds. If split indices are in thirds
-        // 1 and 3 then partitioning has allowed the centre to be skipped.
-        //
-        // Express the average separation with respect to the minimum expected
-        // size to perform partitioning of a single index: 2 * HEAPSELECT_SIZE = 30
-        //
-        // Average separation        Density
-        // ~ 1/3 partition length    High
-        // ~ 2/3 partition length    Sparse
-        //
-        // Transition from a default sortselect size to a large sortselect size
-        // using a linear ramp from 1/6 to 5/6 of the partition length.
-        //
-        // This sets a maximum sortselect size of 90. However note that sort select
-        // is only used when the range (kb - ka) is a substantial fraction of the
-        // current range (r - l).
-        // Thus ranges with a single index or indices separated by a few places will
-        // not use a very large sort, and will default to heapselect.
-        // This allows dynamic switching between sorting expected high density
-        // indices and performing quickselect using a heapselect to finish.
-        //
-        // This will be sub-optimal for high density indices at one end of a range
-        // of indices and then a large separation to another index:
-        // ---kkkk-k-k-------------------k--------------k
-        // As the data range becomes increasingly large then the partition time
-        // dominates and the cost of the final sort is insignificant.
-
-        // TODO - test on many use cases with quantiles/indices that can be specified.
-
-        int ss = 2 * HEAPSELECT_SIZE;
+        int ss = 2 * SORTSELECT_SIZE;
         final double averageSeparation = (double) (kn - k1) / (n - 1) / ss;
-        int max = 3 * ss;
+        int max = 2 * ss;
         if (averageSeparation < 0.16666) {
             return max;
         }
         if (averageSeparation > 0.83333) {
             return ss;
         }
-        return (int) Math.round(max - ss * 2 * (averageSeparation - 0.16666) / 0.66666);
-
-//        if (averageSeparation < SORTSELECT_SIZE / 3) {
-//            return SORTSELECT_SIZE * 3;
-//        }
-//        if (averageSeparation < 2 * SORTSELECT_SIZE / 3) {
-//            return SORTSELECT_SIZE * 2;
-//        }
-//        if (averageSeparation < SORTSELECT_SIZE) {
-//            return SORTSELECT_SIZE + SORTSELECT_SIZE / 2;
-//        }
-//        return SORTSELECT_SIZE;
+        return (int) Math.round(max - ss * (averageSeparation - 0.16666) / 0.66666);
     }
 
     /**
