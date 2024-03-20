@@ -6644,64 +6644,100 @@ final class Partition {
      * @param n Number of indices (must be above 1).
      * @return the sort select size.
      */
-    // Configure the sort select size based on the index density
-    // sortselect is preferred over heapselect when the range of indices is over a set
-    // fraction of the range of data:
-    // l---k1---k---k-----k--k------kn----r
-    // (kb - ka) > f * (r - l)
-    // i.e. it is faster to do a sort of small data than heapselect of a range of the data.
-    //
-    // Thus we set a minimum limit where sortselect performance is good on a
-    // pair of neighbour indices: (i, i+1).
-    //
-    // When the indices are high density then partitioning is likely
-    // to created indices in each third:
-    // l---k1---kr
-    //             lk-----k--kr
-    //                          l---kn----r
-    // Thus we can increase the sort select size to closer to the value
-    // used for optimised dual-pivot sort (~120).
-    // High density is where an ideal dual-pivot partition into thirds will
-    // create indices in adjacent thirds. If split indices are in thirds
-    // 1 and 3 then partitioning has allowed the centre to be skipped.
-    //
-    // Express the average separation with respect to the minimum expected
-    // size to perform partitioning of a single index: 2 * HEAPSELECT_SIZE = 30
-    //
-    // Average separation        Density
-    // ~ 1/3 partition length    High
-    // ~ 2/3 partition length    Sparse
-    //
-    // Transition from a default sortselect size to a large sortselect size
-    // using a linear ramp from 1/6 to 5/6 of the partition length.
-    //
-    // This sets a maximum sortselect size of 90. However note that sort select
-    // is only used when the range (kb - ka) is a substantial fraction of the
-    // current range (r - l).
-    // Thus ranges with a single index or indices separated by a few places will
-    // not use a very large sort, and will default to heapselect.
-    // This allows dynamic switching between sorting expected high density
-    // indices and performing quickselect using a heapselect to finish.
-    //
-    // This will be sub-optimal for high density indices at one end of a range
-    // of indices and then a large separation to another index:
-    // ---kkkk-k-k-------------------k--------------k
-    // As the data range becomes increasingly large then the partition time
-    // dominates and the cost of the final sort is insignificant.
-
-    // TODO - Fix this...
     static int dualPivotSortSelectSize(int k1, int kn, int n) {
-//        int ss = 2 * SORTSELECT_SIZE;
-//        final double averageSeparation = (double) (kn - k1) / (n - 1) / ss;
-//        int max = 2 * ss;
-//        if (averageSeparation < 0.16666) {
-//            return max;
-//        }
-//        if (averageSeparation > 0.83333) {
-//            return ss;
-//        }
-//        return (int) Math.round(max - ss * (averageSeparation - 0.16666) / 0.66666);
-        return MIN_QUICKSELECT_SIZE;
+        // Configure the sort select size based on the index density
+        // l---k1---k---k-----k--k------kn----r
+        //
+        // For a full sort the dual-pivot quicksort can switch to insertion sort
+        // when the length is small. The optimum value is dependent on the
+        // hardware and the insertion sort implementation. Benchmarks show that
+        // insertion sort can be used at length 80-120.
+        //
+        // During selection the SORTSELECT_SIZE specifies the distance from the edge
+        // to use sort select. When keys are not dense there may be a small length
+        // that is ignored by sort select due to the presence of another key.
+        // Diagram of k-l = SORTSELECT_SIZE and r-k < SORTSELECT_SIZE where a second
+        // key b is blocking the use of sort select. The key b is closest it can be to the right
+        // key to enable blocking; it could be further away (up to k = left).
+        //
+        // |--SORTSELECT_SIZE--|
+        //    |--SORTSELECT_SIZE--|
+        // l--b----------------k--r
+        // l----b--------------k----r
+        // l------b------------k------r
+        // l--------b----------k--------r
+        // l----------b--------k----------r
+        // l------------b------k------------r
+        // l--------------b----k--------------r
+        // l----------------b--k----------------r
+        // l------------------bk------------------r
+        //                    |--SORTSELECT_SIZE--|
+        //
+        // For all these cases the partitioning method would have to run. Assuming ideal
+        // dual-pivot partitioning into thirds, and that the left key is randomly positioned
+        // in [left, k) it is more likely that after partitioning 2 partitions will have to
+        // be processed rather than 1 partition. In this case the options are:
+        // - split the range using partitioning; sort select next iteration
+        // - use sort select with a edge distance above the optimum length for single k selection
+        //
+        // Contrast with a longer length:
+        // |--SORTSELECT_SIZE--|
+        // l-------------------k-----k-------k-------------------r
+        //                                   |--SORTSELECT_SIZE--|
+        // Here partitioning has to run and 1, 2, or 3 partitions processed. But all k can
+        // be found with a sort. In this case sort select could be used with a much higher
+        // length (e.g. 80 - 120).
+        //
+        // When keys are extremely sparse (never within SORTSELECT_SIZE) then no switch
+        // to sort select based on length is *required*. It may still be beneficial to avoid
+        // partitioning if the length is very small due to the overhead of partitioning.
+        //
+        // Benchmarking with different lengths for a switch to sort select show inconsistent
+        // behaviour across platforms due to the variable speed of insertion sort at longer
+        // lengths. Attempts to transition the length based on various ramps schemes can
+        // be incorrect and result is a slowdown rather than speed-up (if the correct threshold
+        // is not chosen).
+        //
+        // Here we use a much simpler scheme based on these observations:
+        // - If the average separation is very low then no length will collect extra indices
+        // from a sort select over the current trigger of using the distance from the end. But
+        // using a length dependence will not effect the work done by sort select as it only
+        // performs the minimum sorting required.
+        // - If the average separation is within the SORTSELECT_SIZE then a round of
+        // partitioning will create multiple regions that all require a sort selection.
+        // Thus a partitioning round can be avoided if the length is small.
+        // -If the keys are at the end with nothing in between then partitioning will be able
+        // to split them and a sort will have to sort the entire range:
+        // lk-------------------------------kr
+        // After partitioning starts the chance of keys being at the ends is low as keys
+        // should be random within the divided range.
+        // - Extremely high density keys is rare. It is only expected to saturate the range
+        // with short lengths, e.g. 100 quantiles for length 1000 = separation 10 (high density)
+        // but for length 10000 = separation 100 (low density).
+        // - The density of (non-uniform) keys is hard to predict without complex analysis.
+        //
+        // Benchmarking using random keys at various density show no performance loss from
+        // using a fixed size for the length dependence of sort select, if the size is small.
+        // A large length can impact performance with low density keys, and on machines
+        // where insertion sort is slower. Extreme performance gains occur when the average
+        // separation of random keys is below 8-16, or of uniform keys around 32, by using a
+        // sort at lengths up to 90. But this threshold shows performance loss greater than
+        // the gains with separation of 64-128 on random keys, and on machines with slow
+        // insertion sort. The transition to using an insertion sort of a longer length
+        // is difficult to predict for all situations.
+
+        // Let partitioning run on small lengths.
+        // Use kn - k1 as a proxy for the length. If length is actually very large then
+        // the final selection is insignificant. This avoids slowdown for small lengths
+        // where the keys may only be at the ends. Note ideal dual-pivot partitioning
+        // creates thirds so 1 iteration on SORTSELECT_SIZE * 3 should create
+        // SORTSELECT_SIZE partitions.
+        if (kn - k1 < SORTSELECT_SIZE * 3) {
+            return 0;
+        }
+        // Here partitioning will run at least once.
+        // Stable performance across platforms using a modest length dependence.
+        return SORTSELECT_SIZE * 2;
     }
 
     /**
