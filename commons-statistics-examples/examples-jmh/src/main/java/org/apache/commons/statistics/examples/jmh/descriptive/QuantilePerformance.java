@@ -1821,7 +1821,7 @@ public class QuantilePerformance {
                 final char c = name.charAt(name.length() - 1);
                 // This offsets the start by 1 for comparison with insertion sort
                 final int k = Character.isDigit(c) ? Character.digit(c, 10) + 1 : 1;
-                function = x -> Partition.partitionMinK(x, 1, x.length - 1, k, 0);
+                function = x -> Partition.heapSelectLeft(x, 1, x.length - 1, k, 0);
             }
             if (function == null) {
                 throw new IllegalStateException("Unknown sort function: " + name);
@@ -2193,9 +2193,9 @@ public class QuantilePerformance {
                 return;
             }
             if (kb - left < right - ka) {
-                Partition.partitionMinK(a, left, right, kb, kb - ka);
+                Partition.heapSelectLeft(a, left, right, kb, kb - ka);
             } else {
-                Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                Partition.heapSelectRight(a, left, right, ka, kb - ka);
             }
         }
 
@@ -2222,16 +2222,16 @@ public class QuantilePerformance {
             if (kb - left < right - ka) {
                 // Optimise
                 if (kb == left) {
-                    Partition.partitionMinIgnoreZeros(a, left, right);
+                    Partition.selectMinIgnoreZeros(a, left, right);
                 } else {
-                    Partition.partitionMinK(a, left, right, kb, kb - ka);
+                    Partition.heapSelectLeft(a, left, right, kb, kb - ka);
                 }
             } else {
                 // Optimise
                 if (ka == right) {
-                    Partition.partitionMaxIgnoreZeros(a, left, right);
+                    Partition.selectMaxIgnoreZeros(a, left, right);
                 } else {
-                    Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                    Partition.heapSelectRight(a, left, right, ka, kb - ka);
                 }
             }
         }
@@ -2259,16 +2259,16 @@ public class QuantilePerformance {
             if (kb - left < right - ka) {
                 // Optimise
                 if (kb - 1 <= left) {
-                    Partition.partitionMin2IgnoreZeros(a, left, right);
+                    Partition.selectMin2IgnoreZeros(a, left, right);
                 } else {
-                    Partition.partitionMinK(a, left, right, kb, kb - ka);
+                    Partition.heapSelectLeft(a, left, right, kb, kb - ka);
                 }
             } else {
                 // Optimise
                 if (ka + 1 >= right) {
-                    Partition.partitionMax2IgnoreZeros(a, left, right);
+                    Partition.selectMax2IgnoreZeros(a, left, right);
                 } else {
-                    Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                    Partition.heapSelectRight(a, left, right, ka, kb - ka);
                 }
             }
         }
@@ -2297,23 +2297,23 @@ public class QuantilePerformance {
                 // Optimise
                 if (kb - 1 <= left) {
                     if (kb == left) {
-                        Partition.partitionMinIgnoreZeros(a, left, right);
+                        Partition.selectMinIgnoreZeros(a, left, right);
                     } else {
-                        Partition.partitionMin2IgnoreZeros(a, left, right);
+                        Partition.selectMin2IgnoreZeros(a, left, right);
                     }
                 } else {
-                    Partition.partitionMinK(a, left, right, kb, kb - ka);
+                    Partition.heapSelectLeft(a, left, right, kb, kb - ka);
                 }
             } else {
                 // Optimise
                 if (ka + 1 >= right) {
                     if (ka == right) {
-                        Partition.partitionMaxIgnoreZeros(a, left, right);
+                        Partition.selectMaxIgnoreZeros(a, left, right);
                     } else {
-                        Partition.partitionMax2IgnoreZeros(a, left, right);
+                        Partition.selectMax2IgnoreZeros(a, left, right);
                     }
                 } else {
-                    Partition.partitionMaxK(a, left, right, ka, kb - ka);
+                    Partition.heapSelectRight(a, left, right, ka, kb - ka);
                 }
             }
         }
