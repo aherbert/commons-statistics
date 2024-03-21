@@ -113,6 +113,10 @@ final class Partition {
      * Below this switch to insertion sort rather than selection. This is used to avoid
      * heap select on tiny data. */
     static final int MIN_HEAPSELECT_SIZE = 5;
+    /** Minimum size for sortselect.
+     * Below this switch to insertion sort rather than selection. This is used to avoid
+     * sort select on tiny data. */
+    static final int MIN_SORTSELECT_SIZE = 4;
     /** Minimum selection size for single-pivot select (used for single k).
      * Below this switch to sort selection.
      * Changes to this value are only noticeable when the input array is small.
@@ -457,9 +461,9 @@ final class Partition {
 
             // Edge case for a single point
             if (ka == right) {
-                partitionMax(a, left, ka);
+                selectMax(a, left, ka);
             } else if (kb == left) {
-                partitionMin(a, kb, right);
+                selectMin(a, kb, right);
             } else {
                 final int[] upper = {0};
                 final int k0 = partition(a, left, right, upper, leftInner, rightInner);
@@ -485,10 +489,10 @@ final class Partition {
                 return;
             }
             if (ka == right) {
-                partitionMax(a, left, ka);
+                selectMax(a, left, ka);
                 pivots.add(ka);
             } else if (kb == left) {
-                partitionMin(a, kb, right);
+                selectMin(a, kb, right);
                 pivots.add(kb);
             } else {
                 final int[] upper = {0};
@@ -522,10 +526,10 @@ final class Partition {
                 return;
             }
             if (ka == right) {
-                partitionMax(a, left, ka);
+                selectMax(a, left, ka);
                 pivots.add(ka);
             } else if (kb == left) {
-                partitionMin(a, kb, right);
+                selectMin(a, kb, right);
                 pivots.add(kb);
             } else {
                 final int[] upper = {0};
@@ -841,8 +845,8 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    static void partitionMin(double[] data, int left, int right) {
-        partitionMinIgnoreZeros(data, left, right);
+    static void selectMin(double[] data, int left, int right) {
+        selectMinIgnoreZeros(data, left, right);
         // Edge-case: if min was 0.0, check for a -0.0 above and swap.
         if (data[left] == 0) {
             minZero(data, left, right);
@@ -861,8 +865,8 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    static void partitionMax(double[] data, int left, int right) {
-        partitionMaxIgnoreZeros(data, left, right);
+    static void selectMax(double[] data, int left, int right) {
+        selectMaxIgnoreZeros(data, left, right);
         // Edge-case: if max was -0.0, check for a 0.0 below and swap.
         if (data[right] == 0) {
             maxZero(data, left, right);
@@ -932,7 +936,7 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    static void partitionMinIgnoreZeros(double[] data, int left, int right) {
+    static void selectMinIgnoreZeros(double[] data, int left, int right) {
         // Mitigate worst case performance on descending data by backward sweep
         double min = data[left];
         for (int i = right + 1; --i > left;) {
@@ -943,20 +947,6 @@ final class Partition {
             }
         }
         data[left] = min;
-
-//        // Mitigate worst case performance on descending data by backward sweep
-//        double min = data[left];
-//        int j = left;
-//        for (int i = right + 1; --i > left;) {
-//            final double v = data[i];
-//            if (v < min) {
-//                min = v;
-//                j = i;
-//            }
-//        }
-//        //swap(data, left, j)
-//        data[j] = data[left];
-//        data[left] = min;
     }
 
     /**
@@ -971,7 +961,7 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    static void partitionMin2IgnoreZeros(double[] data, int left, int right) {
+    static void selectMin2IgnoreZeros(double[] data, int left, int right) {
         double min1 = data[left + 1];
         if (min1 < data[left]) {
             min1 = data[left];
@@ -991,49 +981,6 @@ final class Partition {
             }
         }
         data[left + 1] = min1;
-
-//        int j0 = left;
-//        int j1 = left + 1;
-//        if (data[j1] < data[j0]) {
-//            final double v = data[j0];
-//            data[j0] = data[j1];
-//            data[j1] = v;
-//        }
-//        double min0 = data[j0];
-//        double min1 = data[j1];
-//
-//        // Mitigate worst case performance on descending data by backward sweep
-//        for (int i = right + 1, end = j1; --i > end;) {
-//            final double v = data[i];
-//            if (v < min1) {
-//                if (v < min0) {
-//                    j1 = j0;
-//                    j0 = i;
-//                    min1 = min0;
-//                    min0 = v;
-//                } else {
-//                    j1 = i;
-//                    min1 = v;
-//                }
-//            }
-//        }
-//
-//        // Move two smallest values taking care to not overwrite min values
-//        final double v0 = data[left];
-//        final double v1 = data[left + 1];
-//        data[left] = min0;
-//        data[left + 1] = min1;
-//        if (j1 == left) {
-//            // |j1|  |......|j0|..........  Found 1 value below the smaller of the original pair
-//            data[j0] = v1;
-//        } else {
-//            // |j0|j1|....................  Just overwrite the same values
-//            // |j0|  |......|j1|..........  Found 1 value below the larger of the original pair
-//            // |  |  |......|j0|....|j1|..  Found multiple smaller values
-//            // |  |  |......|j1|....|j0|..  Found multiple smaller values
-//            data[j0] = v0;
-//            data[j1] = v1;
-//        }
     }
 
     /**
@@ -1048,7 +995,7 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    static void partitionMaxIgnoreZeros(double[] data, int left, int right) {
+    static void selectMaxIgnoreZeros(double[] data, int left, int right) {
         // Mitigate worst case performance on descending data by backward sweep
         double max = data[right];
         for (int i = left - 1; ++i < right;) {
@@ -1058,22 +1005,7 @@ final class Partition {
                 max = v;
             }
         }
-        //swap(data, right, j)
         data[right] = max;
-
-//        // Mitigate worst case performance on descending data by backward sweep
-//        double max = data[right];
-//        int j = right;
-//        for (int i = left - 1; ++i < right;) {
-//            final double v = data[i];
-//            if (v > max) {
-//                max = v;
-//                j = i;
-//            }
-//        }
-//        //swap(data, right, j)
-//        data[j] = data[right];
-//        data[right] = max;
     }
 
     /**
@@ -1088,7 +1020,7 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    static void partitionMax2IgnoreZeros(double[] data, int left, int right) {
+    static void selectMax2IgnoreZeros(double[] data, int left, int right) {
         double max1 = data[right - 1];
         if (max1 > data[right]) {
             max1 = data[right];
@@ -1108,49 +1040,6 @@ final class Partition {
             }
         }
         data[right - 1] = max1;
-
-//        int j0 = right;
-//        int j1 = right - 1;
-//        if (data[j1] > data[j0]) {
-//            final double v = data[j0];
-//            data[j0] = data[j1];
-//            data[j1] = v;
-//        }
-//        double max0 = data[j0];
-//        double max1 = data[j1];
-//
-//        // Mitigate worst case performance on descending data by backward sweep
-//        for (int i = left - 1, end = j1; ++i < end;) {
-//            final double v = data[i];
-//            if (v > max1) {
-//                if (v > max0) {
-//                    j1 = j0;
-//                    j0 = i;
-//                    max1 = max0;
-//                    max0 = v;
-//                } else {
-//                    j1 = i;
-//                    max1 = v;
-//                }
-//            }
-//        }
-//
-//        // Move two largest values taking care to not overwrite max values
-//        final double v0 = data[right];
-//        final double v1 = data[right - 1];
-//        data[right] = max0;
-//        data[right - 1] = max1;
-//        if (j1 == right) {
-//            // ......|j0|..........|  |j1|  Found 1 value above the smaller of the original pair
-//            data[j0] = v1;
-//        } else {
-//            // ....................|j1|j0|  Just overwrite the same values
-//            // ......|j1|..........|  |j0|  Found 1 value above the larger of the original pair
-//            // ......|j0|....|j1|..|  |  |  Found multiple larger values
-//            // ......|j1|....|j0|..|  |  |  Found multiple larger values
-//            data[j0] = v0;
-//            data[j1] = v1;
-//        }
     }
 
     /**
@@ -1165,8 +1054,8 @@ final class Partition {
      */
     static void heapSort(double[] a, int left, int right) {
         // We could make a choice here
-        partitionMinK(a, left, right, right, right - left);
-        //partitionMaxK(a, left, right, left, right - left);
+        heapSelectLeft(a, left, right, right, right - left);
+        //heapSelectRight(a, left, right, left, right - left);
     }
 
     /**
@@ -1189,7 +1078,7 @@ final class Partition {
      * @param kb Upper index to select.
      * @see #heapSelectRange(double[], int, int, int, int)
      */
-    static void heapSelect(double[] a, int left, int right, int ka, int kb) {
+    static void heapSelectPair(double[] a, int left, int right, int ka, int kb) {
         // Avoid the overhead of heap select on tiny data (supports right <= left).
         if (right - left < MIN_HEAPSELECT_SIZE) {
             Sorting.sort(a, left, right);
@@ -1211,20 +1100,16 @@ final class Partition {
             // Note: Not possible if ka == kb.
             // s1 + s3 == r - l and >= than the smallest
             // distance to one of the ends
-            partitionMinK(a, left, right, ka, 0);
+            heapSelectLeft(a, left, right, ka, 0);
             // Repeat for the other side above ka
-            partitionMaxK(a, ka + 1, right, kb, 0);
+            heapSelectRight(a, ka + 1, right, kb, 0);
         } else if (d2 < d4) {
-            partitionMinK(a, left, right, kb, kb - ka);
+            heapSelectLeft(a, left, right, kb, kb - ka);
         } else {
             // s4
-            partitionMaxK(a, left, right, ka, kb - ka);
+            heapSelectRight(a, left, right, ka, kb - ka);
         }
     }
-
-    // TODO
-    // Rename: heapSelectLeft/Right : sortSelectLeft/Right
-    // heapSelectPair
 
     /**
      * Partition the elements between {@code ka} and {@code kb} using a heap select
@@ -1238,7 +1123,7 @@ final class Partition {
      * @param right Upper bound (inclusive).
      * @param ka Lower index to select.
      * @param kb Upper index to select.
-     * @see #heapSelect(double[], int, int, int, int)
+     * @see #heapSelectPair(double[], int, int, int, int)
      */
     static void heapSelectRange(double[] a, int left, int right, int ka, int kb) {
         // Combine the test for right <= left with
@@ -1256,18 +1141,21 @@ final class Partition {
         // The main overhead is the test for insertion against the current top of the heap
         // which grows increasingly unlikely as the range is scanned.
         if (kb - left < right - ka) {
-            partitionMinK(a, left, right, kb, kb - ka);
+            heapSelectLeft(a, left, right, kb, kb - ka);
         } else {
-            partitionMaxK(a, left, right, ka, kb - ka);
+            heapSelectRight(a, left, right, ka, kb - ka);
         }
     }
+
+    // TODO - update to heapselect a range [ka, kb]
 
     /**
      * Partition the minimum {@code n} elements below {@code k} where
      * {@code n = k - left + 1}. Uses a heap select algorithm.
      *
      * <p>Works with any {@code k} in the range {@code left <= k <= right}
-     * and can be used to perform a full sort of the range below {@code k}.
+     * and can be used to perform a full sort of the range below {@code k}
+     * using the {@code count} parameter.
      *
      * <p>For best performance this should be called with
      * {@code k - left < right - k}, i.e.
@@ -1282,7 +1170,7 @@ final class Partition {
      * @param k Index to select.
      * @param count Size of range to sort below k.
      */
-    static void partitionMinK(double[] a, int left, int right, int k, int count) {
+    static void heapSelectLeft(double[] a, int left, int right, int k, int count) {
         // Create a max heap in-place in [left, k], rooted at a[left] = max
         // |l|-max-heap-|k|--------------|
         // Build the heap using Floyd's heap-construction algorithm for heap size n.
@@ -1369,7 +1257,8 @@ final class Partition {
      * {@code n = right - k + 1}. Uses a heap select algorithm.
      *
      * <p>Works with any {@code k} in the range {@code left <= k <= right}
-     * and can be used to perform a full sort of the range above {@code k}.
+     * and can be used to perform a full sort of the range above {@code k}
+     * using the {@code count} parameter.
      *
      * <p>For best performance this should be called with
      * {@code k - left > right - k}, i.e.
@@ -1384,7 +1273,7 @@ final class Partition {
      * @param k Index to select.
      * @param count Size of range to sort below k.
      */
-    static void partitionMaxK(double[] a, int left, int right, int k, int count) {
+    static void heapSelectRight(double[] a, int left, int right, int k, int count) {
         // Create a min heap in-place in [k, right], rooted at a[right] = min
         // |--------------|k|-min-heap-|r|
         // Build the heap using Floyd's heap-construction algorithm for heap size n.
@@ -1481,16 +1370,16 @@ final class Partition {
     static void sortSelectRange(double[] a, int left, int right, int ka, int kb) {
         // Combine the test for right <= left with
         // avoiding the overhead of sort select on tiny data.
-        if (right - left < 2) {
+        if (right - left <= MIN_SORTSELECT_SIZE) {
             Sorting.sort(a, left, right);
             return;
         }
         // Sort the smallest side
         // |l|-----|ka|--------|kb|------|r|
         if (kb - left < right - ka) {
-            sortMinK(a, left, right, kb);
+            sortSelectLeft(a, left, right, kb);
         } else {
-            sortMaxK(a, left, right, ka);
+            sortSelectRight(a, left, right, ka);
         }
     }
 
@@ -1513,7 +1402,7 @@ final class Partition {
      * @param right Upper bound (inclusive).
      * @param k Index to select.
      */
-    static void sortMinK(double[] a, int left, int right, int k) {
+    static void sortSelectLeft(double[] a, int left, int right, int k) {
         // Sort
         for (int i = left; ++i <= k;) {
             final double v = a[i];
@@ -1562,7 +1451,7 @@ final class Partition {
      * @param right Upper bound (inclusive).
      * @param k Index to select.
      */
-    static void sortMaxK(double[] a, int left, int right, int k) {
+    static void sortSelectRight(double[] a, int left, int right, int k) {
         // Sort
         for (int i = right; --i >= k;) {
             final double v = a[i];
@@ -2499,7 +2388,7 @@ final class Partition {
                 // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
                 // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
                 if (p > k[1]) {
-                    partitionMinIgnoreZeros(a, k[1], p);
+                    selectMinIgnoreZeros(a, k[1], p);
                 }
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
                 // Dedicated method for two keys
@@ -2614,7 +2503,7 @@ final class Partition {
             final int d2 = r - k;
             if (maxDepth == 0 || Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or k is close to the end
-                heapSelect(a, l, r, k, k);
+                heapSelectPair(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
@@ -2703,7 +2592,7 @@ final class Partition {
             if (maxDepth == 0 ||
                 Math.min(d1 + d3, Math.min(d2, d4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
-                heapSelect(a, l, r, ka1, kb1);
+                heapSelectPair(a, l, r, ka1, kb1);
                 return;
             }
 
@@ -3153,7 +3042,7 @@ final class Partition {
             if (Math.min(hi - l, right - lo) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 if (hi - l > right - lo) {
                     // Right end
-                    partitionMaxK(a, l, right, lo, right - lo);
+                    heapSelectRight(a, l, right, lo, right - lo);
                     recursionConsumer.accept(maxDepth);
                     return;
                 } else if (k.nextAfter(right)) {
@@ -3161,7 +3050,7 @@ final class Partition {
                     // Only if no further indices in the range.
                     // If false this branch will continue to be triggered until
                     // a partition is made to separate the next indices.
-                    partitionMinK(a, l, right, hi, hi - l);
+                    heapSelectLeft(a, l, right, hi, hi - l);
                     recursionConsumer.accept(maxDepth);
                     // Advance iterator
                     l = hi + 1;
@@ -3189,7 +3078,7 @@ final class Partition {
                 if (n < minQuickSelectSize) {
                     // Must not use sortSelectRange in [lo, hi] as the iterator
                     // has not been advanced to check after hi
-                    sortMaxK(a, l, right, lo);
+                    sortSelectRight(a, l, right, lo);
                     //Sorting.sort(a, l, right, l > 0);
                 } else {
                     // Note: This disregards the current level of recursion
@@ -3341,7 +3230,7 @@ final class Partition {
                 // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
                 // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
                 if (p > k[1]) {
-                    partitionMinIgnoreZeros(a, k[1], p);
+                    selectMinIgnoreZeros(a, k[1], p);
                 }
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
                 // Dedicated method for two keys
@@ -3457,7 +3346,7 @@ final class Partition {
             final int d3 = r - k;
             if (maxDepth == 0 || Math.min(d1, d3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or k is close to the end
-                heapSelect(a, l, r, k, k);
+                heapSelectPair(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
@@ -3560,7 +3449,7 @@ final class Partition {
             if (maxDepth == 0 ||
                 Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
-                heapSelect(a, l, r, ka1, kb1);
+                heapSelectPair(a, l, r, ka1, kb1);
                 return;
             }
 
@@ -3985,7 +3874,7 @@ final class Partition {
             if (Math.min(hi - l, right - lo) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 if (hi - l > right - lo) {
                     // Right end
-                    partitionMaxK(a, l, right, lo, right - lo);
+                    heapSelectRight(a, l, right, lo, right - lo);
                     recursionConsumer.accept(maxDepth);
                     return;
                 } else if (k.nextAfter(right)) {
@@ -3993,7 +3882,7 @@ final class Partition {
                     // Only if no further indices in the range.
                     // If false this branch will continue to be triggered until
                     // a partition is made to separate the next indices.
-                    partitionMinK(a, l, right, hi, hi - l);
+                    heapSelectLeft(a, l, right, hi, hi - l);
                     recursionConsumer.accept(maxDepth);
                     // Advance iterator
                     l = hi + 1;

@@ -172,22 +172,22 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionMinMax"})
-    void testPartitionMin(double[] values, int from, int to) {
-        assertRangePartition(sort(values, from, to),
-            (a, l, r, ka, kb) -> Partition.partitionMin(values, from, to),
+    @MethodSource(value = {"testSelectMinMax"})
+    void testSelectMin(double[] values, int from, int to) {
+        assertPartitionRange(sort(values, from, to),
+            (a, l, r, ka, kb) -> Partition.selectMin(values, from, to),
             values, from, to, from, from);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionMinMax"})
-    void testPartitionMax(double[] values, int from, int to) {
-        assertRangePartition(sort(values, from, to),
-            (a, l, r, ka, kb) -> Partition.partitionMax(values, from, to),
+    @MethodSource(value = {"testSelectMinMax"})
+    void testSelectMax(double[] values, int from, int to) {
+        assertPartitionRange(sort(values, from, to),
+            (a, l, r, ka, kb) -> Partition.selectMax(values, from, to),
             values, from, to, to, to);
     }
 
-    static Stream<Arguments> testPartitionMinMax() {
+    static Stream<Arguments> testSelectMinMax() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         builder.add(Arguments.of(new double[] {1, 2, 3, 4, 5}, 0, 4));
         builder.add(Arguments.of(new double[] {5, 4, 3, 2, 1}, 0, 4));
@@ -210,30 +210,30 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = "testPartitionMinMax2")
-    void testPartitionMin2IgnoreZeros(double[] values, int from, int to) {
-        assertRangePartition(sort(values, from, to),
+    @MethodSource(value = "testSelectMinMax2")
+    void testSelectMin2IgnoreZeros(double[] values, int from, int to) {
+        assertPartitionRange(sort(values, from, to),
             (a, l, r, ka, kb) -> {
                 replaceNegativeZeros(values, from, to);
-                Partition.partitionMin2IgnoreZeros(values, from, to);
+                Partition.selectMin2IgnoreZeros(values, from, to);
                 restoreNegativeZeros(values, from, to);
             },
             values, from, to, from, from + 1);
     }
 
     @ParameterizedTest
-    @MethodSource(value = "testPartitionMinMax2")
-    void testPartitionMax2IgnoreZeros(double[] values, int from, int to) {
-        assertRangePartition(sort(values, from, to),
+    @MethodSource(value = "testSelectMinMax2")
+    void testSelectMax2IgnoreZeros(double[] values, int from, int to) {
+        assertPartitionRange(sort(values, from, to),
             (a, l, r, ka, kb) -> {
                 replaceNegativeZeros(values, from, to);
-                Partition.partitionMax2IgnoreZeros(values, from, to);
+                Partition.selectMax2IgnoreZeros(values, from, to);
                 restoreNegativeZeros(values, from, to);
             },
             values, from, to, to - 1, to);
     }
 
-    static Stream<Arguments> testPartitionMinMax2() {
+    static Stream<Arguments> testSelectMinMax2() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final double[] values = {-0.0, 0.0, 1};
         final double x = Double.NaN;
@@ -274,58 +274,58 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
-    void testPartitionMinK(double[] values, int from, int to) {
+    @MethodSource(value = {"testHeapSelect", "testSelectMinMax", "testSelectMinMax2"})
+    void testHeapSelectLeft(double[] values, int from, int to) {
         final double[] sorted = sort(values, from, to);
 
         final double[] x = values.clone();
         replaceNegativeZeros(x, from, to);
         final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
-            Partition.partitionMinK(a, l, r, kb, kb - ka);
+            Partition.heapSelectLeft(a, l, r, kb, kb - ka);
             restoreNegativeZeros(a, l, r);
         };
 
         for (int k = from; k <= to; k++) {
-            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
+            assertPartitionRange(sorted, fun, x.clone(), from, to, k, k);
             if (k > from) {
                 // Sort an extra 1
-                assertRangePartition(sorted, fun, x.clone(), from, to, k - 1, k);
+                assertPartitionRange(sorted, fun, x.clone(), from, to, k - 1, k);
                 if (k > from + 1) {
                     // Sort all
                     // Test clipping with k < from
-                    assertRangePartition(sorted, fun, x.clone(), from, to, from - 23, k);
+                    assertPartitionRange(sorted, fun, x.clone(), from, to, from - 23, k);
                 }
             }
         }
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
-    void testPartitionMaxK(double[] values, int from, int to) {
+    @MethodSource(value = {"testHeapSelect", "testSelectMinMax", "testSelectMinMax2"})
+    void testHeapSelectRight(double[] values, int from, int to) {
         final double[] sorted = sort(values, from, to);
 
         final double[] x = values.clone();
         replaceNegativeZeros(x, from, to);
         final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
-            Partition.partitionMaxK(a, l, r, ka, kb - ka);
+            Partition.heapSelectRight(a, l, r, ka, kb - ka);
             restoreNegativeZeros(a, l, r);
         };
 
         for (int k = from; k <= to; k++) {
-            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
+            assertPartitionRange(sorted, fun, x.clone(), from, to, k, k);
             if (k < to) {
                 // Sort an extra 1
-                assertRangePartition(sorted, fun, x.clone(), from, to, k, k + 1);
+                assertPartitionRange(sorted, fun, x.clone(), from, to, k, k + 1);
                 if (k < to - 1) {
                     // Sort all
                     // Test clipping with k > to
-                    assertRangePartition(sorted, fun, x.clone(), from, to, k, to + 23);
+                    assertPartitionRange(sorted, fun, x.clone(), from, to, k, to + 23);
                 }
             }
         }
     }
 
-    static Stream<Arguments> testPartitionK() {
+    static Stream<Arguments> testHeapSelect() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         builder.add(Arguments.of(new double[] {1}, 0, 0));
         builder.add(Arguments.of(new double[] {3, 2, 1}, 1, 1));
@@ -342,7 +342,7 @@ class PartitionTest {
     @MethodSource
     void testHeapSelectPair(double[] values, int from, int to, int k1, int k2) {
         final double[] sorted = sort(values, from, to);
-        Partition.heapSelect(values, from, to, k1, k2);
+        Partition.heapSelectPair(values, from, to, k1, k2);
         Assertions.assertEquals(sorted[k1], values[k1]);
         Assertions.assertEquals(sorted[k2], values[k2]);
         // Check the data is the same
@@ -363,7 +363,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource
     void testHeapSelectRange(double[] values, int from, int to, int k1, int k2) {
-        assertRangePartition(sort(values, from, to),
+        assertPartitionRange(sort(values, from, to),
             Partition::heapSelectRange, values, from, to, k1, k2);
     }
 
@@ -379,61 +379,43 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
-    void testSortMinK(double[] values, int from, int to) {
+    @MethodSource(value = {"testHeapSelect", "testSelectMinMax", "testSelectMinMax2"})
+    void testSortSelectLeft(double[] values, int from, int to) {
         final double[] sorted = sort(values, from, to);
 
         final double[] x = values.clone();
         replaceNegativeZeros(x, from, to);
         final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
-            Partition.sortMinK(a, l, r, kb);
+            Partition.sortSelectLeft(a, l, r, kb);
             restoreNegativeZeros(a, l, r);
         };
 
         for (int k = from; k <= to; k++) {
-            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
-            if (k > from) {
-                // Sort an extra 1
-                assertRangePartition(sorted, fun, x.clone(), from, to, k - 1, k);
-                if (k > from + 1) {
-                    // Sort all
-                    // Test clipping with k < from
-                    assertRangePartition(sorted, fun, x.clone(), from, to, from - 23, k);
-                }
-            }
+            assertPartitionRange(sorted, fun, x.clone(), from, to, from, k);
         }
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartitionK", "testPartitionMinMax", "testPartitionMinMax2"})
-    void testSortMaxK(double[] values, int from, int to) {
+    @MethodSource(value = {"testHeapSelect", "testSelectMinMax", "testSelectMinMax2"})
+    void testSortSelectRight(double[] values, int from, int to) {
         final double[] sorted = sort(values, from, to);
 
         final double[] x = values.clone();
         replaceNegativeZeros(x, from, to);
         final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
-            Partition.sortMaxK(a, l, r, ka);
+            Partition.sortSelectRight(a, l, r, ka);
             restoreNegativeZeros(a, l, r);
         };
 
         for (int k = from; k <= to; k++) {
-            assertRangePartition(sorted, fun, x.clone(), from, to, k, k);
-            if (k < to) {
-                // Sort an extra 1
-                assertRangePartition(sorted, fun, x.clone(), from, to, k, k + 1);
-                if (k < to - 1) {
-                    // Sort all
-                    // Test clipping with k > to
-                    assertRangePartition(sorted, fun, x.clone(), from, to, k, to + 23);
-                }
-            }
+            assertPartitionRange(sorted, fun, x.clone(), from, to, k, to);
         }
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testHeapSelectRange"})
     void testSortSelectRange(double[] values, int from, int to, int k1, int k2) {
-        assertRangePartition(sort(values, from, to),
+        assertPartitionRange(sort(values, from, to),
             Partition::sortSelectRange, values, from, to, k1, k2);
     }
 
@@ -474,7 +456,7 @@ class PartitionTest {
      * @param ka Lower index to select.
      * @param kb Upper index to select.
      */
-    private static void assertRangePartition(double[] sorted,
+    private static void assertPartitionRange(double[] sorted,
             DoubleRangePartitionFunction fun,
             double[] values, int from, int to, int ka, int kb) {
         Arrays.sort(sorted, from, to + 1);
