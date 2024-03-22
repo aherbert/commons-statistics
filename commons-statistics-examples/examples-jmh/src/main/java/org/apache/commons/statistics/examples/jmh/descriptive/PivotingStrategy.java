@@ -339,26 +339,30 @@ enum PivotingStrategy {
     }
 
     /**
-     * Find pivot index of the array so that partition and K<sup>th</sup> element
-     * selection can be made.
+     * Find a pivot index of the array so that partitioning into 2-regions can be made.
+     *
+     * <pre>{@code
+     * left <= p <= right
+     * }</pre>
      *
      * @param data Array.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
-     * @return the index of the pivot element chosen between the first and the last
-     * element of the array slice
+     * @return pivot
      */
     abstract int pivotIndex(double[] data, int left, int right);
 
     /**
-     * Find pivot index of the array so that partition and K<sup>th</sup> element
-     * selection can be made.
+     * Find a pivot index of the array so that partitioning into 2-regions can be made.
+     *
+     * <pre>{@code
+     * left <= p <= right
+     * }</pre>
      *
      * @param data Array.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
-     * @return the index of the pivot element chosen between the first and the last
-     * element of the array slice
+     * @return pivot
      */
     abstract int pivotIndex(int[] data, int left, int right);
 
