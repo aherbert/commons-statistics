@@ -5420,21 +5420,7 @@ final class Partition {
         // - Added a fast-forward over initial range containing the pivot.
         // - Changed the final move to perform the minimum moves.
 
-        // Median of 9 pivot selection using the median of 3 medians:
-        // 1 4 7
-        // x y z --> med(x,y,z) identifies pivot as 4th - 6th of 9 sorted values
-        // 3 6 9
-        // Bentley and McIlroy (1993) switch to median of 3 below size 40.
-        // Heapselect edge distance is 15 so partitioning is limited to size 30
-        // and we choose to always use this pivot selection.
-        final int s = (r - l) >>> 3;
-        final int m = (l + r) >>> 1;
-        final int x = med3(data, l, l + s, l + (s << 1));
-        final double a = data[x];
-        final int y = med3(data, m - s, m, m + s);
-        final double b = data[y];
-        final int z = med3(data, r - (s << 1), r - s, r);
-        final int pivot = med3(a, b, data[z], x, y, z);
+        final int pivot = pivotIndex(data, l, r);
 
         // Use the pivot index to set the upper sentinel value
         final double v = data[pivot];
@@ -5536,6 +5522,36 @@ final class Partition {
 
         // Equal in [lower, upper]
         return lower;
+    }
+
+    /**
+     * Find a pivot index of the array so that partitioning into 2-regions can be made.
+     *
+     * <pre>{@code
+     * left <= p <= right
+     * }</pre>
+     *
+     * @param data Array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @return pivot
+     */
+    private static int pivotIndex(double[] data, int l, int r) {
+        // Median of 9 pivot selection using the median of 3 medians:
+        // 1 4 7
+        // x y z --> med(x,y,z) identifies pivot as 4th - 6th of 9 sorted values
+        // 3 6 9
+        // Bentley and McIlroy (1993) switch to median of 3 below size 40.
+        // Heapselect edge distance is 15 so partitioning is limited to size 30
+        // and we choose to always use this pivot selection.
+        final int s = (r - l) >>> 3;
+        final int m = (l + r) >>> 1;
+        final int x = med3(data, l, l + s, l + (s << 1));
+        final double a = data[x];
+        final int y = med3(data, m - s, m, m + s);
+        final double b = data[y];
+        final int z = med3(data, r - (s << 1), r - s, r);
+        return med3(a, b, data[z], x, y, z);
     }
 
     /**
