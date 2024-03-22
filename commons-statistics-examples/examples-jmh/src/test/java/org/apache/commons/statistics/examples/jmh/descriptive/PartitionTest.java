@@ -1038,7 +1038,8 @@ class PartitionTest {
                 return;
             }
             replaceNegativeZeros(a, 0, right);
-            Partition.select(a, 0, right, IndexIntervals.interval(0, right), 100, Partition.SORTSELECT_SIZE);
+            Partition.select(a, 0, right, IndexIntervals.interval(0, right),
+                Partition.dualPivotFlags(0, right, 0, right, 100));
             restoreNegativeZeros(a, 0, right);
         });
     }

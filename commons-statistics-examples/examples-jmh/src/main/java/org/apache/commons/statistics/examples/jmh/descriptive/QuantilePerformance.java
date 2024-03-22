@@ -1762,9 +1762,7 @@ public class QuantilePerformance {
                     }
                     Partition.select(a, 0, end - 1,
                         IndexIntervals.interval(0, end - 1),
-                        Partition.dualPivotMaxDepth(a.length),
-                        // Maximum sort select size
-                        Partition.SORTSELECT_SIZE * 3);
+                        Partition.dualPivotFlags(0, end, 0, end - 1, 100));
                     // Restore signed zeros
                     t.postProcess(a);
                 };

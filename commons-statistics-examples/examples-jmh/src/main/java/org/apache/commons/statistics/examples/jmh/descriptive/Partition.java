@@ -192,6 +192,14 @@ final class Partition {
     /** Separation distance to identify a range of indices as a single index. This allows
      * switching to an implementation optimised for a single target index. */
     private static final int MIN_SEPARATION_DISTANCE = 8;
+    /** Increment used for the recursion counter. The counter will overflow to negative when
+     * recursion has exceeded the maximum level. The counter is maintained in the upper bits
+     * of the dual-pivot control flags. */
+    private static final int RECURSION_INCREMENT = 1 << 20;
+    /** Mask to extract the sort select size from the dual-pivot control flags. Currently
+     * the bits below those used for the recursion counter are only used for the sort select size
+     * so this can use a mask with all bits below the increment. */
+    private static final int SORTSELECT_MASK = RECURSION_INCREMENT - 1;
 
     /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
     private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
@@ -4477,8 +4485,9 @@ final class Partition {
         }
 
         // Dual-pivot mode with small range sort length configured using index density
-        select(a, 0, length - 1, keys, dualPivotMaxDepth(length),
-            dualPivotSortSelectSize(k1, kn, n));
+        //select(a, 0, length - 1, keys, dualPivotMaxDepth(length),
+        //    dualPivotSortSelectSize(k1, kn, n));
+        select(a, 0, length - 1, keys, dualPivotFlags(0, length - 1, k1, kn, n));
     }
 
     /**
@@ -4587,15 +4596,19 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
+     * <p>The control {@code flags} contain the the current recursion count and the configured
+     * length threshold for {@code r - l} to perform sort select. The count is in the upper
+     * bits and the threshold is in the lower bits.
+     *
      * @param a Values.
      * @param left Lower bound of data (inclusive, assumed to be strictly positive).
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
      * @param k Interval of indices to partition (ordered).
-     * @param maxDepth Maximum depth for recursion.
-     * @param ss Sort select size for the length {@code right - left}.
+     * @param flags Control flags.
      */
     // package-private for benchmarking
-    static void select(double[] a, int left, int right, UpdatingInterval k, int maxDepth, int ss) {
+    static void select(double[] a, int left, int right, UpdatingInterval k, int flags) {
+        //int maxDepth, int ss) {
         // Inline code using the defaults.
         // Branching uses left/middle/right.
         // This allows branch prediction to track that after a split then the next section
@@ -4616,11 +4629,11 @@ final class Partition {
             // select when ka and kb are close to the same end,
             // or the entire range is small
             // |l|-----|ka|--------|kb|------|r|
-            if (r - l < ss || Math.min(kb - l, r - ka) < SORTSELECT_SIZE) {
+            if (r - l < (flags & SORTSELECT_MASK) || Math.min(kb - l, r - ka) < SORTSELECT_SIZE) {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
-            if (maxDepth == 0) {
+            if (flags < 0) {
                 // Excess recursion, switch to heap select
                 heapSelectRange2(a, l, r, ka, kb);
                 return;
@@ -4665,7 +4678,7 @@ final class Partition {
             //                   p0 p1               p2 p3
             // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
             //                 kb  |      ka
-            maxDepth--;
+            flags += RECURSION_INCREMENT;
             // Recurse left side if required
             if (ka < p0) {
                 if (kb <= p1) {
@@ -4676,7 +4689,7 @@ final class Partition {
                     }
                     continue;
                 }
-                select(a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth, ss);
+                select(a, l, p0 - 1, k.splitLeft(p0, p1), flags);
                 // Here we must process middle and possibly right
                 ka = k.left();
             }
@@ -4701,7 +4714,7 @@ final class Partition {
                         }
                         continue;
                     }
-                    select(a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth, ss);
+                    select(a, l, p2 - 1, k.splitLeft(p2, p3), flags);
                     // Here we must process right
                     ka = k.left();
                 }
@@ -6754,6 +6767,27 @@ final class Partition {
         // Here partitioning will run at least once.
         // Stable performance across platforms using a modest length dependence.
         return SORTSELECT_SIZE * 2;
+    }
+
+    /**
+     * Configure the dual-pivot control flags. This packs the maximum recursion depth and
+     * sort select size into a single integer.
+     *
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k1 First key of interest.
+     * @param kn Last key of interest.
+     * @param n Number of indices (must be above 1).
+     * @return the flags
+     */
+    static int dualPivotFlags(int left, int right, int k1, int kn, int n) {
+        final int maxDepth = dualPivotMaxDepth(right - left);
+        final int ss = dualPivotSortSelectSize(k1, kn, n);
+        // The flags are packed using the upper bits to count back from -1 in
+        // step sizes. The lower bits pack the sort select size.
+        int flags = Integer.MIN_VALUE - maxDepth * RECURSION_INCREMENT;
+        flags &= ~SORTSELECT_MASK;
+        return flags | ss;
     }
 
     /**
