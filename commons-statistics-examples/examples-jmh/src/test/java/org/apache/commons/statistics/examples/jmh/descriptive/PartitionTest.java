@@ -339,6 +339,58 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testHeapSelect", "testSelectMinMax", "testSelectMinMax2"})
+    void testHeapSelectLeft2(double[] values, int from, int to) {
+        final double[] sorted = sort(values, from, to);
+
+        final double[] x = values.clone();
+        replaceNegativeZeros(x, from, to);
+        final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
+            Partition.heapSelectLeft2(a, l, r, ka, kb);
+            restoreNegativeZeros(a, l, r);
+        };
+
+        for (int k = from; k <= to; k++) {
+            assertPartitionRange(sorted, fun, x.clone(), from, to, k, k);
+            if (k > from) {
+                // Sort an extra 1
+                assertPartitionRange(sorted, fun, x.clone(), from, to, k - 1, k);
+                if (k > from + 1) {
+                    // Sort all
+                    // Test clipping with k < from
+                    assertPartitionRange(sorted, fun, x.clone(), from, to, from - 23, k);
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testHeapSelect", "testSelectMinMax", "testSelectMinMax2"})
+    void testHeapSelectRight2(double[] values, int from, int to) {
+        final double[] sorted = sort(values, from, to);
+
+        final double[] x = values.clone();
+        replaceNegativeZeros(x, from, to);
+        final DoubleRangePartitionFunction fun = (a, l, r, ka, kb) -> {
+            Partition.heapSelectRight2(a, l, r, ka, kb);
+            restoreNegativeZeros(a, l, r);
+        };
+
+        for (int k = from; k <= to; k++) {
+            assertPartitionRange(sorted, fun, x.clone(), from, to, k, k);
+            if (k < to) {
+                // Sort an extra 1
+                assertPartitionRange(sorted, fun, x.clone(), from, to, k, k + 1);
+                if (k < to - 1) {
+                    // Sort all
+                    // Test clipping with k > to
+                    assertPartitionRange(sorted, fun, x.clone(), from, to, k, to + 23);
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
     @MethodSource
     void testHeapSelectPair(double[] values, int from, int to, int k1, int k2) {
         final double[] sorted = sort(values, from, to);
@@ -361,10 +413,17 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource
+    @MethodSource(value = {"testHeapSelectRange"})
     void testHeapSelectRange(double[] values, int from, int to, int k1, int k2) {
         assertPartitionRange(sort(values, from, to),
             Partition::heapSelectRange, values, from, to, k1, k2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testHeapSelectRange"})
+    void testHeapSelectRange2(double[] values, int from, int to, int k1, int k2) {
+        assertPartitionRange(sort(values, from, to),
+            Partition::heapSelectRange2, values, from, to, k1, k2);
     }
 
     static Stream<Arguments> testHeapSelectRange() {

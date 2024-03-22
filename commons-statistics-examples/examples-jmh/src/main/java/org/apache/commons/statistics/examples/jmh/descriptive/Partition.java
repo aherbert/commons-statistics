@@ -1222,8 +1222,8 @@ final class Partition {
      * <p>Assumes {@code root <= p < end}, i.e. the max heap is above root.
      *
      * @param a Heap data.
-     * @param p Start position.
      * @param v Value to sift.
+     * @param p Start position.
      * @param root Root of the heap.
      * @param end End of the heap (exclusive).
      */
@@ -1325,8 +1325,8 @@ final class Partition {
      * <p>Assumes {@code root >= p > end}, i.e. the max heap is below root.
      *
      * @param a Heap data.
-     * @param p Start position.
      * @param v Value to sift.
+     * @param p Start position.
      * @param root Root of the heap.
      * @param end End of the heap (exclusive).
      */
@@ -1352,6 +1352,133 @@ final class Partition {
             p = c;
         }
         a[p] = v;
+    }
+
+    /**
+     * Partition the elements between {@code ka} and {@code kb} using a heap select
+     * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     * @see #heapSelectPair(double[], int, int, int, int)
+     */
+    static void heapSelectRange2(double[] a, int left, int right, int ka, int kb) {
+        // Combine the test for right <= left with
+        // avoiding the overhead of heap select on tiny data.
+        if (right - left < MIN_HEAPSELECT_SIZE) {
+            Sorting.sort(a, left, right);
+            return;
+        }
+        // Use the smallest heap
+        if (kb - left < right - ka) {
+            heapSelectLeft2(a, left, right, ka, kb);
+        } else {
+            heapSelectRight2(a, left, right, ka, kb);
+        }
+    }
+
+    /**
+     * Partition the elements between {@code ka} and {@code kb} using a heap select
+     * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+     *
+     * <p>For best performance this should be called with {@code k} in the lower
+     * half of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     */
+    static void heapSelectLeft2(double[] a, int left, int right, int ka, int kb) {
+        // Create a max heap in-place in [left, k], rooted at a[left] = max
+        // |l|-max-heap-|k|--------------|
+        // Build the heap using Floyd's heap-construction algorithm for heap size n.
+        // Start at parent of the last element in the heap (k),
+        // i.e. start = parent(n-1) : parent(c) = floor((c - 1) / 2) : c = k - left
+        int end = kb + 1;
+        for (int p = left + ((kb - left - 1) >> 1); p >= left; p--) {
+            maxHeapSiftDown(a, a[p], p, left, end);
+        }
+        // Scan the remaining data and insert
+        // Mitigate worst case performance on descending data by backward sweep
+        double max = a[left];
+        for (int i = right + 1; --i > kb;) {
+            final double v = a[i];
+            if (v < max) {
+                a[i] = max;
+                maxHeapSiftDown(a, v, left, left, end);
+                max = a[left];
+            }
+        }
+        // Partition [ka, kb]
+        // |l|-max-heap-|k|--------------|
+        //  |  <-swap->  |   then sift down reduced size heap
+        // Avoid sifting heap of size 1
+        final int last = Math.max(left, ka - 1);
+        while (--end > last) {
+            maxHeapSiftDown(a, a[end], left, left, end);
+            a[end] = max;
+            max = a[left];
+        }
+    }
+
+    /**
+     * Partition the elements between {@code ka} and {@code kb} using a heap select
+     * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+     *
+     * <p>For best performance this should be called with {@code k} in the upper
+     * half of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     */
+    static void heapSelectRight2(double[] a, int left, int right, int ka, int kb) {
+        // Create a min heap in-place in [k, right], rooted at a[right] = min
+        // |--------------|k|-min-heap-|r|
+        // Build the heap using Floyd's heap-construction algorithm for heap size n.
+        // Start at parent of the last element in the heap (k),
+        // i.e. start = parent(n-1) : parent(c) = floor((c - 1) / 2) : c = right - k
+        int end = ka - 1;
+        for (int p = right - ((right - ka - 1) >> 1); p <= right; p++) {
+            minHeapSiftDown(a, a[p], p, right, end);
+        }
+        // Scan the remaining data and insert
+        // Mitigate worst case performance on descending data by backward sweep
+        double min = a[right];
+        for (int i = left - 1; ++i < ka;) {
+            final double v = a[i];
+            if (v > min) {
+                a[i] = min;
+                minHeapSiftDown(a, v, right, right, end);
+                min = a[right];
+            }
+        }
+        // Partition [ka, kb]
+        // |--------------|k|-min-heap-|r|
+        //                 |  <-swap->  |   then sift down reduced size heap
+        // Avoid sifting heap of size 1
+        final int last = Math.min(right, kb + 1);
+        while (++end < last) {
+            minHeapSiftDown(a, a[end], right, right, end);
+            a[end] = min;
+            min = a[right];
+        }
     }
 
     /**
@@ -4402,7 +4529,7 @@ final class Partition {
             }
             if (maxDepth == 0) {
                 // Excess recursion, switch to heap select
-                heapSelectRange(a, l, r, ka, kb);
+                heapSelectRange2(a, l, r, ka, kb);
                 return;
             }
 
@@ -4495,7 +4622,7 @@ final class Partition {
             }
             if (maxDepth == 0) {
                 // Excess recursion, switch to heap select
-                heapSelectRange(a, l, r, ka, kb);
+                heapSelectRange2(a, l, r, ka, kb);
                 return;
             }
 //            // TODO:
