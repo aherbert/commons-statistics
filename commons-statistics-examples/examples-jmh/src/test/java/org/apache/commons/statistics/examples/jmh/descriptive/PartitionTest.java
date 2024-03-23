@@ -1476,7 +1476,7 @@ class PartitionTest {
 
         // Sort the data. This will record the recursion depth when a region is complete.
         for (int i = 0; i < source.size(); i++) {
-            final double[] x = source.getData(i);
+            final double[] x = source.getDataSample(i);
             if (dualPivot) {
                 p.introselect(Partition::partitionDP, x, 0, x.length - 1,
                     IndexIntervals.anyIndex(), 0, x.length - 1, maxDepth);
