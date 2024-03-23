@@ -58,7 +58,7 @@ class QuantileTest {
     }
 
     @Test
-    void testProbabiiltiesThrows() {
+    void testProbabilitiesThrows() {
         for (final int n : new int[] {-1, -42, Integer.MIN_VALUE}) {
             Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(n));
             Assertions.assertThrows(IllegalArgumentException.class, () -> Quantile.probabilities(n, 0.5, 0.75));
