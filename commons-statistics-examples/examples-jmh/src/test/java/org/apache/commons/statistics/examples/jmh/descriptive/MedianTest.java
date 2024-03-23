@@ -19,6 +19,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.stream.Stream;
+import org.apache.commons.math3.exception.NotANumberException;
 import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.stat.ranking.NaNStrategy;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -175,6 +176,26 @@ class MedianTest {
         builder.add(Arguments.of(new double[] {-0.0, -0.0}, -0.0));
         builder.add(Arguments.of(new double[] {-0.0, 0.0, -0.0}, -0.0));
         return builder.build();
+    }
+
+    @Test
+    void testCMBugs() {
+        // Always interpolates pairs so creates NaN when this is the upper value
+        // even if the upper value should be ignored
+        // Uses: low + 0.0 * (NaN - low)
+        // This also does an additional search for the upper value even when it
+        // is not used.
+        Percentile p = new Percentile().withNaNStrategy(NaNStrategy.FIXED);
+        Assertions.assertEquals(1, p.evaluate(new double[] {0, 1, 2}, 50));
+        Assertions.assertEquals(Double.NaN, p.evaluate(new double[] {0, 1, Double.NaN}, 50));
+
+        // Cannot use a NaNStratgey on the work array
+        Percentile p2 = new Percentile().withNaNStrategy(NaNStrategy.FAILED);
+        double[] x = {0, 1, Double.NaN};
+        Assertions.assertThrows(NotANumberException.class, () -> p2.evaluate(x, 50));
+        // With a work array
+        p2.setData(x);
+        Assertions.assertDoesNotThrow(() -> p2.evaluate(50));
     }
 
     @Test
