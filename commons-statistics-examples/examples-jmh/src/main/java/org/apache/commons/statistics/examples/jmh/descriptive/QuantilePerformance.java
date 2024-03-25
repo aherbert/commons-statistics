@@ -2020,9 +2020,9 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(FR)) {
-                // Not configurable
+                final Partition part = createPartition(name, SBM2, qs, hc, sc);
                 function = (data, indices) -> {
-                    Partition.partitionFR(data, indices.clone(), indices.length);
+                    part.partitionFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Introselect implementations

@@ -4398,7 +4398,7 @@ final class Partition {
      * @param k Indices (may be destructively modified).
      * @param count Count of indices.
      */
-    static void partitionFR(double[] a, int[] k, int count) {
+    void partitionFR(double[] a, int[] k, int count) {
         // Handle NaN / signed zeros
         final DoubleDataTransformer t = SORT_TRANSFORMER.get();
         // Assume this is in-place
@@ -4439,15 +4439,32 @@ final class Partition {
      * @param right Upper bound (inclusive).
      * @param k Key of interest.
      */
-    private static void selectFR(double[] a, int left, int right, int k) {
+    private void selectFR(double[] a, int left, int right, int k) {
         int l = left;
         int r = right;
-        while (r > l) {
+        while (true) {
+            // length - 1
+            int n = r - l;
+            // It is possible to use heapselect when k is close to the end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(k - l, r - k) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                heapSelectRange(a, l, r, k, k);
+                return;
+            }
+
+            if (n < minQuickSelectSize || Math.min(k - l, r - k) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                return;
+            }
+
             // use selectFR recursively to sample a smaller set of size s
             // the arbitrary constants 600 and 0.5 are used in the original
             // version to minimize execution time
-            if (r - l > 600) {
-                final int n = r - l + 1;
+            if (n > 600) {
+                ++n;
                 final int i = k - l + 1;
                 final double z = Math.log(n);
                 final double s = 0.5 * Math.exp(2 * z / 3);
@@ -4455,11 +4472,12 @@ final class Partition {
                 final int newLeft = Math.max(l, (int) (k - i * s / n + sd));
                 final int newRight = Math.min(r, (int) (k + (n - i) * s / n + sd));
                 selectFR(a, newLeft, newRight, k);
+                // Here k is correctly partitioning [newLeft, newRight] which is a good
+                // estimate for the pivot value for the rest of the data
             }
-            // TODO: Add use of min select size
 
-            // TODO: Can this be broken without index checks on i and j?
-            // Can we substitute code from another partition algorithm?
+            // TODO: Can we substitute code from another partition algorithm?
+
             // partition the elements between left and right around t
             final double t = a[k];
             // swap(left, k)
@@ -4468,10 +4486,12 @@ final class Partition {
                 // swap(right, left)
                 a[l] = a[r];
                 a[r] = t;
-                // Here: a[l] <= t; a[r] = t
+                // Here: a[l] > t; a[r] = t
+                // First swap: a[l] = t; a[r] > t
             } else {
                 a[l] = t;
                 // Here: a[l] = t; a[r] <= t
+                // First swap: a[l] <= t; a[r] = t
             }
             int i = l;
             int j = r;
@@ -4498,14 +4518,21 @@ final class Partition {
                 a[j] = a[r];
                 a[r] = temp;
             }
-            // adjust left and right towards the boundaries of the subset
-            // containing the (k - left + 1)th smallest element
-            if (j <= k) {
-                l = j + 1;
-            }
-            if (k <= j) {
+            if (k < j) {
                 r = j - 1;
+            } else if (k > j) {
+                l = j + 1;
+            } else {
+                return;
             }
+//            // adjust left and right towards the boundaries of the subset
+//            // containing the (k - left + 1)th smallest element
+//            if (j <= k) {
+//                l = j + 1;
+//            }
+//            if (k <= j) {
+//                r = j - 1;
+//            }
         }
         // Here k is correctly partitioned in [left, right]
     }
