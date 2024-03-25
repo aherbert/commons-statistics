@@ -4430,7 +4430,7 @@ final class Partition {
      * Select the k-th element of the array.
      *
      * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
-     *  Floyd-Rivest Algorithm (Wikipedia)</a>
+     * Floyd-Rivest Algorithm (Wikipedia)</a>
      *
      * <p>This code has been adapted from a contribution to MATH-1169 by Adam Stelmaszczyk.
      *
@@ -4440,69 +4440,74 @@ final class Partition {
      * @param k Key of interest.
      */
     private static void selectFR(double[] a, int left, int right, int k) {
-        while (right > left) {
+        int l = left;
+        int r = right;
+        while (r > l) {
             // use selectFR recursively to sample a smaller set of size s
             // the arbitrary constants 600 and 0.5 are used in the original
             // version to minimize execution time
-            if (right - left > 600) {
-                final int n = right - left + 1;
-                final int i = k - left + 1;
+            if (r - l > 600) {
+                final int n = r - l + 1;
+                final int i = k - l + 1;
                 final double z = Math.log(n);
                 final double s = 0.5 * Math.exp(2 * z / 3);
                 final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - n / 2);
-                final int newLeft = Math.max(left, (int) (k - i * s / n + sd));
-                final int newRight = Math.min(right, (int) (k + (n - i) * s / n + sd));
+                final int newLeft = Math.max(l, (int) (k - i * s / n + sd));
+                final int newRight = Math.min(r, (int) (k + (n - i) * s / n + sd));
                 selectFR(a, newLeft, newRight, k);
             }
+            // TODO: Add use of min select size
+
+            // TODO: Can this be broken without index checks on i and j?
+            // Can we substitute code from another partition algorithm?
             // partition the elements between left and right around t
             final double t = a[k];
-            int i = left;
-            int j = right;
             // swap(left, k)
-            double temp = a[left];
-            a[left] = a[k];
-            a[k] = temp;
-            if (a[right] > t) {
+            a[k] = a[l];
+            if (a[r] > t) {
                 // swap(right, left)
-                temp = a[right];
-                a[right] = a[left];
-                a[left] = temp;
+                a[l] = a[r];
+                a[r] = t;
+                // Here: a[l] <= t; a[r] = t
+            } else {
+                a[l] = t;
+                // Here: a[l] = t; a[r] <= t
             }
+            int i = l;
+            int j = r;
             while (i < j) {
                 // swap(i, j)
-                temp = a[i];
+                final double temp = a[i];
                 a[i] = a[j];
                 a[j] = temp;
-                i++;
-                j--;
-                while (a[i] < t) {
-                    i++;
-                }
-                while (a[j] > t) {
-                    j--;
-                }
+                do {
+                    ++i;
+                } while (a[i] < t);
+                do {
+                    --j;
+                } while (a[j] > t);
             }
-            if (a[left] == t) {
+            if (a[l] == t) {
                 // swap(left, j)
-                temp = a[left];
-                a[left] = a[j];
-                a[j] = temp;
+                a[l] = a[j];
+                a[j] = t;
             } else {
                 j++;
                 // swap(j, right)
-                temp = a[j];
-                a[j] = a[right];
-                a[right] = temp;
+                final double temp = a[j];
+                a[j] = a[r];
+                a[r] = temp;
             }
             // adjust left and right towards the boundaries of the subset
             // containing the (k - left + 1)th smallest element
             if (j <= k) {
-                left = j + 1;
+                l = j + 1;
             }
             if (k <= j) {
-                right = j - 1;
+                r = j - 1;
             }
         }
+        // Here k is correctly partitioned in [left, right]
     }
 
     /**
