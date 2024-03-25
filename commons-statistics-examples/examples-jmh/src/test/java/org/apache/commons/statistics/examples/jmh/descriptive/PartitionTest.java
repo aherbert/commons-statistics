@@ -970,6 +970,20 @@ class PartitionTest {
                     new int[] {rng.nextInt(size)}));
             }
         }
+        // Cases for the partition between left and right around t
+        for (final double[] x : new double[][] {
+            {0, 1, 2},
+            {0, 2, 1},
+            {1, 0, 2},
+            {1, 2, 0},
+            {2, 0, 1},
+            {2, 1, 0},
+        }) {
+            builder.add(Arguments.of(x.clone(), new int[] {0}));
+            builder.add(Arguments.of(x.clone(), new int[] {1}));
+            builder.add(Arguments.of(x.clone(), new int[] {2}));
+        }
+
         return builder.build();
     }
 
