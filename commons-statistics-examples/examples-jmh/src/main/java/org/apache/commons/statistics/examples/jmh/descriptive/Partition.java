@@ -4542,8 +4542,10 @@ final class Partition {
                 return;
             }
 
-            // Single-pivot partitioning handling equal values
-            final int p0 = partitionSBM(a, l, r, upper);
+            // Single-pivot partitioning handling equal values.
+            // This is faster if the pivot is computed before the partition method.
+            final int p0 = partitionSBM(a, l, r, pivotIndex(a, l, r), upper);
+            //final int p0 = partitionSBM(a, l, r, upper);
             final int p1 = upper[0];
 
             // Recursion to max depth
@@ -4666,6 +4668,15 @@ final class Partition {
 //            }
 
             // Dual-pivot partitioning
+//            final int n = r - l;
+//            final int step = 1 + (n >>> 3) + (n >>> 6);
+//            final int i3 = l + (n >>> 1);
+//            final int i2 = i3 - step;
+//            final int i1 = i2 - step;
+//            final int i4 = i3 + step;
+//            final int i5 = i4 + step;
+//            Sorting.sort5(a, i1, i2, i3, i4, i5);
+//            final int p0 = partitionDP(a, l, r, i2, i4, upper);
             final int p0 = partitionDP(a, l, r, upper, ka, kb);
             final int p1 = upper[0];
             final int p2 = upper[1];
@@ -5264,13 +5275,13 @@ final class Partition {
         // - Added a fast-forward over initial range containing the pivot.
         // - Changed the final move to perform the minimum moves.
 
-        int p = l;
-        int q = r;
-
         // Use the pivot index to set the upper sentinel value
         final double v = data[pivot];
         data[pivot] = data[r];
         data[r] = v;
+
+        int p = l;
+        int q = r;
 
         // Fast-forward over equal regions to reduce swaps
         while (data[p] == v) {
