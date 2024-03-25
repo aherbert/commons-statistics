@@ -4384,6 +4384,136 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
+     * Floyd-Rivest Algorithm (Wikipedia)</a>
+     *
+     * <p>WARNING: Currently this only supports a single {@code k}. It uses code adapted
+     * from MATH-1169 as a proof-of-concept. For parity with other select methods this
+     * accepts an array {@code k} and pre/post processes the data for NaN and signed zeros.
+     *
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    static void partitionFR(double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            // Only handles a single k
+            if (n != 0) {
+                selectFR(a, 0, end - 1, k[0]);
+            }
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Select the k-th element of the array.
+     *
+     * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
+     *  Floyd-Rivest Algorithm (Wikipedia)</a>
+     *
+     * <p>This code has been adapted from a contribution to MATH-1169 by Adam Stelmaszczyk.
+     *
+     * @param a Values.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k Key of interest.
+     */
+    private static void selectFR(double[] a, int left, int right, int k) {
+        while (right > left) {
+            // use selectFR recursively to sample a smaller set of size s
+            // the arbitrary constants 600 and 0.5 are used in the original
+            // version to minimize execution time
+            if (right - left > 600) {
+                final int n = right - left + 1;
+                final int i = k - left + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(2 * z / 3);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - n / 2);
+                final int newLeft = Math.max(left, (int) (k - i * s / n + sd));
+                final int newRight = Math.min(right, (int) (k + (n - i) * s / n + sd));
+                selectFR(a, newLeft, newRight, k);
+            }
+            // partition the elements between left and right around t
+            final double t = a[k];
+            int i = left;
+            int j = right;
+            // swap(left, k)
+            double temp = a[left];
+            a[left] = a[k];
+            a[k] = temp;
+            if (a[right] > t) {
+                // swap(right, left)
+                temp = a[right];
+                a[right] = a[left];
+                a[left] = temp;
+            }
+            while (i < j) {
+                // swap(i, j)
+                temp = a[i];
+                a[i] = a[j];
+                a[j] = temp;
+                i++;
+                j--;
+                while (a[i] < t) {
+                    i++;
+                }
+                while (a[j] > t) {
+                    j--;
+                }
+            }
+            if (a[left] == t) {
+                // swap(left, j)
+                temp = a[left];
+                a[left] = a[j];
+                a[j] = temp;
+            } else {
+                j++;
+                // swap(j, right)
+                temp = a[j];
+                a[j] = a[right];
+                a[right] = temp;
+            }
+            // adjust left and right towards the boundaries of the subset
+            // containing the (k - left + 1)th smallest element
+            if (j <= k) {
+                left = j + 1;
+            }
+            if (k <= j) {
+                right = j - 1;
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
      * <p>All indices are assumed to be within {@code [0, right]}.
      *
      * <p>Note: This method does not use any configuration. It is built using the

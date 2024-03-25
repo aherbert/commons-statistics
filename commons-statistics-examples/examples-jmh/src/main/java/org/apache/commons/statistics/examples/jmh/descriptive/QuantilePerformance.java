@@ -81,6 +81,8 @@ public class QuantilePerformance {
     private static final String BM = "BM";
     /** Commons Statistics Quantile implementation with a dual-pivot strategy. */
     private static final String DP = "DP";
+    /** Commons Statistics Quantile implementation with Floyd-Rivest partitioning. */
+    private static final String FR = "FR";
     /** Commons Statistics Quantile implementation with a dual-pivot strategy
      * with 5 sorted points to choose pivots. */
     private static final String DP5 = "5DP";
@@ -2015,6 +2017,12 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, SBM2, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionSBM(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(FR)) {
+                // Not configurable
+                function = (data, indices) -> {
+                    Partition.partitionFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Introselect implementations
