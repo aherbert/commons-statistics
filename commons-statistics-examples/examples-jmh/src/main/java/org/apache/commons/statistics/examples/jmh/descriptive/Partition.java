@@ -4390,9 +4390,9 @@ final class Partition {
      * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
      * Floyd-Rivest Algorithm (Wikipedia)</a>
      *
-     * <p>WARNING: Currently this only supports a single {@code k}. It uses code adapted
-     * from MATH-1169 as a proof-of-concept. For parity with other select methods this
-     * accepts an array {@code k} and pre/post processes the data for NaN and signed zeros.
+     * <p>WARNING: Currently this only supports a single {@code k}. For parity with other
+     * select methods this accepts an array {@code k} and pre/post processes the data for
+     * NaN and signed zeros.
      *
      * @param a Values.
      * @param k Indices (may be destructively modified).
@@ -4419,7 +4419,7 @@ final class Partition {
             }
             // Only handles a single k
             if (n != 0) {
-                selectFR(a, 0, end - 1, k[0]);
+                selectFR(a, 0, end - 1, k[0], 0);
             }
         }
         // Restore signed zeros
@@ -4430,16 +4430,22 @@ final class Partition {
      * Select the k-th element of the array.
      *
      * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
-     * Floyd-Rivest Algorithm (Wikipedia)</a>
+     * Floyd-Rivest Algorithm (Wikipedia)</a>.
      *
-     * <p>This code has been adapted from a contribution to MATH-1169 by Adam Stelmaszczyk.
+     * <p>This code has been adapted from:
+     * <pre>
+     * Floyd and Rivest (1975)
+     * Algorithm 489: The Algorithm SELECT—for Finding the ith Smallest of n elements.
+     * Comm. ACM. 18 (3): 173.
+     * </pre>
      *
      * @param a Values.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Key of interest.
+     * @param flags Control flags.
      */
-    private void selectFR(double[] a, int left, int right, int k) {
+    private void selectFR(double[] a, int left, int right, int k, int flags) {
         int l = left;
         int r = right;
         while (true) {
@@ -4460,28 +4466,48 @@ final class Partition {
                 return;
             }
 
-            // use selectFR recursively to sample a smaller set of size s
-            // the arbitrary constants 600 and 0.5 are used in the original
-            // version to minimize execution time
+            // use SELECT recursively on a sample of size S to get an estimate for the 
+            // (k-l+1)-th smallest element into a[k], biased slightly so that the (k-l+1)-th
+            // element is expected to lie in the smaller set after partitioning.
+            int pivot;
             if (n > 600) {
                 ++n;
                 final int i = k - l + 1;
                 final double z = Math.log(n);
-                final double s = 0.5 * Math.exp(2 * z / 3);
-                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - n / 2);
-                final int newLeft = Math.max(l, (int) (k - i * s / n + sd));
-                final int newRight = Math.min(r, (int) (k + (n - i) * s / n + sd));
-                selectFR(a, newLeft, newRight, k);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
+                final int ll = Math.max(l, (int) (k - i * s / n + sd));
+                final int rr = Math.min(r, (int) (k + (n - i) * s / n + sd));
+                selectFR(a, ll, rr, k, flags);
                 // Here k is correctly partitioning [newLeft, newRight] which is a good
                 // estimate for the pivot value for the rest of the data
+                flags |= Integer.MIN_VALUE;
+//                pivot = k;
+//            } else {
+//                // default pivot strategy
+//                pivot = pivotingStrategy.pivotIndex(a, l, r);
             }
 
             // TODO: Can we substitute code from another partition algorithm?
 
-            // partition the elements between left and right around t
-            final double t = a[k];
-            // swap(left, k)
-            a[k] = a[l];
+            if (flags < 0) {
+                // k has partitioned a subset
+                // TODO: can we detect when k was not a good choice and revert to
+                // the default strategy? Note the default strategy attempts to divide
+                // the range in half whereas k attempts to find the correct percentile
+                // in the range.
+                pivot = k;
+            } else {
+                // k does not partition any subset: default pivot strategy
+                pivot = pivotingStrategy.pivotIndex(a, l, r);
+            }
+
+            // Partition a[l : r] about t.
+            // Sub-script range checking has been eliminated by appropriate placement of t
+            // at the l or r end.
+            final double t = a[pivot];
+            // swap(left, pivot)
+            a[pivot] = a[l];
             if (a[r] > t) {
                 // swap(right, left)
                 a[l] = a[r];
@@ -4512,12 +4538,11 @@ final class Partition {
                 a[l] = a[j];
                 a[j] = t;
             } else {
-                j++;
-                // swap(j, right)
-                final double temp = a[j];
-                a[j] = a[r];
-                a[r] = temp;
+                // j++; swap(j, right)
+                a[r] = a[++j];
+                a[j] = t;
             }
+            // Continue on the correct side
             if (k < j) {
                 r = j - 1;
             } else if (k > j) {
