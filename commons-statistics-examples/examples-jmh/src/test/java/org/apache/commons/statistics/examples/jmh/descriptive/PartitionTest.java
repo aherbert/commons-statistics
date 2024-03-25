@@ -802,6 +802,13 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionFR(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1);
+        assertPartition(values, indices, Partition::partitionFR);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
@@ -943,6 +950,25 @@ class PartitionTest {
         rng = RandomSource.XO_SHI_RO_128_PP.create(-8111061151820577011L);
         for (int i = 0; i < 5; i++) {
             builder.add(Arguments.of(TestUtils.shuffle(rng, x.clone()), new int[] {50}));
+        }
+        return builder.build();
+    }
+
+    static Stream<Arguments> testFR() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
+        // Sizes above the threshold (600) for recursive partitioning
+        for (final int size : new int[] {1000, 5000, 10000}) {
+            final double[] a = IntStream.range(0, size).asDoubleStream().toArray();
+            // With repeat elements
+            final double[] b = rng.ints(size, 0, size >> 3).asDoubleStream().toArray();
+            for (int i = 0; i < 15; i++) {
+                builder.add(Arguments.of(
+                    TestUtils.shuffle(rng, a.clone()),
+                    new int[] {rng.nextInt(size)}));
+                builder.add(Arguments.of(b.clone(),
+                    new int[] {rng.nextInt(size)}));
+            }
         }
         return builder.build();
     }
