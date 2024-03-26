@@ -52,13 +52,28 @@ class QuantilePerformanceTest {
     }
 
     @Test
-    void testGetCompressionLevel() {
+    void testGetSortSelectConstant() {
+        assertIntParameter(Partition.SORTSELECT_CONSTANT, "SC", QuantilePerformance::getSortSelectConstant);
+    }
+
+    @Test
+    void testGetSubSamplingSize() {
+        assertIntParameter(Partition.SUBSAMPLING_SIZE, "SU", QuantilePerformance::getSubSamplingSize);
+    }
+
+    @Test
+    void testGetRecursionMultiple() {
         assertDoubleParameter(Partition.RECURSION_MULTIPLE, "RM", QuantilePerformance::getRecursionMultiple);
     }
 
     @Test
     void testGetRecursionConstant() {
         assertIntParameter(Partition.RECURSION_CONSTANT, "RC", QuantilePerformance::getRecursionConstant);
+    }
+
+    @Test
+    void testGetCompressionLevel() {
+        assertIntParameter(Partition.COMPRESSION_LEVEL, "CL", QuantilePerformance::getCompressionLevel);
     }
 
     @Test
@@ -85,6 +100,10 @@ class QuantilePerformanceTest {
         final String[] s = {"nothing"};
         Assertions.assertEquals(defaultValue, fun.applyAsInt(s));
         Assertions.assertEquals("nothing", s[0]);
+        // Prevent overflow when setting non-default values
+        if (defaultValue + 4 < 0) {
+            defaultValue = 0;
+        }
         s[0] = pattern + (defaultValue + 1);
         Assertions.assertEquals(defaultValue + 1, fun.applyAsInt(s));
         Assertions.assertEquals("", s[0]);
