@@ -249,8 +249,52 @@ final class Partition {
      * Order(log(n)) for a heap. */
     private final int sortSelectConstant;
     /** Threshold to use sub-sampling of the range to identify the single pivot.
-     * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data to
-     * identify a pivot so that the target element is in the smaller set after partitioning. */
+     * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data. This
+     * identifies a pivot so that the target element is in the smaller set after partitioning.
+     * The algorithm applies to searching for a single k.
+     * Not all single-pivot {@link PairedKeyStrategy} methods support sub-sampling.
+     *
+     * <p>Sub-sampling can provide up to a 2-fold performance gain on large random data.
+     * The algorithm relies on partitioning of a subset to be representative of partitioning
+     * of the entire data. That is the values in a small range partitioned around a pivot P
+     * should create P in a similar location to its position in the entire fully sorted array,
+     * i.e. ordering around P in [ll, rr] will be similar to P's order in [l, r]:
+     * <pre>
+     * target:                       k
+     * subset:                  ll---P-------rr
+     * sorted: l----------------------P-------------------------------------------r
+     *                                Good pivot
+     * </pre>
+     *
+     * <p>This is true for random data. If the data in [ll, rr] is not representative then
+     * pivot selection based on a subset creates bad pivot choices and performance
+     * is worse than using a {@link PivotingStrategy}.
+     * <pre>
+     * target:                       k
+     * subset:                 ll----P-------rr
+     * sorted: l------------------------------------------P----------------------r
+     *                                                    Bad pivot
+     * </pre>
+     *
+     * <p>Note that performance is also worse on fully sorted data. Although the subset sampling
+     * can pick representative pivots, there is an overhead to each subset sampling iteration.
+     * Any {@link PivotingStrategy} based on ranking will identify ideal pivots to cut the range
+     * in half and convergence is fast as the main partitioning loop does not move any elements.
+     *
+     * <p>The choice to use Floyd-Rivest subset sampling should be based on whether the data
+     * is random (yes), or structured with subsets containing values not representative of the
+     * equivalent fully sorted data (no), or sorted (no). This cannot be known by the
+     * partition algorithm before processing. Thus the Floyd-Rivest subset sampling is more
+     * suitable as an option to be enabled by user settings.
+     *
+     * <p>See <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
+     * Floyd-Rivest Algorithm (Wikipedia)</a>.
+     *
+     * <pre>
+     * Floyd and Rivest (1975)
+     * Algorithm 489: The Algorithm SELECT—for Finding the ith Smallest of n elements.
+     * Comm. ACM. 18 (3): 173.
+     * </pre> */
     private final int subSamplingSize;
 
     // Use final for settings used to configure partitioning functions
