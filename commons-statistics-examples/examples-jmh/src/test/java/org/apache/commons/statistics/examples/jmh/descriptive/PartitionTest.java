@@ -1684,4 +1684,44 @@ class PartitionTest {
         builder.add(Arguments.of(128, 32, 0));
         return builder.build();
     }
+
+    /**
+     * Prints the size of the Floyd-Rivest recursive subset samples.
+     * This method is for information purposes. It is intended to be pasted into JShell
+     * and called with various parameters. Example:
+     *
+     * <pre>{@code
+     * jshell> printSubSamplingSize(0, 1000000, 5000)
+     * 5000 [0, 1000000] (k=0.005 * 1000001) -> [4843, 9843] (k=0.032 * 5001)
+     * 5000 [4843, 9843] (k=0.032 * 5001) -> [4977, 5124] (k=0.162 * 148)
+     *
+     * jshell> printSubSamplingSize(0, 1000000, 500000)
+     * 500000 [0, 1000000] (k=0.500 * 1000001) -> [497631, 502631] (k=0.474 * 5001)
+     * 500000 [497631, 502631] (k=0.474 * 5001) -> [499913, 500059] (k=0.599 * 147)
+     * }</pre>
+     *
+     * @param l Left bound (inclusive).
+     * @param r Right bound (inclusive).
+     * @param k Target index.
+     */
+    static void printSubSamplingSize(int l, int r, int k) {
+        int n = r - l;
+        if (n > 600) {
+            // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+            // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+            // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+            ++n;
+            final int i = k - l + 1;
+            final double z = Math.log(n);
+            final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+            final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
+            final int ll = Math.max(l, (int) (k - i * s / n + sd));
+            final int rr = Math.min(r, (int) (k + (n - i) * s / n + sd));
+            // CHECKSTYLE: stop regex
+            System.out.printf("%d [%d, %d] (k=%.3f * %d) -> [%d, %d] (k=%.3f * %d)%n",
+                k, l, r, (double) i / n, n, ll, rr, (double) (k - ll + 1) / (rr - ll + 1), rr - ll + 1);
+            // CHECKSTYLE: start regex
+            printSubSamplingSize(ll, rr, k);
+        }
+    }
 }
