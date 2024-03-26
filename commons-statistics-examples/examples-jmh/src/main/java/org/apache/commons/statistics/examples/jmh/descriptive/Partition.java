@@ -192,9 +192,6 @@ final class Partition {
      * quicksort. See {@link #dualPivotSortSelectSize(int, int, int)}.
      */
     static final int SORTSELECT_SIZE = 20;
-    /** Separation distance to identify a range of indices as a single index. This allows
-     * switching to an implementation optimised for a single target index. */
-    private static final int MIN_SEPARATION_DISTANCE = 8;
     /** Increment used for the recursion counter. The counter will overflow to negative when
      * recursion has exceeded the maximum level. The counter is maintained in the upper bits
      * of the dual-pivot control flags. */
@@ -4696,7 +4693,9 @@ final class Partition {
         final int k1 = keys.left();
         final int kn = keys.right();
         // If the keys are not separated then they are effectively a single key.
-        if (kn - k1 < MIN_SEPARATION_DISTANCE) {
+        // Use the sort select size. Any split of keys separated by this distance
+        // will be finished on the next iteration.
+        if (kn - k1 < SORTSELECT_SIZE) {
             select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
             return;
         }
