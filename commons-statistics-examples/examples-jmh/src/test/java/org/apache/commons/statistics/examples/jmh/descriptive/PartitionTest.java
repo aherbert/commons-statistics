@@ -1713,6 +1713,7 @@ class PartitionTest {
             ++n;
             final int i = k - l + 1;
             final double z = Math.log(n);
+            // s ~ sub-sample size
             final double s = 0.5 * Math.exp(0.6666666666666666 * z);
             final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
             final int ll = Math.max(l, (int) (k - i * s / n + sd));
