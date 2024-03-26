@@ -142,6 +142,8 @@ public class QuantilePerformance {
     private static final Pattern MS_PATTERN = Pattern.compile("MS(\\d+)");
     /** Pattern for the sortselect constant. */
     private static final Pattern SC_PATTERN = Pattern.compile("SC(\\d+)");
+    /** Pattern for the sub-sampling size. */
+    private static final Pattern SU_PATTERN = Pattern.compile("SU(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
     private static final Pattern RM_PATTERN = Pattern.compile("RM(\\d+\\.?\\d*)");
     /** Pattern for the recursion constant. */
@@ -2496,6 +2498,7 @@ public class QuantilePerformance {
         final int heapSelectConstant = hc != 0 ? hc : getHeapSelectConstant(s);
         final int heapSelectMaskShift = getHeapSelectMaskShift(s);
         final int sortSelectConstant = sc != 0 ? sc : getSortSelectConstant(s);
+        final int subSamplingSize = getSubSamplingSize(s);
         final KeyStrategy keyStartegy = getKeyStrategy(s);
         final PairedKeyStrategy pairedKeyStartegy = getPairedKeyStrategy(s);
         final double recursionMultiple = getRecursionMultiple(s);
@@ -2510,7 +2513,7 @@ public class QuantilePerformance {
         }
         final Partition p = new Partition(sp, dp, minQuickSelectSize,
             heapSelectShift, heapSelectConstant, heapSelectMaskShift,
-            sortSelectConstant);
+            sortSelectConstant, subSamplingSize);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(keyStartegy);
@@ -2602,6 +2605,22 @@ public class QuantilePerformance {
             return i;
         }
         return Partition.SORTSELECT_CONSTANT;
+    }
+
+    /**
+     * Gets the minimum size for single-pivot sub-sampling.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @return the sub-sampling size
+     */
+    static int getSubSamplingSize(String[] name) {
+        final Matcher m = SU_PATTERN.matcher(name[0]);
+        if (m.find()) {
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
+        }
+        return Partition.SUBSAMPLING_SIZE;
     }
 
     /**

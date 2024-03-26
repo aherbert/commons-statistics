@@ -152,6 +152,9 @@ final class Partition {
     /** Default selection constant for sortselect. Off by default as heapselect is used
      * in the default configuration for indices close to the edge. */
     static final int SORTSELECT_CONSTANT = 0;
+    /** Default sub-sampling size to identify a single pivot. Off by default.
+     * The SELECT algorithm of Floyd-Rivest uses 600. */
+    static final int SUBSAMPLING_SIZE = Integer.MAX_VALUE;
     /** Default key strategy. */
     static final KeyStrategy KEY_STRATEGY = KeyStrategy.INDEX_SET;
     /** Default 1 or 2 key strategy. */
@@ -217,6 +220,8 @@ final class Partition {
     private static final int SORT_BETWEEN_SIZE = 2;
     /** Mask to extract the positive index from an integer. */
     private static final int INDEX_MASK = Integer.MAX_VALUE;
+    /** log2(e). Used for conversions: log2(x) = ln(x) * log2(e) */
+    private static final double LOG2_E = 1.4426950408889634;
 
     // Use final for settings/objects used within partitioning functions
 
@@ -246,6 +251,10 @@ final class Partition {
      * as insertion sort scales poorly with larger size (insertion is Order(n) vs
      * Order(log(n)) for a heap. */
     private final int sortSelectConstant;
+    /** Threshold to use sub-sampling of the range to identify the single pivot.
+     * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data to
+     * identify a pivot so that the target element is in the smaller set after partitioning. */
+    private final int subSamplingSize;
 
     // Use final for settings used to configure partitioning functions
 
@@ -653,7 +662,7 @@ final class Partition {
     Partition() {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, MIN_QUICKSELECT_SIZE,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT);
+            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -666,7 +675,7 @@ final class Partition {
     Partition(int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT);
+            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -680,7 +689,7 @@ final class Partition {
     Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize) {
         this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT);
+            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -694,7 +703,7 @@ final class Partition {
     Partition(DualPivotingStrategy dualPivotingStrategy, int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT);
+            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -707,13 +716,15 @@ final class Partition {
      * @param heapSelectShift Length shift used for heap select distance from end threshold.
      * @param heapSelectConstant Length constant used for heap select distance from end threshold.
      * @param sortSelectConstant Length constant used for sort select distance from end threshold.
+     * @param subSamplingSize Size threshold to use sub-sampling for single-pivot selection.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant, int sortSelectConstant) {
+        int heapSelectConstant, int sortSelectConstant,
+        int subSamplingSize) {
         this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, heapSelectShift, heapSelectConstant,
-            HEAPSELECT_MASK_SHIFT, sortSelectConstant);
+            HEAPSELECT_MASK_SHIFT, sortSelectConstant, subSamplingSize);
     }
 
     /**
@@ -734,7 +745,7 @@ final class Partition {
         int heapSelectConstant, int heapSelectMaskShift,
         int sortSelectConstant) {
         this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, heapSelectShift,
-            heapSelectConstant, heapSelectMaskShift, sortSelectConstant);
+            heapSelectConstant, heapSelectMaskShift, sortSelectConstant, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -753,12 +764,13 @@ final class Partition {
      * @param heapSelectConstant Length constant used for heap select distance from end threshold.
      * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
      * @param sortSelectConstant Length constant used for sort select distance from end threshold.
+     * @param subSamplingSize Size threshold to use sub-sampling for single-pivot selection.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
         int minQuickSelectSize, int heapSelectShift,
         int heapSelectConstant, int heapSelectMaskShift,
-        int sortSelectConstant) {
+        int sortSelectConstant, int subSamplingSize) {
         // Shift only uses lowest 5 bits. It should use [0, 31].
         // If bits outside this are set the shift is invalid.
         if ((heapSelectShift & ~31) != 0) {
@@ -771,6 +783,7 @@ final class Partition {
         this.heapSelectConstant = heapSelectConstant;
         this.heapSelectDynamicMask = Integer.MAX_VALUE >>> heapSelectMaskShift;
         this.sortSelectConstant = sortSelectConstant;
+        this.subSamplingSize = subSamplingSize;
     }
 
     /**
@@ -2628,7 +2641,7 @@ final class Partition {
         final int[] upper = {0};
         while (true) {
             // length - 1
-            final int n = r - l;
+            int n = r - l;
 
             // It is possible to use heapselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
@@ -2651,9 +2664,26 @@ final class Partition {
             }
 
             // Pick a pivot and partition
-            final int p0 = part.partition(a, l, r,
-                pivotingStrategy.pivotIndex(a, l, r),
-                upper);
+            int pivot;
+            if (n > subSamplingSize) {
+                // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+                // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+                // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+                ++n;
+                final int i = k - l + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
+                final int ll = Math.max(l, (int) (k - i * s / n + sd));
+                final int rr = Math.min(r, (int) (k + (n - i) * s / n + sd));
+                introselect(part, a, ll, rr, k, lnNtoMaxDepthSinglePivot(z));
+                pivot = k;
+            } else {
+                // default pivot strategy
+                pivot = pivotingStrategy.pivotIndex(a, l, r);
+            }
+
+            final int p0 = part.partition(a, l, r, pivot, upper);
             final int p1 = upper[0];
 
             maxDepth--;
@@ -6818,6 +6848,17 @@ final class Partition {
      */
     static int floorLog2(int x) {
         return 31 - Integer.numberOfLeadingZeros(x);
+    }
+
+    /**
+     * Convert {@code ln(n)} to the single-pivot max depth.
+     *
+     * @param x ln(n)
+     * @return the maximum recursion depth
+     */
+    private int lnNtoMaxDepthSinglePivot(double x) {
+        final double maxDepth = x * LOG2_E;
+        return (int) Math.floor(maxDepth * recursionMultiple) + recursionConstant;
     }
 
     /**
