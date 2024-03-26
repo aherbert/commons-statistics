@@ -4466,7 +4466,7 @@ final class Partition {
                 return;
             }
 
-            // use SELECT recursively on a sample of size S to get an estimate for the 
+            // use SELECT recursively on a sample of size S to get an estimate for the
             // (k-l+1)-th smallest element into a[k], biased slightly so that the (k-l+1)-th
             // element is expected to lie in the smaller set after partitioning.
             int pivot;
@@ -5269,51 +5269,58 @@ final class Partition {
      */
     private static int partitionSP(double[] data, int l, int r, int pivot, int[] upper) {
         // Partition data using pivot P into less-than or greater-than.
-        // P is placed at the end to act as a sentinel.
-        // k traverses the unknown region ??? and values moved if less or greater:
         //
-        // left            i            j              right
-        // |          <P   |     ???    |   >P           |P|
+        // Adapted from Floyd and Rivest (1975)
+        // Algorithm 489: The Algorithm SELECT—for Finding the ith Smallest of n elements.
+        // Comm. ACM. 18 (3): 173.
+        //
+        // Sub-script range checking has been eliminated by appropriate placement
+        // of values at the ends to act as sentinels.
+        //
+        // left           i            j               right
+        // |<=P|     <P   |     ???    |   >P          |>=P|
         //
         // At the end P is swapped back to the centre.
         //
         // |         <P          |P|             >P        |
-
-        // Use the pivot index to set the upper sentinel value
         final double v = data[pivot];
-        data[pivot] = data[r];
-        data[r] = v;
-
-        int i = l - 1;
+        // swap(left, pivot)
+        data[pivot] = data[l];
+        if (data[r] > v) {
+            // swap(right, left)
+            data[l] = data[r];
+            data[r] = v;
+            // Here after the first swap: a[l] = v; a[r] > v
+        } else {
+            data[l] = v;
+            // Here after the first swap: a[l] <= v; a[r] = v
+        }
+        int i = l;
         int j = r;
-
-        for (;;) {
-            // Cannot pass upper sentinal
+        while (i < j) {
+            // swap(i, j)
+            final double temp = data[i];
+            data[i] = data[j];
+            data[j] = temp;
             do {
                 ++i;
             } while (data[i] < v);
-            while (v < data[--j]) {
-                // Cannot use i in the event that i == r
-                if (j == l) {
-                    break;
-                }
-            }
-            if (i >= j) {
-                break;
-            }
-            //swap(data, i, j)
-            final double tmp = data[j];
-            data[j] = data[i];
-            data[i] = tmp;
+            do {
+                --j;
+            } while (data[j] > v);
         }
-
-        // data[i] >= P
-        // Move pivot value to correct location
-        data[r] = data[i];
-        data[i] = v;
-
-        upper[0] = i;
-        return i;
+        // Move pivot back to the correct location from either l or r
+        if (data[l] == v) {
+            // data[j] <= v : swap(left, j)
+            data[l] = data[j];
+            data[j] = v;
+        } else {
+            // data[j+1] > v : swap(j+1, right)
+            data[r] = data[++j];
+            data[j] = v;
+        }
+        upper[0] = j;
+        return j;
     }
 
     /**
