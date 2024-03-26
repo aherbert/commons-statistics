@@ -24,11 +24,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -202,6 +204,10 @@ public class QuantilePerformance {
     public abstract static class AbstractDataSource {
         /** All distributions / modifications. */
         private static final String ALL = "all";
+        /** Flag to determine if the data size should be logged. This is useful to be
+         * able to determine the execution time per sample when the number of samples
+         * is dynamically created based on the data length, range and seed. */
+        private static final AtomicBoolean LOG_SIZE = new AtomicBoolean();
 
         /**
          * The type of distribution.
@@ -464,6 +470,10 @@ public class QuantilePerformance {
                 }
             }
             data = sampleData.toArray(int[][]::new);
+            if (LOG_SIZE.compareAndSet(false, true)) {
+                Logger.getLogger(getClass().getName()).info(
+                    () -> String.format("Data length: [%d, %d] n=%d", length, length2, data.length));
+            }
         }
 
         /**
