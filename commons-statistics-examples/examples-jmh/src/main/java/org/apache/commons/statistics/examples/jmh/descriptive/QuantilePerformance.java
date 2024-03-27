@@ -2031,10 +2031,16 @@ public class QuantilePerformance {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
-            } else if (name.startsWith(FR)) {
-                final Partition part = createPartition(name, SBM2, qs, hc, sc);
+            } else if (name.startsWith(FR + "1")) {
+                final Partition part = createPartition(name, FR + "1", qs, hc, sc);
                 function = (data, indices) -> {
-                    part.partitionFR(data, indices.clone(), indices.length);
+                    part.partitionFR1(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(FR + "2")) {
+                final Partition part = createPartition(name, FR + "2", qs, hc, sc);
+                function = (data, indices) -> {
+                    part.partitionFR2(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Introselect implementations

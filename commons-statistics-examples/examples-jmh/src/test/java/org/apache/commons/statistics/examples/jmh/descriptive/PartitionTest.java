@@ -805,9 +805,16 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
-    void testPartitionFR(double[] values, int[] indices) {
+    void testPartitionFR1(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionFR);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionFR1);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionFR2(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionFR2);
     }
 
     @ParameterizedTest

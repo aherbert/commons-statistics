@@ -4470,7 +4470,7 @@ final class Partition {
      * @param k Indices (may be destructively modified).
      * @param count Count of indices.
      */
-    void partitionFR(double[] a, int[] k, int count) {
+    void partitionFR1(double[] a, int[] k, int count) {
         // Handle NaN / signed zeros
         final DoubleDataTransformer t = SORT_TRANSFORMER.get();
         // Assume this is in-place
@@ -4491,7 +4491,61 @@ final class Partition {
             }
             // Only handles a single k
             if (n != 0) {
-                selectFR(a, 0, end - 1, k[0], 0);
+                selectFR(a, 0, end - 1, k[0], false);
+            }
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
+     * Floyd-Rivest Algorithm (Wikipedia)</a>
+     *
+     * <p>WARNING: Currently this only supports a single {@code k}. For parity with other
+     * select methods this accepts an array {@code k} and pre/post processes the data for
+     * NaN and signed zeros.
+     *
+     * <p>This method differs from {@link #partitionFR1(double[], int[], int)} by using
+     * the pivoting strategy when the length is too small for subset sampling.
+     *
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    void partitionFR2(double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            // Only handles a single k
+            if (n != 0) {
+                selectFR(a, 0, end - 1, k[0], true);
             }
         }
         // Restore signed zeros
@@ -4515,12 +4569,17 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Key of interest.
-     * @param flags Control flags.
+     * @param usePivotingStrategy Set to true to use the pivoting strategy on small lengths;
+     * false will revert to using k (as per the original FR algorithm)
      */
-    private void selectFR(double[] a, int left, int right, int k, int flags) {
+    private void selectFR(double[] a, int left, int right, int k, boolean usePivotingStrategy) {
         int l = left;
         int r = right;
         while (true) {
+            // The following heapselect/sortselect modifications are additions to the
+            // FR algorithm. These have been added for testing and only affect the finishing
+            // selection of small lengths.
+
             // length - 1
             int n = r - l;
             // It is possible to use heapselect when k is close to the end
@@ -4541,7 +4600,7 @@ final class Partition {
             // use SELECT recursively on a sample of size S to get an estimate for the
             // (k-l+1)-th smallest element into a[k], biased slightly so that the (k-l+1)-th
             // element is expected to lie in the smaller set after partitioning.
-            int pivot;
+            int pivot = k;
             if (n > 600) {
                 ++n;
                 final int i = k - l + 1;
@@ -4550,27 +4609,9 @@ final class Partition {
                 final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
                 final int ll = Math.max(l, (int) (k - i * s / n + sd));
                 final int rr = Math.min(r, (int) (k + (n - i) * s / n + sd));
-                selectFR(a, ll, rr, k, flags);
-                // Here k is correctly partitioning [newLeft, newRight] which is a good
-                // estimate for the pivot value for the rest of the data
-                flags |= Integer.MIN_VALUE;
-//                pivot = k;
-//            } else {
-//                // default pivot strategy
-//                pivot = pivotingStrategy.pivotIndex(a, l, r);
-            }
-
-            // TODO: Can we substitute code from another partition algorithm?
-
-            if (flags < 0) {
-                // k has partitioned a subset
-                // TODO: can we detect when k was not a good choice and revert to
-                // the default strategy? Note the default strategy attempts to divide
-                // the range in half whereas k attempts to find the correct percentile
-                // in the range.
-                pivot = k;
-            } else {
-                // k does not partition any subset: default pivot strategy
+                selectFR(a, ll, rr, k, usePivotingStrategy);
+            } else if (usePivotingStrategy) {
+                // default pivot strategy
                 pivot = pivotingStrategy.pivotIndex(a, l, r);
             }
 
@@ -4584,12 +4625,10 @@ final class Partition {
                 // swap(right, left)
                 a[l] = a[r];
                 a[r] = t;
-                // Here: a[l] > t; a[r] = t
-                // First swap: a[l] = t; a[r] > t
+                // Here after the first swap: a[l] = t; a[r] > t
             } else {
                 a[l] = t;
-                // Here: a[l] = t; a[r] <= t
-                // First swap: a[l] <= t; a[r] = t
+                // Here after the first swap: a[l] <= t; a[r] = t
             }
             int i = l;
             int j = r;
@@ -4606,11 +4645,11 @@ final class Partition {
                 } while (a[j] > t);
             }
             if (a[l] == t) {
-                // swap(left, j)
+                // data[j] <= t : swap(left, j)
                 a[l] = a[j];
                 a[j] = t;
             } else {
-                // j++; swap(j, right)
+                // data[j+1] > t : swap(j+1, right)
                 a[r] = a[++j];
                 a[j] = t;
             }
@@ -4622,16 +4661,7 @@ final class Partition {
             } else {
                 return;
             }
-//            // adjust left and right towards the boundaries of the subset
-//            // containing the (k - left + 1)th smallest element
-//            if (j <= k) {
-//                l = j + 1;
-//            }
-//            if (k <= j) {
-//                r = j - 1;
-//            }
         }
-        // Here k is correctly partitioned in [left, right]
     }
 
     /**
