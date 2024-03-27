@@ -252,11 +252,18 @@ final class Partition {
      * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data. This
      * identifies a pivot so that the target element is in the smaller set after partitioning.
      * The algorithm applies to searching for a single k.
-     * Not all single-pivot {@link PairedKeyStrategy} methods support sub-sampling.
+     * Not all single-pivot {@link PairedKeyStrategy} methods support sub-sampling. It is
+     * available to test in {@link #introselect(SPEPartition, double[], int, int, int, int)}.
      *
      * <p>Sub-sampling can provide up to a 2-fold performance gain on large random data.
-     * The algorithm relies on partitioning of a subset to be representative of partitioning
-     * of the entire data. That is the values in a small range partitioned around a pivot P
+     * It can have a 2-fold slowdown on some structured data (e.g. large shuffle data from
+     * the Bentley and McIlroy test data). Large shuffle data also observes a larger performance
+     * drop when using the SBM/BM/DNF partition methods (collect equal values) verses a
+     * simple SP method ignoring equal values. Here large ~500,000; the behaviour
+     * is observed at smaller sizes and becomes increasingly obvious at larger sizes.
+     *
+     * <p>The algorithm relies on partitioning of a subset to be representative of partitioning
+     * of the entire data. Values in a small range partitioned around a pivot P
      * should create P in a similar location to its position in the entire fully sorted array,
      * i.e. ordering around P in [ll, rr] will be similar to P's order in [l, r]:
      * <pre>
@@ -266,9 +273,9 @@ final class Partition {
      *                                Good pivot
      * </pre>
      *
-     * <p>This is true for random data. If the data in [ll, rr] is not representative then
-     * pivot selection based on a subset creates bad pivot choices and performance
-     * is worse than using a {@link PivotingStrategy}.
+     * <p>If the data in [ll, rr] is not representative then pivot selection based on a
+     * subset creates bad pivot choices and performance is worse than using a
+     * {@link PivotingStrategy}.
      * <pre>
      * target:                       k
      * subset:                 ll----P-------rr
@@ -276,16 +283,10 @@ final class Partition {
      *                                                    Bad pivot
      * </pre>
      *
-     * <p>Note that performance is also worse on fully sorted data. Although the subset sampling
-     * can pick representative pivots, there is an overhead to each subset sampling iteration.
-     * Any {@link PivotingStrategy} based on ranking will identify ideal pivots to cut the range
-     * in half and convergence is fast as the main partitioning loop does not move any elements.
-     *
-     * <p>The choice to use Floyd-Rivest subset sampling should be based on whether the data
-     * is random (yes), or structured with subsets containing values not representative of the
-     * equivalent fully sorted data (no), or sorted (no). This cannot be known by the
-     * partition algorithm before processing. Thus the Floyd-Rivest subset sampling is more
-     * suitable as an option to be enabled by user settings.
+     * <p>Use of the Floyd-Rivest subset sampling is not always an improvement and is data
+     * dependent. The type of data cannot be known by the partition algorithm before processing.
+     * Thus the Floyd-Rivest subset sampling is more suitable as an option to be enabled by
+     * user settings.
      *
      * <p>See <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
      * Floyd-Rivest Algorithm (Wikipedia)</a>.
