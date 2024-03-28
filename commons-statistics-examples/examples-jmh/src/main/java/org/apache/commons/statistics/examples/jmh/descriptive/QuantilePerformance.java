@@ -910,7 +910,7 @@ public class QuantilePerformance {
             //SORT, SPH, SPE
             CM, SP, BM, SBM, DP, DP5,
             SBM2,
-            ISP, IBM, ISBM, IDP, SELECT})
+            ISP, IBM, ISBM, IKBM, IDP, SELECT})
         private String name;
 
         /** The action. */
@@ -971,6 +971,8 @@ public class QuantilePerformance {
                 function = withPartition(name, IBM)::evaluateIBM;
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name, ISBM)::evaluateISBM;
+            } else if (name.startsWith(IKBM)) {
+                function = withPartition(name, IKBM)::evaluateIKBM;
             } else if (name.startsWith(IDP)) {
                 function = withPartition(name, IDP)::evaluateIDP;
             } else if (name.startsWith(SELECT)) {
@@ -1703,7 +1705,7 @@ public class QuantilePerformance {
             // Not run by default as it is slow on large data
             //"InsertionSortIF", "InsertionSortIT", "InsertionSort", "InsertionSortB"
             //"BM25"
-            ISBM, IDP,
+            ISBM, IKBM, IDP,
             })
         private String name;
 
@@ -1913,7 +1915,7 @@ public class QuantilePerformance {
             SP, BM, SBM,
             DP, DP5, DNF,
             SBM2,
-            ISP, IBM, ISBM, IDNF, IDP, SELECT})
+            ISP, IBM, ISBM, IKBM, IDNF, IDP, SELECT})
         private String name;
 
         /** Override of minimum quickselect size. */
@@ -1954,6 +1956,12 @@ public class QuantilePerformance {
                     final Partition part = createPartition(name.substring(SORT.length()), ISBM, qs, hc, sc);
                     function = (data, indices) -> {
                         part.sortISBM(data);
+                        return extractIndices(data, indices);
+                    };
+                } else if (name.contains(IKBM)) {
+                    final Partition part = createPartition(name.substring(SORT.length()), IKBM, qs, hc, sc);
+                    function = (data, indices) -> {
+                        part.sortIKBM(data);
                         return extractIndices(data, indices);
                     };
                 } else if (name.contains(IDP)) {
@@ -2067,6 +2075,12 @@ public class QuantilePerformance {
                     part.partitionISBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
+            } else if (name.startsWith(IKBM)) {
+                final Partition part = createPartition(name, IKBM, qs, hc, sc);
+                function = (data, indices) -> {
+                    part.partitionIKBM(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
             } else if (name.startsWith(IDNF)) {
                 final Partition part = createPartition(name, IDNF, qs, hc, sc);
                 function = (data, indices) -> {
@@ -2118,7 +2132,7 @@ public class QuantilePerformance {
     public static class EdgeFunctionSource {
         /** Name of the source.
          * For introselect methods this should effectively turn-off heapselect. */
-        @Param({HEAP_SELECT, ISBM + "_HC0", IDP + "_HC0",
+        @Param({HEAP_SELECT, IKBM + "_HC0", IDP + "_HC0",
             // Only use for small length as sort insertion is Order(k)
             // vs Order(log(k)) for the heap.
             //SORT_SELECT
@@ -2182,8 +2196,8 @@ public class QuantilePerformance {
                     return extractIndices(data, indices[0], indices[1]);
                 };
             // introselect methods - these should be configured to not use heapselect
-            } else if (name.startsWith(ISBM)) {
-                final Partition part = createPartition(name, ISBM, 0, 0, 0);
+            } else if (name.startsWith(IKBM)) {
+                final Partition part = createPartition(name, IKBM, 0, 0, 0);
                 function = (data, indices) -> {
                     part.introselect(Partition::partitionSBM, data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);

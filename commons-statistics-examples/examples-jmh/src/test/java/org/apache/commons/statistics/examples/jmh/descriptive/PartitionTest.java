@@ -723,6 +723,15 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionIKBM(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+            .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            ::partitionIKBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionIDNF(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionIDNF);
     }

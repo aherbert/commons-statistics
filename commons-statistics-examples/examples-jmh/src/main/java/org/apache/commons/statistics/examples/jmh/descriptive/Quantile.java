@@ -1515,6 +1515,52 @@ public final class Quantile {
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
+     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
+     * handling equal keys by Kiwiel; switching to heapselect if quickselect convergence
+     * is slow.
+     *
+     * <p><strong>Performance</strong>
+     *
+     * <p>It is not recommended to use this method for repeat calls for different quantiles
+     * within the same values. The {@link #evaluateIKBM(double[], double...)} method should be used
+     * which provides better performance.
+     *
+     * @param values Values.
+     * @param p Probability for the quantile to compute.
+     * @return the quantile
+     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
+     * @see #evaluateSP(double[], double...)
+     */
+    public double evaluateIKBM(double[] values, double p) {
+        return evaluate3(partition::partitionIKBM, values, p);
+    }
+
+    /**
+     * Evaluate the {@code p}-th quantiles of the values.
+     *
+     * <p>Note: This method may partially sort the input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
+     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
+     * handling equal keys by Kiwiel; switching to heapselect if quickselect convergence
+     * is slow.
+     *
+     * @param values Values.
+     * @param p Probabilities for the quantiles to compute.
+     * @return the quantiles
+     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
+     * or no probabilities are specified.
+     */
+    public double[] evaluateIKBM(double[] values, double... p) {
+        return evaluate3(partition::partitionIKBM, values, p);
+    }
+
+    /**
+     * Evaluate the {@code p}-th quantile of the values.
+     *
+     * <p>Note: This method may partially sort the input values if configured to
+     * {@link #withOverwrite(boolean) overwrite} the input data.
+     *
      * <p>Uses an introselect variant with a dual-pivot quickselect partition method;
      * switching to heapselect if quickselect convergence is slow.
      *
