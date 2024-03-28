@@ -1051,6 +1051,13 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
+    void testSortIKBM(double[] values) {
+        assertSort(values,
+            new Partition(SP, QS)::sortIKBM);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testSort"})
     void testSortIDNF1(double[] values) {
         assertSort(values,
             new Partition(SP, QS)::sortIDNF1);
