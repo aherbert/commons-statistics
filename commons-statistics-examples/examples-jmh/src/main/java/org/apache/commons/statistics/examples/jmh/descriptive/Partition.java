@@ -5694,31 +5694,31 @@ final class Partition {
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method by Kiwiel.
      *
-     * @param data Data array.
+     * @param x Data array.
      * @param l Lower bound (inclusive).
      * @param r Upper bound (inclusive).
      * @param pivot Pivot index.
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    static int partitionKBM(double[] data, int l, int r, int pivot, int[] upper) {
+    static int partitionKBM(double[] x, int l, int r, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys.
         //
         // Partition data using pivot P into less-than, greater-than or equal.
         // The basic idea is to work with the 5 inner parts of the array [l', r']
         // by positioning sentinels at l and r:
         //
-        // l  ll     p          i            j         q      rr r
+        // l  ll    p           i            j          q    rr  r
         // |<P|  ==P |     <P   |     ???    |   >P    | ==P  |>P|
         //
         // until the middle part is empty or just contains an element equal to the pivot:
         //
-        // ll     p               j   i           q      rr
+        // ll    p               j     i           q    rr
         // |  ==P |     <P        |==P|     >P    | ==P  |
         //
-        // i.e. j = i-1 or j = i-2, then swap the ends into the middle:
+        // i.e. j = i-1 or i-2, then swap the ends into the middle:
         //
-        // ll               a           d                rr
+        // ll                a         d                rr
         // |        <P      |     ==P   |      >P        |
         //
         // Adapted from Kiwiel (2005) "On Floyd and Rivest's SELECT algorithm"
@@ -5727,34 +5727,30 @@ final class Partition {
         // Note: The difference between this and Sedgewick's BM is the use of sentinals
         // at either end to remove index checks at both ends.
         //
-        // Equal value data is not swapped to the end. Since the value is fixed then
-        // only the less than / greater than value must be moved from the end inwards.
-        // TODO:
-        // The end is then assumed to be the equal value. This would not work with
-        // object references. Equivalent swap calls are commented.
-        // Added a fast-forward over initial range containing the pivot.
-        // The final move to perform the minimum moves.
+        // The listing in Kiwiel has been updated:
+        // - p and q mark the inclusive end of ==P regions.
+        // - Added a fast-forward over initial range containing the pivot.
+        // - vector swap is optimised given one side of the exchange ==P.
 
-        final double v = data[pivot];
-        data[pivot] = data[l];
-        data[l] = v;
+        final double v = x[pivot];
+        x[pivot] = x[l];
+        x[l] = v;
 
         int ll = l;
         int rr = r;
-        int p = l + 1;
-        int q = r - 1;
 
-        // Ensure data[l] <= v <= data[r]
-        if (v < data[r]) {
+        // Ensure x[l] <= v <= x[r]
+        if (v < x[r]) {
             --rr;
-        } else if (v > data[r]) {
-            data[l] = data[r];
-            data[r] = v;
+        } else if (v > x[r]) {
+            x[l] = x[r];
+            x[r] = v;
             ++ll;
         }
 
         // Fast-forward over equal regions to reduce swaps
-        while (data[p] == v) {
+        int p = l + 1;
+        while (x[p] == v) {
             if (++p == r) {
                 // Edge-case: constant value up to rr
                 upper[0] = rr;
@@ -5762,68 +5758,66 @@ final class Partition {
             }
         }
         // Cannot overrun as the prior scan using p stopped before the end
-        while (data[q] == v) {
+        int q = r - 1;
+        while (x[q] == v) {
             --q;
         }
 
-        int i = p - 1;
-        int j = q + 1;
+        // Position p and q for pre-in/decrement
+        int i = --p;
+        int j = ++q;
 
         for (;;) {
             do {
                 ++i;
-            } while (data[i] < v);
+            } while (x[i] < v);
             do {
                 --j;
-            } while (data[j] > v);
-            // Here data[j] <= v <= data[i]
+            } while (x[j] > v);
+            // Here x[j] <= v <= x[i]
             if (i >= j) {
                 if (i == j) {
-                    // Met at v; update to leave the pivot in between [j, i]
+                    // x[i]=x[j]=v; update to leave the pivot in between [j, i]
                     ++i;
                     --j;
                 }
                 break;
             }
-            //swap(data, i, j)
-            final double vi = data[j];
-            final double vj = data[i];
-            data[i] = vi;
-            data[j] = vj;
+            //swap(x, i, j)
+            final double vi = x[j];
+            final double vj = x[i];
+            x[i] = vi;
+            x[j] = vj;
             // Move the equal values to the ends
             if (vi == v) {
-                data[i] = data[p];
-                data[p] = v;
-                ++p;
+                x[i] = x[++p];
+                x[p] = v;
             }
             if (vj == v) {
-                data[j] = data[q];
-                data[q] = v;
-                --q;
+                x[j] = x[--q];
+                x[q] = v;
             }
         }
 
-        // Set [a, d]
-        final int lower = ll + j - p + 1;
-        upper[0] = rr - q + i - 1;
+        // Set [a, d] (p and q are offset by 1 from Kiwiel)
+        final int a = ll + j - p;
+        upper[0] = rr - q + i;
 
         // Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
         // elements of the array x[a:c] are exchanged with its last m elements.
-        // data[ll:p-1] <-> data[p:j]
-        int m = Math.min(p - ll, j - p + 1);
+        // x[ll:p] <-> x[p+1:j]
+        int m = Math.min(p + 1 - ll, j - p);
         for (int k = ll; --m >= 0; --j, ++k) {
-            data[k] = data[j];
-            data[j] = v;
+            x[k] = x[j];
+            x[j] = v;
         }
-        // data[i:q]    <-> data[q+1:rr]
-        m = Math.min(q + 1 - i, rr - q);
+        // x[i:q-1] <-> x[q:rr]
+        m = Math.min(q - i, rr - q + 1);
         for (int k = rr; --m >= 0; ++i, --k) {
-            data[k] = data[i];
-            data[i] = v;
+            x[k] = x[i];
+            x[i] = v;
         }
-
-        // Equal in [lower, upper]
-        return lower;
+        return a;
     }
 
     /**
