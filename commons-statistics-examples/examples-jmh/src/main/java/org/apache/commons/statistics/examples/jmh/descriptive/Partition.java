@@ -5122,6 +5122,19 @@ final class Partition {
     /**
      * Sort the data using an intrasort.
      *
+     * <p>Uses a Bentley-McIlroy quicksort method by Kiwiel; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortIKBM(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(Partition::partitionKBM, data);
+    }
+
+    /**
+     * Sort the data using an intrasort.
+     *
      * <p>Uses a Dutch-National-Flag quicksort method; falling back
      * to heapsort when quicksort recursion is slow.
      *
@@ -5566,10 +5579,6 @@ final class Partition {
         // The algorithm has been changed so that:
         // - A pivot point must be provided.
         // - An edge case where the search meets in the middle is handled.
-        // - Equal value data is not swapped to the end. Since the value is fixed then
-        //   only the less than / greater than value must be moved from the end inwards.
-        //   The end is then assumed to be the equal value. This would not work with
-        //   object references. Equivalent swap calls are commented.
         // - Added a fast-forward over initial range containing the pivot.
         // - Changed the final move to perform the minimum moves.
 
@@ -5683,98 +5692,96 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
      *
-     * <p>Uses a Bentley-McIlroy quicksort partition method by Sedgewick.
-     *
-     * <p>This method is similar to {@link #partitionSBM(double[], int, int, int, int[])}
-     * with the following changes:
-     * <ul>
-     * <li>Selection of the pivots is performed in this method.
-     * </ul>
+     * <p>Uses a Bentley-McIlroy quicksort partition method by Kiwiel.
      *
      * @param data Data array.
      * @param l Lower bound (inclusive).
      * @param r Upper bound (inclusive).
+     * @param pivot Pivot index.
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    static int partitionSBM(double[] data, int l, int r, int[] upper) {
-        // Single-pivot Bentley-McIlroy quicksort handling equal keys (Sedgewick's algorithm).
+    static int partitionKBM(double[] data, int l, int r, int pivot, int[] upper) {
+        // Single-pivot Bentley-McIlroy quicksort handling equal keys.
         //
         // Partition data using pivot P into less-than, greater-than or equal.
-        // P is placed at the end to act as a sentinel.
-        // k traverses the unknown region ??? and values moved if equal (l) or greater (g):
+        // The basic idea is to work with the 5 inner parts of the array [l', r']
+        // by positioning sentinels at l and r:
         //
-        // left    p       i            j         q    right
-        // |  ==P  |  <P   |     ???    |   >P    | ==P  |P|
+        // l  ll     p          i            j         q      rr r
+        // |<P|  ==P |     <P   |     ???    |   >P    | ==P  |>P|
         //
-        // At the end P and additional equal values are swapped back to the centre.
+        // until the middle part is empty or just contains an element equal to the pivot:
         //
-        // |         <P        | ==P |            >P        |
+        // ll     p               j   i           q      rr
+        // |  ==P |     <P        |==P|     >P    | ==P  |
         //
-        // Adapted from Sedgewick "Quicksort is optimal"
-        // https://sedgewick.io/wp-content/themes/sedgewick/talks/2002QuicksortIsOptimal.pdf
+        // i.e. j = i-1 or j = i-2, then swap the ends into the middle:
         //
-        // Note: The difference between this and the original BM partition is the use of
-        // < or > rather than <= and >=. This allows the pivot to act as a sentinal and removes
-        // the requirement for checks on i; and j can be checked against an unlikely condition.
-        // This method will swap runs of equal values.
+        // ll               a           d                rr
+        // |        <P      |     ==P   |      >P        |
         //
-        // The algorithm has been changed so that:
-        // - A pivot point must be provided.
-        // - An edge case where the search meets in the middle is handled.
-        // - Equal value data is not swapped to the end. Since the value is fixed then
-        //   only the less than / greater than value must be moved from the end inwards.
-        //   The end is then assumed to be the equal value. This would not work with
-        //   object references. Equivalent swap calls are commented.
-        // - Added a fast-forward over initial range containing the pivot.
-        // - Changed the final move to perform the minimum moves.
+        // Adapted from Kiwiel (2005) "On Floyd and Rivest's SELECT algorithm"
+        // Theoretical Computer Science 347, 214-238.
+        //
+        // Note: The difference between this and Sedgewick's BM is the use of sentinals
+        // at either end to remove index checks at both ends.
+        //
+        // Equal value data is not swapped to the end. Since the value is fixed then
+        // only the less than / greater than value must be moved from the end inwards.
+        // TODO:
+        // The end is then assumed to be the equal value. This would not work with
+        // object references. Equivalent swap calls are commented.
+        // Added a fast-forward over initial range containing the pivot.
+        // The final move to perform the minimum moves.
 
-        final int pivot = pivotIndex(data, l, r);
-
-        // Use the pivot index to set the upper sentinel value
         final double v = data[pivot];
-        data[pivot] = data[r];
-        data[r] = v;
+        data[pivot] = data[l];
+        data[l] = v;
 
-        int p = l;
-        int q = r;
+        int ll = l;
+        int rr = r;
+        int p = l + 1;
+        int q = r - 1;
+
+        // Ensure data[l] <= v <= data[r]
+        if (v < data[r]) {
+            --rr;
+        } else if (v > data[r]) {
+            data[l] = data[r];
+            data[r] = v;
+            ++ll;
+        }
 
         // Fast-forward over equal regions to reduce swaps
         while (data[p] == v) {
-            if (++p == q) {
-                // Edge-case: constant value
-                upper[0] = r;
+            if (++p == r) {
+                // Edge-case: constant value up to rr
+                upper[0] = rr;
                 return l;
             }
         }
         // Cannot overrun as the prior scan using p stopped before the end
-        while (data[q - 1] == v) {
-            q--;
+        while (data[q] == v) {
+            --q;
         }
 
         int i = p - 1;
-        int j = q;
+        int j = q + 1;
 
         for (;;) {
             do {
                 ++i;
             } while (data[i] < v);
-            while (v < data[--j]) {
-                // Cannot use j == i in the event that i == q (already passed j)
-                if (j == l) {
-                    break;
-                }
-            }
+            do {
+                --j;
+            } while (data[j] > v);
+            // Here data[j] <= v <= data[i]
             if (i >= j) {
-                // Edge-case if search met on an internal pivot value
-                // (not at the greater equal region, i.e. i < q).
-                // Move this to the lower-equal region.
-                if (i == j && v == data[i]) {
-                    //swap(data, i++, p++)
-                    data[i] = data[p];
-                    data[p] = v;
-                    i++;
-                    p++;
+                if (i == j) {
+                    // Met at v; update to leave the pivot in between [j, i]
+                    ++i;
+                    --j;
                 }
                 break;
             }
@@ -5785,47 +5792,33 @@ final class Partition {
             data[j] = vj;
             // Move the equal values to the ends
             if (vi == v) {
-                //swap(data, i, p++)
                 data[i] = data[p];
                 data[p] = v;
-                p++;
+                ++p;
             }
             if (vj == v) {
-                //swap(data, j, --q)
-                data[j] = data[--q];
+                data[j] = data[q];
                 data[q] = v;
+                --q;
             }
         }
-        // i is at the end (exclusive) of the less-than region
 
-        // Place pivot value in centre
-        //swap(data, r, i)
-        data[r] = data[i];
-        data[i] = v;
+        // Set [a, d]
+        final int lower = ll + j - p + 1;
+        upper[0] = rr - q + i - 1;
 
-        // Move equal regions to the centre.
-        // Set the pivot range [j, i) and move this outward for equal values.
-        j = i++;
-
-        // less-equal:
-        //   for k = l; k < p; k++
-        //     swap(data, k, --j)
-        // greater-equal:
-        //   for k = r; k-- > q; i++
-        //     swap(data, k, i)
-
-        // Move the minimum of less-equal or less-than
-        int move = Math.min(p - l, j - p);
-        final int lower = j - (p - l);
-        for (int k = l; --move >= 0; k++) {
-            data[k] = data[--j];
+        // Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
+        // elements of the array x[a:c] are exchanged with its last m elements.
+        // data[ll:p-1] <-> data[p:j]
+        int m = Math.min(p - ll, j - p + 1);
+        for (int k = ll; --m >= 0; --j, ++k) {
+            data[k] = data[j];
             data[j] = v;
         }
-        // Move the minimum of greater-equal or greater-than
-        move = Math.min(r - q, q - i);
-        upper[0] = i + (r - q) - 1;
-        for (int k = r; --move >= 0; i++) {
-            data[--k] = data[i];
+        // data[i:q]    <-> data[q+1:rr]
+        m = Math.min(q + 1 - i, rr - q);
+        for (int k = rr; --m >= 0; ++i, --k) {
+            data[k] = data[i];
             data[i] = v;
         }
 

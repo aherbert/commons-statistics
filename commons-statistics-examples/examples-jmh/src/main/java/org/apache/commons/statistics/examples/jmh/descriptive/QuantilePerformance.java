@@ -119,6 +119,9 @@ public class QuantilePerformance {
     /** Commons Statistics Quantile introselect implementation with Sedgewick's Bentley-McIlroy
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
+    /** Commons Statistics Quantile introselect implementation with Kiwiel's Bentley-McIlroy
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String IKBM = "IKBM";
     /** Commons Statistics Quantile introselect implementation with Dutch National Flag partitioning
      * partitioning, switching to heapselect when progress is poor. The DNF algorithm is appended
      * as a suffix. */
@@ -1749,6 +1752,8 @@ public class QuantilePerformance {
                 function = createPartition(name, IBM, qs, 0, 0)::sortIBM;
             } else if (name.startsWith(ISBM)) {
                 function = createPartition(name, ISBM, qs, 0, 0)::sortISBM;
+            } else if (name.startsWith(IKBM)) {
+                function = createPartition(name, IKBM, qs, 0, 0)::sortIKBM;
             } else if (name.startsWith(IDNF)) {
                 // 3 variants
                 if (name.startsWith(IDNF + "3")) {
