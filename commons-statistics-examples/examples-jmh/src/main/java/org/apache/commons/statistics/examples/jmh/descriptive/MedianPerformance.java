@@ -79,6 +79,9 @@ public class MedianPerformance {
     /** Commons Statistics Median introselect implementation with Sedgewick's Bentley-McIlroy
      * partitioning, switching to heapselect when progress is poor. */
     private static final String ISBM = "ISBM";
+    /** Commons Statistics Quantile introselect implementation with Kiwiel's Bentley-McIlroy
+     * partitioning, switching to heapselect when progress is poor. */
+    private static final String IKBM = "IKBM";
     /** Commons Statistics Median introselect implementation with dual-pivot
      * partitioning, switching to heapselect when progress is poor. */
     private static final String IDP = "IDP";
@@ -118,7 +121,7 @@ public class MedianPerformance {
         /** Name of the source. */
         @Param({JDK, CM, SP, SP_NAN, SBM, BM, DP, DP5,
             SBM2,
-            ISP, IBM, ISBM, IDP, SELECT
+            ISP, IBM, ISBM, IKBM, IDP, SELECT
         })
         private String name;
 
@@ -170,6 +173,8 @@ public class MedianPerformance {
                 function = withPartition(name, IBM)::evaluateIBM;
             } else if (name.startsWith(ISBM)) {
                 function = withPartition(name, ISBM)::evaluateISBM;
+            } else if (name.startsWith(IKBM)) {
+                function = withPartition(name, IKBM)::evaluateIKBM;
             } else if (name.startsWith(IDP)) {
                 function = withPartition(name, IDP)::evaluateIDP;
             } else if (name.startsWith(SELECT)) {
