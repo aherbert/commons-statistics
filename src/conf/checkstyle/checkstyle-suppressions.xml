@@ -32,6 +32,7 @@
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]QuantilePerformance.java" />
   <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Sorting.java" />
   <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Partition.java" />
+  <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]QuantilePerformance.java" />
   <!-- Be more lenient on tests. -->
   <suppress checks="Javadoc" files=".*[/\\]test[/\\].*" />
   <suppress checks="MultipleStringLiterals" files=".*[/\\]test[/\\].*" />
