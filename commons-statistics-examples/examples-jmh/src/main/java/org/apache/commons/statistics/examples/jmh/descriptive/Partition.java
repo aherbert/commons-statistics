@@ -6209,12 +6209,17 @@ final class Partition {
         //
         // Adapted from Kiwiel (2005) "On Floyd and Rivest's SELECT algorithm"
         // Theoretical Computer Science 347, 214-238.
+        // This is the safeguarded ternary partition Scheme E with modification to
+        // prevent vacuous swaps of equal keys (section 5.6) in Kiwiel (2003)
+        // Partitioning schemes for quicksort and quickselect,
+        // Technical report, Systems Research Institute, Warsaw.
+        // http://arxiv.org/abs/cs.DS/0312054
         //
         // Note: The difference between this and Sedgewick's BM is the use of sentinals
         // at either end to remove index checks at both ends and changing the behaviour
         // when i and j meet on a pivot value.
         //
-        // The listing in Kiwiel has been updated:
+        // The listing in Kiwiel (2005) has been updated:
         // - p and q mark the *inclusive* end of ==v regions.
         // - Added a fast-forward over initial range containing the pivot.
         // - Vector swap is optimised given one side of the exchange is v.
