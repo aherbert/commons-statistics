@@ -45,50 +45,42 @@ import org.openjdk.jmh.infra.Blackhole;
 @State(Scope.Benchmark)
 @Fork(value = 1, jvmArgs = {"-server", "-Xms512M", "-Xmx8192M"})
 public class MedianPerformance {
-    /** Commons Statistics Median implementation using a single-pivot quickselect. */
+    /** Single-pivot quickselect. */
     private static final String SP = "SP";
-    /** Commons Statistics Median implementation with special NaN/zero handling. */
+    /** Single-pivot quickselect with special NaN/zero handling. */
     private static final String SP_NAN = "NSP";
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect. */
+    /** Bentley-McIlroy partitioning (Sedgewick). */
     private static final String SBM = "SBM";
-    /** Commons Statistics Median implementation with Bentley-McIlroy (original) quickselect. */
+    /** Bentley-McIlroy partitioning (original). */
     private static final String BM = "BM";
-    /** Commons Statistics Median implementation with a dual-pivot quickselect. */
+    /** Dual-pivot partitioning. */
     private static final String DP = "DP";
-    /** Commons Statistics Median implementation with a dual-pivot quickselect
-     * with 5 sorted points to choose pivots. */
+    /** Dual-pivot partitioning with 5 sorted points to choose pivots. */
     private static final String DP5 = "5DP";
-    /** Commons Math Median implementation. */
+    /** Commons Math Percentile implementation. */
     private static final String CM = "CM";
-    /** Median implementation using the JDK sort function. */
+    /** Use the JDK sort function. */
     private static final String JDK = "JDK";
 
     // Second generation partition functions
 
-    /** Commons Statistics Median implementation with Sedgewick's BM quickselect. */
+    /** Bentley-McIlroy partitioning (Sedgewick). */
     private static final String SBM2 = "2SBM";
 
-    // Introselect functions
+    // Introselect functions - switch to heapselect when progress is poor
 
-    /** Commons Statistics Quantile introselect implementation with single pivot
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with single pivot partitioning. */
     private static final String ISP = "ISP";
-    /** Commons Statistics Median introselect implementation with Bentley-McIlroy
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with Bentley-McIlroy partitioning (original). */
     private static final String IBM = "IBM";
-    /** Commons Statistics Median introselect implementation with Sedgewick's Bentley-McIlroy
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with Bentley-McIlroy partitioning (Sedgewick). */
     private static final String ISBM = "ISBM";
-    /** Commons Statistics Quantile introselect implementation with Kiwiel's Bentley-McIlroy
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with Bentley-McIlroy partitioning (Kiwiel). */
     private static final String IKBM = "IKBM";
-    /** Commons Statistics Median introselect implementation with dual-pivot
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with dual-pivot partitioning. */
     private static final String IDP = "IDP";
-    /** Commons Statistics Median implementation. This method is built using the best performing
-     * select function across a range of input data. Current implementation uses
-     * an introselect variant with a dual-pivot quickselect; switching to heapselect when
-     * progress is poor. This algorithm currently cannot be configured. */
+    /** Commons Statistics Quantile implementation. This method is built using the best performing
+     * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
 
     /**
