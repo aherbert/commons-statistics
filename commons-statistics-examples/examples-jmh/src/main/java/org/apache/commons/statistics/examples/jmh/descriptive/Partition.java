@@ -22,7 +22,6 @@ import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
-import org.apache.commons.rng.simple.RandomSource;
 
 /**
  * Partition array data.
@@ -4851,10 +4850,7 @@ final class Partition {
             // Step 2: Sample selection
             // Convenient to place the random sample in [l, rs]
             if (rng == null) {
-                // Middle-Square Weyl Sequence is fastest int generator
-                // Should this be seeded with e.g. k, ku, kv
-                // TODO: make generator configurable. Will a SplittableRandom be OK?
-                rng = RandomSource.MSWS.create()::nextInt;
+                rng = createRNG();
             }
             final int r1 = r + 1;
             for (int i = l; i <= rs; i++) {
@@ -4986,8 +4982,10 @@ final class Partition {
                 d = rr - q + 1 + j;
                 c = d - rr + q - 1;
                 vectorSwap(x, pp + 1, p, j);
-                vectorSwap(x, ll, pp, b - 1);
-                vectorSwap(x, i, q - 1, rr);
+                //vectorSwap(x, ll, pp, b - 1);
+                //vectorSwap(x, i, q - 1, rr);
+                vectorSwapL(x, ll, pp, b - 1, u);
+                vectorSwapR(x, i, q - 1, rr, v);
             } else {
                 // Right k: u < x[k] < v --> expects x < u.
                 // Symmetric quintary partitioning replacing 6.6-6.8 with:
@@ -5055,9 +5053,11 @@ final class Partition {
                 b = a + p + 1 - ll;
                 d = rr - q + 1 + j;
                 c = d - rr + qq - 1;
-                vectorSwap(x, ll, p, j);
                 vectorSwap(x, i, q - 1, qq - 1);
-                vectorSwap(x, c + 1, qq - 1, rr);
+                //vectorSwap(x, ll, p, j);
+                //vectorSwap(x, c + 1, qq - 1, rr);
+                vectorSwapL(x, ll, p, j, u);
+                vectorSwapR(x, c + 1, qq - 1, rr, v);
             }
 
             // Step 5/6/7: Stopping test, reduction and recursion
@@ -5103,6 +5103,46 @@ final class Partition {
             final double v = x[++i];
             x[i] = x[--j];
             x[j] = v;
+        }
+    }
+
+    /**
+     * Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
+     * elements of the array x[a:c] are exchanged with its last m elements.
+     *
+     * <p>This is a specialisation of {@link #vectorSwap(double[], int, int, int)}
+     * where the current left-most value is a constant {@code v}.
+     *
+     * @param x Array.
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param v Constant value in [a, b]
+     */
+    private static void vectorSwapL(double[] x, int a, int b, int c, double v) {
+        for (int i = a - 1, j = c + 1, m = Math.min(b + 1 - a, c - b); --m >= 0;) {
+            x[++i] = x[--j];
+            x[j] = v;
+        }
+    }
+
+    /**
+     * Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
+     * elements of the array x[a:c] are exchanged with its last m elements.
+     *
+     * <p>This is a specialisation of {@link #vectorSwap(double[], int, int, int)}
+     * where the current right-most value is a constant {@code v}.
+     *
+     * @param x Array.
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param v Constant value in (b, c]
+     */
+    private static void vectorSwapR(double[] x, int a, int b, int c, double v) {
+        for (int i = a - 1, j = c + 1, m = Math.min(b + 1 - a, c - b); --m >= 0;) {
+            x[--j] = x[++i];
+            x[i] = v;
         }
     }
 
@@ -6248,17 +6288,19 @@ final class Partition {
         // Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
         // elements of the array x[a:c] are exchanged with its last m elements.
         // x[ll:p] <-> x[p+1:j]
-        int m = Math.min(p + 1 - ll, j - p);
-        for (int k = ll; --m >= 0; --j, ++k) {
-            x[k] = x[j];
-            x[j] = v;
-        }
+//        int m = Math.min(p + 1 - ll, j - p);
+//        for (int k = ll; --m >= 0; --j, ++k) {
+//            x[k] = x[j];
+//            x[j] = v;
+//        }
+        vectorSwapL(x, ll, p, j, v);
         // x[i:q-1] <-> x[q:rr]
-        m = Math.min(q - i, rr - q + 1);
-        for (int k = rr; --m >= 0; ++i, --k) {
-            x[k] = x[i];
-            x[i] = v;
-        }
+//        m = Math.min(q - i, rr - q + 1);
+//        for (int k = rr; --m >= 0; ++i, --k) {
+//            x[k] = x[i];
+//            x[i] = v;
+//        }
+        vectorSwapR(x, i, q - 1, rr, v);
         return a;
     }
 
@@ -7832,5 +7874,40 @@ final class Partition {
         // Smallest known value above
         // l is always moved upward when a middle index value is too low
         return l;
+    }
+
+    /**
+     * Creates the source of random numbers in {@code [0, n)}.
+     *
+     * @return the RNG
+     */
+    private static IntUnaryOperator createRNG() {
+        // Middle-Square Weyl Sequence is fastest int generator
+        // Should this be seeded with e.g. k, ku, kv
+        // TODO: make generator configurable. Will a SplittableRandom be OK?
+        //return RandomSource.MSWS.create()::nextInt;
+        return new Gen();
+    }
+
+    /**
+     * Random generator for numbers in {@code [0, n)}.
+     * The random sample should be fast in preference to statistically robust.
+     * Here we implement a biased sampler for the range [0, n)
+     * as n * f with f a fraction with base 2^32.
+     * Source of randomness is a simple 64-bit LCG.
+     * https://en.wikipedia.org/wiki/Linear_congruential_generator
+     */
+    private static class Gen implements IntUnaryOperator {
+        /** LCG state. */
+        private long s = System.nanoTime();
+
+        @Override
+        public int applyAsInt(int n) {
+            // Update state. Use the constants from MMIX by Donald Knuth.
+            s = s * 6364136223846793005L + 1442695040888963407L;
+            // Use the upper 32-bits from the state as the random 32-bit sample
+            // result = n * [0, 2^32) / 2^32
+            return (int) (((long) n * (s >>> Integer.SIZE)) >>> Integer.SIZE);
+        }
     }
 }
