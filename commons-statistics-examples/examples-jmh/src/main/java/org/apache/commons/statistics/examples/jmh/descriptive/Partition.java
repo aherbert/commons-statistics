@@ -4889,15 +4889,14 @@ final class Partition {
             double v = x[kvm];
             // |l      |ku- ku+|                   |kv- kv+|     rs|            r|     (6.4)
             // | x < u | x = u |     u < x < v     | x = v | x > v |      ???    |
-            // TODO - update p,q,pp,qq for pre-in/decrement
             int ll = kum;
-            int pp = kup + 1;
+            int pp = kup;
             int rr = r - rs + kvp;
-            int qq = rr - kvp + kvm - 1;
+            int qq = rr - kvp + kvm;
             vectorSwap(x, kvp + 1, rs, r);
             vectorSwap(x, kvm, kvp, rr);
             //vectorSwap(x, kvm, rs, r);
-            // |l      |ll     |pp                 |kv-        qq|     rr|      r|     (6.5)
+            // |l      |ll   pp|                   |kv-          |qq   rr|      r|     (6.5)
             // | x < u | x = u |     u < x < v     |      ???    | x = v | x > v |
 
             int a;
@@ -4919,23 +4918,23 @@ final class Partition {
             } else if (k < (r + l) >>> 1) {
                 // Left k: u < x[k] < v --> expects x > v.
                 // Quintary partitioning using the six-part array:
-                // |ll     |pp             |p         |i        j|      q|     rr|     (6.6)
+                // |ll   pp|              p|          |i        j|       |q    rr|     (6.6)
                 // | x = u |    u < x < v  |   x < u  |   ???    | x > v | x = v |
                 //
-                // |ll     |pp             |p             j|i           q|     rr|     (6.7)
+                // |ll   pp|              p|              j|i            |q    rr|     (6.7)
                 // | x = u |    u < x < v  |   x < u       |       x > v | x = v |
                 //
                 // Swap the second and third part:
-                // |ll     |pp             |b             c|i           q|     rr|     (6.8)
+                // |ll   pp|               |b             c|i            |q    rr|     (6.8)
                 // | x = u |   x < u       |    u < x < v  |       x > v | x = v |
                 //
                 // Swap the extreme parts with their neighbours:
                 // |ll             |a      |b             c|      d|           rr|     (6.9)
                 // |   x < u       | x = u |    u < x < v  | x = v |       x > v |
-                int p = kvm;
+                int p = kvm - 1;
                 int q = qq;
-                int i = p - 1;
-                int j = q + 1;
+                int i = p;
+                int j = q;
                 for (;;) {
                     while (x[++i] < v) {
                         if (x[i] < u) {
@@ -4943,22 +4942,19 @@ final class Partition {
                         }
                         // u <= xi < v
                         double xi = x[i];
-                        x[i] = x[p];
+                        x[i] = x[++p];
                         if (xi > u) {
                             x[p] = xi;
                         } else {
-                            x[p] = x[pp];
+                            x[p] = x[++pp];
                             x[pp] = xi;
-                            ++pp;
                         }
-                        ++p;
                     }
                     while (x[--j] >= v) {
                         if (x[j] == v) {
                             double xj = x[j];
-                            x[j] = x[q];
+                            x[j] = x[--q];
                             x[q] = xj;
-                            --q;
                         }
                     }
                     // Here x[j] < v <= x[i]
@@ -4971,55 +4967,50 @@ final class Partition {
                     x[i] = xi;
                     x[j] = xj;
                     if (xi > u) {
-                        x[i] = x[p];
+                        x[i] = x[++p];
                         x[p] = xi;
-                        ++p;
                     } else if (xi == u) {
-                        x[i] = x[p];
-                        x[p] = x[pp];
+                        x[i] = x[++p];
+                        x[p] = x[++pp];
                         x[pp] = xi;
-                        ++p;
-                        ++pp;
                     }
                     if (xj == v) {
-                        x[j] = x[q];
+                        x[j] = x[--q];
                         x[q] = xj;
-                        --q;
                     }
                 }
-                a = ll + i - p;
-                b = a + pp - ll;
-                d = rr - q + j;
-                c = d - rr + q;
-                vectorSwap(x, pp, p - 1, j);
-                vectorSwap(x, ll, pp - 1, b - 1);
-                vectorSwap(x, i, q, rr);
+                a = ll + i - p - 1;
+                b = a + pp + 1 - ll;
+                d = rr - q + 1 + j;
+                c = d - rr + q - 1;
+                vectorSwap(x, pp + 1, p, j);
+                vectorSwap(x, ll, pp, b - 1);
+                vectorSwap(x, i, q - 1, rr);
             } else {
                 // Right k: u < x[k] < v --> expects x < u.
                 // Symmetric quintary partitioning replacing 6.6-6.8 with:
-                // |ll     |p         |i        j|      q|             qq|     rr|     (6.10)
+                // |ll    p|          |i        j|       |q              |qq   rr|     (6.10)
                 // | x = u |   x < u  |   ???    | x > v |    u < x < v  | x = v |
                 //
-                // |ll     |p               j|i     q|                 qq|     rr|     (6.11)
+                // |ll    p|                j|i      |q                  |qq   rr|     (6.11)
                 // | x = u |   x < u         | x > v |        u < x < v  | x = v |
                 //
-                // |ll     |p               j|b                 c|     qq|     rr|     (6.12)
+                // |ll    p|                j|b                 c|       |qq   rr|     (6.12)
                 // | x = u |   x < u         |        u < x < v  | x > v | x = v |
                 //
                 // |ll               |a      |b                 c|      d|     rr|     (6.9)
                 // |   x < u         | x = u |        u < x < v  | x = v | x > v |
                 int p = pp;
                 int q = qq - kvm + kup + 1;
-                int i = p - 1;
-                int j = q + 1;
-                vectorSwap(x, pp, kvm - 1, qq);
+                int i = p;
+                int j = q;
+                vectorSwap(x, pp + 1, kvm - 1, qq - 1);
                 for (;;) {
                     while (x[++i] <= u) {
                         if (x[i] == u) {
                             double xi = x[i];
-                            x[i] = x[p];
+                            x[i] = x[++p];
                             x[p] = xi;
-                            ++p;
                         }
                     }
                     while (x[--j] > u) {
@@ -5028,15 +5019,13 @@ final class Partition {
                         }
                         // u < xj <= v
                         double xj = x[j];
-                        x[j] = x[q];
+                        x[j] = x[--q];
                         if (xj < v) {
                             x[q] = xj;
                         } else {
-                            x[q] = x[qq];
+                            x[q] = x[--qq];
                             x[qq] = xj;
-                            --qq;
                         }
-                        --q;
                     }
                     // Here x[j] < v <= x[i]
                     if (i >= j) {
@@ -5048,29 +5037,25 @@ final class Partition {
                     x[i] = xi;
                     x[j] = xj;
                     if (xi == u) {
-                        x[i] = x[p];
+                        x[i] = x[++p];
                         x[p] = xi;
-                        ++p;
                     }
                     if (xj < v) {
-                        x[j] = x[q];
+                        x[j] = x[--q];
                         x[q] = xj;
-                        --q;
                     } else if (xj == v) {
-                        x[j] = x[q];
-                        x[q] = x[qq];
+                        x[j] = x[--q];
+                        x[q] = x[--qq];
                         x[qq] = xj;
-                        --q;
-                        --qq;
                     }
                 }
-                a = ll + i - p;
-                b = a + p - ll;
-                d = rr - q + j;
-                c = d - rr + qq;
-                vectorSwap(x, ll, p - 1, j);
-                vectorSwap(x, i, q, qq);
-                vectorSwap(x, c + 1, qq, rr);
+                a = ll + i - p - 1;
+                b = a + p + 1 - ll;
+                d = rr - q + 1 + j;
+                c = d - rr + qq - 1;
+                vectorSwap(x, ll, p, j);
+                vectorSwap(x, i, q - 1, qq - 1);
+                vectorSwap(x, c + 1, qq - 1, rr);
             }
 
             // Step 5/6/7: Stopping test, reduction and recursion
