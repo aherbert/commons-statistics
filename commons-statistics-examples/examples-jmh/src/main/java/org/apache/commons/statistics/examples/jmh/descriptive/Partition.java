@@ -4897,7 +4897,6 @@ final class Partition {
             int qq = rr - kvp + kvm;
             vectorSwap(x, kvp + 1, rs, r);
             vectorSwap(x, kvm, kvp, rr);
-            //vectorSwap(x, kvm, rs, r);
             // |l      |ll   pp|                   |kv-          |qq   rr|      r|     (6.5)
             // | x < u | x = u |     u < x < v     |      ???    | x = v | x > v |
 
