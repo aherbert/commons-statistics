@@ -4838,13 +4838,14 @@ final class Partition {
             }
 
             // Floyd-Rivest sub-sampling
+            // TODO: check this sampling. Does the Kiwiel paper provide code?
             ++n;
             // Step 1: Choose sample size s <= n-1 and gap g > 0
             final double z = Math.log(n);
             // sample size = alpha * n^(2/3) * ln(n)^1/3
             final double s = 0.5 * Math.exp(0.6666666666666666 * z) * Math.cbrt(z);
             // gap = sqrt(beta * s * ln(n))
-            final double g = Math.sqrt(0.5 * s * z);
+            final double g = Math.sqrt(0.25 * s * z);
             final int rs = (int) (l + s - 1);
             // Step 2: Sample selection
             // Convenient to place the random sample in [l, rs]
@@ -4906,6 +4907,7 @@ final class Partition {
 
             // TODO: u < v : try partitionDP here.
             // May work best if ku and kv straddle the median of [l, rs]
+            // TODO: move quintary partitioning to methods.
 
             if (u == v) {
                 // Can be optimised by omitting step A1 (moving of sentinels). Here the
