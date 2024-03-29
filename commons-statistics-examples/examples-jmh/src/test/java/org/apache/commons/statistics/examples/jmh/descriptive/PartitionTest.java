@@ -827,6 +827,13 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionKFR(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionKFR);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
