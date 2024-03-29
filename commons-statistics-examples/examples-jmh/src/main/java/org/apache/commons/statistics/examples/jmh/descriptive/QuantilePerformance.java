@@ -219,7 +219,16 @@ public class QuantilePerformance {
             /** plateau distribution. */
             PLATEAU,
             /** shuffle distribution. */
-            SHUFFLE;
+            SHUFFLE,
+            /** sharktooth distribution. This is an addition to the original suite of B & M
+             * and is not included in the test suite by default and must be specified.
+             *
+             * <p>An ascending then descending sequence is also known as organpipe in
+             * Valois (2000),
+             * Introspective sorting and selection revisited,
+             * Software–Practice and Experience 30, 617–638.
+             * This version allows multiple ascending/descending runs in the same length. */
+            SHARKTOOTH;
         }
 
         /**
@@ -493,7 +502,12 @@ public class QuantilePerformance {
          * @return the distributions
          */
         private EnumSet<Distribution> getDistributions() {
-            return getEnumFromParam(Distribution.class, distribution);
+            final EnumSet<Distribution> mod = getEnumFromParam(Distribution.class, distribution);
+            // Require the sharktooth distribution to be explicitly requested.
+            if (ALL.equals(distribution)) {
+                mod.remove(Distribution.SHARKTOOTH);
+            }
+            return mod;
         }
 
         /**
@@ -577,6 +591,10 @@ public class QuantilePerformance {
          * <p>The offset is used to adjust each distribution to generate a different output.
          * Only applies to distributions that do not use the source of randomness.
          *
+         * <p>Distributions that are a constant value at {@code m == 1} are not generated.
+         * This case is handled by the plateau distribution which will be a constant value
+         * except one occurrence of zero.
+         *
          * @param dist Distributions.
          * @param rng Source of randomness.
          * @param n Length of the sample.
@@ -588,7 +606,7 @@ public class QuantilePerformance {
                 UniformRandomProvider rng, int n, int m, int o) {
             final ArrayList<int[]> distData = new ArrayList<>(5);
             int[] x;
-            if (dist.contains(Distribution.SAWTOOTH)) {
+            if (dist.contains(Distribution.SAWTOOTH) && m != 1) {
                 distData.add(x = new int[n]);
                 // i % m
                 // Typical case m is a power of 2 so we can use a mask
@@ -607,7 +625,7 @@ public class QuantilePerformance {
                     }
                 }
             }
-            if (dist.contains(Distribution.RANDOM)) {
+            if (dist.contains(Distribution.RANDOM) && m != 1) {
                 distData.add(x = new int[n]);
                 // rand() % m
                 // A sampler is faster than rng.nextInt(m); the sampler has an inclusive upper.
@@ -643,12 +661,33 @@ public class QuantilePerformance {
                     System.arraycopy(a, n2, x, 0, n1);
                 }
             }
-            if (dist.contains(Distribution.SHUFFLE)) {
+            if (dist.contains(Distribution.SHUFFLE) && m != 1) {
                 distData.add(x = new int[n]);
                 // rand() % m ? (j += 2) : (k += 2)
                 final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
                 for (int i = -1, j = 0, k = 1; ++i < n;) {
                     x[i] = s.sample() != 0 ? (j += 2) : (k += 2);
+                }
+            }
+            if (dist.contains(Distribution.SHARKTOOTH) && m != 1) {
+                distData.add(x = new int[n]);
+                // ascending-descending runs
+                int i = -1;
+                int j = (o & Integer.MAX_VALUE) % m - 1;
+                OUTER:
+                for (;;) {
+                    while (++j < m) {
+                        if (++i == n) {
+                            break OUTER;
+                        }
+                        x[i] = j;
+                    }
+                    while (--j >= 0) {
+                        if (++i == n) {
+                            break OUTER;
+                        }
+                        x[i] = j;
+                    }
                 }
             }
             return distData;
