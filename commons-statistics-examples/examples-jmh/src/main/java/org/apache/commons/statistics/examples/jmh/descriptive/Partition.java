@@ -4859,19 +4859,19 @@ final class Partition {
             final int r1 = r + 1;
             for (int i = l; i <= rs; i++) {
                 // i + rand [0, r - i]
-                int j = i + rng.applyAsInt(r1 - i);
-                double t = x[i];
+                final int j = i + rng.applyAsInt(r1 - i);
+                final double t = x[i];
                 x[i] = x[j];
                 x[j] = t;
             }
 
             // Step 3: pivot selection (adjusted for 0-based indexing)
             final double isn = (k - l) * s / n;
-            int ku = (int) Math.max(Math.ceil(l + isn - g), l);
-            int kv = (int) Math.min(Math.ceil(l + isn + g), rs);
+            final int ku = (int) Math.max(Math.ceil(l + isn - g), l);
+            final int kv = (int) Math.min(Math.ceil(l + isn + g), rs);
             // Find u and v by recursion
             selectKFR(x, l, rs, ku, bounds, rng);
-            int kum = bounds[0];
+            final int kum = bounds[0];
             int kup = bounds[1];
             int kvm;
             int kvp;
@@ -4887,13 +4887,13 @@ final class Partition {
             }
 
             // Step 4: Partitioning
-            double u = x[kup];
-            double v = x[kvm];
+            final double u = x[kup];
+            final double v = x[kvm];
             // |l      |ku- ku+|                   |kv- kv+|     rs|            r|     (6.4)
             // | x < u | x = u |     u < x < v     | x = v | x > v |      ???    |
-            int ll = kum;
+            final int ll = kum;
             int pp = kup;
-            int rr = r - rs + kvp;
+            final int rr = r - rs + kvp;
             int qq = rr - kvp + kvm;
             vectorSwap(x, kvp + 1, rs, r);
             vectorSwap(x, kvm, kvp, rr);
@@ -4944,7 +4944,7 @@ final class Partition {
                             continue;
                         }
                         // u <= xi < v
-                        double xi = x[i];
+                        final double xi = x[i];
                         x[i] = x[++p];
                         if (xi > u) {
                             x[p] = xi;
@@ -4955,7 +4955,7 @@ final class Partition {
                     }
                     while (x[--j] >= v) {
                         if (x[j] == v) {
-                            double xj = x[j];
+                            final double xj = x[j];
                             x[j] = x[--q];
                             x[q] = xj;
                         }
@@ -5011,7 +5011,7 @@ final class Partition {
                 for (;;) {
                     while (x[++i] <= u) {
                         if (x[i] == u) {
-                            double xi = x[i];
+                            final double xi = x[i];
                             x[i] = x[++p];
                             x[p] = xi;
                         }
@@ -5021,7 +5021,7 @@ final class Partition {
                             continue;
                         }
                         // u < xj <= v
-                        double xj = x[j];
+                        final double xj = x[j];
                         x[j] = x[--q];
                         if (xj < v) {
                             x[q] = xj;
