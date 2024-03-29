@@ -20,7 +20,9 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.IntConsumer;
+import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
+import org.apache.commons.rng.simple.RandomSource;
 
 /**
  * Partition array data.
@@ -4560,7 +4562,7 @@ final class Partition {
      * It handles NaN and signed zeros in the data.
      *
      * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
-     * Floyd-Rivest Algorithm (Wikipedia)</a>
+     * Floyd-Rivest Algorithm (Wikipedia)</a>.
      *
      * <p>WARNING: Currently this only supports a single {@code k}. For parity with other
      * select methods this accepts an array {@code k} and pre/post processes the data for
@@ -4710,6 +4712,410 @@ final class Partition {
             } else {
                 return;
             }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
+     * Floyd-Rivest Algorithm (Wikipedia)</a>, modified by Kiwiel.
+     *
+     * <p>WARNING: Currently this only supports a single {@code k}. For parity with other
+     * select methods this accepts an array {@code k} and pre/post processes the data for
+     * NaN and signed zeros.
+     *
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    void partitionKFR(double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            // Only handles a single k
+            if (n != 0) {
+                final int[] bounds = {0, 0};
+                selectKFR(a, 0, end - 1, k[0], bounds, null);
+            }
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Select the k-th element of the array.
+     *
+     * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
+     * Floyd-Rivest Algorithm (Wikipedia)</a>, modified by Kiwiel.
+     *
+     * <p>References:
+     * <ul>
+     * <li>Floyd and Rivest (1975)
+     * Algorithm 489: The Algorithm SELECT—for Finding the ith Smallest of n elements.
+     * Comm. ACM. 18 (3): 173.
+     * <li>Kiwiel (2005)
+     * On Floyd and Rivest's SELECT algorithm.
+     * Theoretical Computer Science 347, 214-238.
+     * </ul>
+     *
+     * @param x Values.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k Key of interest.
+     * @param bounds Inclusive bounds {@code [k-, k+]} containing {@code k}.
+     * @param rng Random generator for samples in {@code [0, n)}.
+     */
+    private void selectKFR(double[] x, int left, int right, int k, int[] bounds,
+        IntUnaryOperator rng) {
+        int l = left;
+        int r = right;
+        while (true) {
+            // The following heapselect/sortselect modifications are additions to the
+            // KFR algorithm. These have been added for testing and only affect the finishing
+            // selection of small lengths.
+
+            // length - 1
+            int n = r - l;
+            // It is possible to use heapselect when k is close to the end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(k - l, r - k) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                heapSelectRange(x, l, r, k, k);
+                bounds[0] = bounds[1] = k;
+                return;
+            }
+
+            if (n < minQuickSelectSize || Math.min(k - l, r - k) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(x, l, r, k, k);
+                bounds[0] = bounds[1] = k;
+                return;
+            }
+
+            if (n < 600) {
+                // Switch to quickselect
+                final int p0 = partitionKBM(x, l, r, pivotingStrategy.pivotIndex(x, l, r), bounds);
+                final int p1 = bounds[0];
+                if (k < p0) {
+                    // The element is in the left partition
+                    r = p0 - 1;
+                } else if (k > p1) {
+                    // The element is in the right partition
+                    l = p1 + 1;
+                } else {
+                    // The range contains the element we wanted.
+                    bounds[0] = p0;
+                    bounds[1] = p1;
+                    return;
+                }
+                continue;
+            }
+
+            // Floyd-Rivest sub-sampling
+            ++n;
+            // Step 1: Choose sample size s <= n-1 and gap g > 0
+            final double z = Math.log(n);
+            // sample size = alpha * n^(2/3) * ln(n)^1/3
+            final double s = 0.5 * Math.exp(0.6666666666666666 * z) * Math.cbrt(z);
+            // gap = sqrt(beta * s * ln(n))
+            final double g = Math.sqrt(0.5 * s * z);
+            final int rs = (int) (l + s - 1);
+            // Step 2: Sample selection
+            // Convenient to place the random sample in [l, rs]
+            if (rng == null) {
+                // Middle-Square Weyl Sequence is fastest int generator
+                // Should this be seeded with e.g. k, ku, kv
+                // TODO: make generator configurable. Will a SplittableRandom be OK?
+                rng = RandomSource.MSWS.create()::nextInt;
+            }
+            final int r1 = r + 1;
+            for (int i = l; i <= rs; i++) {
+                // i + rand [0, r - i]
+                int j = i + rng.applyAsInt(r1 - i);
+                double t = x[i];
+                x[i] = x[j];
+                x[j] = t;
+            }
+
+            // Step 3: pivot selection (adjusted for 0-based indexing)
+            final double isn = (k - l) * s / n;
+            int ku = (int) Math.max(Math.ceil(l + isn - g), l);
+            int kv = (int) Math.min(Math.ceil(l + isn + g), rs);
+            // Find u and v by recursion
+            selectKFR(x, l, rs, ku, bounds, rng);
+            int kum = bounds[0];
+            int kup = bounds[1];
+            int kvm;
+            int kvp;
+            if (kup >= kv) {
+                kvm = kv;
+                kvp = kup;
+                kup = kv - 1;
+                // u == v will use single-pivot ternary partitioning
+            } else {
+                selectKFR(x, kup + 1, rs, kv, bounds, rng);
+                kvm = bounds[0];
+                kvp = bounds[1];
+            }
+
+            // Step 4: Partitioning
+            double u = x[kup];
+            double v = x[kvm];
+            // |l      |ku- ku+|                   |kv- kv+|     rs|            r|     (6.4)
+            // | x < u | x = u |     u < x < v     | x = v | x > v |      ???    |
+            // TODO - update p,q,pp,qq for pre-in/decrement
+            int ll = kum;
+            int pp = kup + 1;
+            int rr = r - rs + kvp;
+            int qq = rr - kvp + kvm - 1;
+            vectorSwap(x, kvp + 1, rs, r);
+            vectorSwap(x, kvm, kvp, rr);
+            //vectorSwap(x, kvm, rs, r);
+            // |l      |ll     |pp                 |kv-        qq|     rr|      r|     (6.5)
+            // | x < u | x = u |     u < x < v     |      ???    | x = v | x > v |
+
+            int a;
+            int b;
+            int c;
+            int d;
+
+            // TODO: u < v : try partitionDP here.
+            // May work best if ku and kv straddle the median of [l, rs]
+
+            if (u == v) {
+                // Can be optimised by omitting step A1 (moving of sentinels). Here the
+                // size of ??? is large and initialisation is insignificant.
+                a = partitionKBM(x, ll, rr, kup, bounds);
+                d = bounds[0];
+                // Make ternary and quintary partitioning compatible
+                b = d + 1;
+                c = a - 1;
+            } else if (k < (r + l) >>> 1) {
+                // Left k: u < x[k] < v --> expects x > v.
+                // Quintary partitioning using the six-part array:
+                // |ll     |pp             |p         |i        j|      q|     rr|     (6.6)
+                // | x = u |    u < x < v  |   x < u  |   ???    | x > v | x = v |
+                //
+                // |ll     |pp             |p             j|i           q|     rr|     (6.7)
+                // | x = u |    u < x < v  |   x < u       |       x > v | x = v |
+                //
+                // Swap the second and third part:
+                // |ll     |pp             |b             c|i           q|     rr|     (6.8)
+                // | x = u |   x < u       |    u < x < v  |       x > v | x = v |
+                //
+                // Swap the extreme parts with their neighbours:
+                // |ll             |a      |b             c|      d|           rr|     (6.9)
+                // |   x < u       | x = u |    u < x < v  | x = v |       x > v |
+                int p = kvm;
+                int q = qq;
+                int i = p - 1;
+                int j = q + 1;
+                for (;;) {
+                    while (x[++i] < v) {
+                        if (x[i] < u) {
+                            continue;
+                        }
+                        // u <= xi < v
+                        double xi = x[i];
+                        x[i] = x[p];
+                        if (xi > u) {
+                            x[p] = xi;
+                        } else {
+                            x[p] = x[pp];
+                            x[pp] = xi;
+                            ++pp;
+                        }
+                        ++p;
+                    }
+                    while (x[--j] >= v) {
+                        if (x[j] == v) {
+                            double xj = x[j];
+                            x[j] = x[q];
+                            x[q] = xj;
+                            --q;
+                        }
+                    }
+                    // Here x[j] < v <= x[i]
+                    if (i >= j) {
+                        break;
+                    }
+                    //swap(x, i, j)
+                    final double xi = x[j];
+                    final double xj = x[i];
+                    x[i] = xi;
+                    x[j] = xj;
+                    if (xi > u) {
+                        x[i] = x[p];
+                        x[p] = xi;
+                        ++p;
+                    } else if (xi == u) {
+                        x[i] = x[p];
+                        x[p] = x[pp];
+                        x[pp] = xi;
+                        ++p;
+                        ++pp;
+                    }
+                    if (xj == v) {
+                        x[j] = x[q];
+                        x[q] = xj;
+                        --q;
+                    }
+                }
+                a = ll + i - p;
+                b = a + pp - ll;
+                d = rr - q + j;
+                c = d - rr + q;
+                vectorSwap(x, pp, p - 1, j);
+                vectorSwap(x, ll, pp - 1, b - 1);
+                vectorSwap(x, i, q, rr);
+            } else {
+                // Right k: u < x[k] < v --> expects x < u.
+                // Symmetric quintary partitioning replacing 6.6-6.8 with:
+                // |ll     |p         |i        j|      q|             qq|     rr|     (6.10)
+                // | x = u |   x < u  |   ???    | x > v |    u < x < v  | x = v |
+                //
+                // |ll     |p               j|i     q|                 qq|     rr|     (6.11)
+                // | x = u |   x < u         | x > v |        u < x < v  | x = v |
+                //
+                // |ll     |p               j|b                 c|     qq|     rr|     (6.12)
+                // | x = u |   x < u         |        u < x < v  | x > v | x = v |
+                //
+                // |ll               |a      |b                 c|      d|     rr|     (6.9)
+                // |   x < u         | x = u |        u < x < v  | x = v | x > v |
+                int p = pp;
+                int q = qq - kvm + kup + 1;
+                int i = p - 1;
+                int j = q + 1;
+                vectorSwap(x, pp, kvm - 1, qq);
+                for (;;) {
+                    while (x[++i] <= u) {
+                        if (x[i] == u) {
+                            double xi = x[i];
+                            x[i] = x[p];
+                            x[p] = xi;
+                            ++p;
+                        }
+                    }
+                    while (x[--j] > u) {
+                        if (x[j] > v) {
+                            continue;
+                        }
+                        // u < xj <= v
+                        double xj = x[j];
+                        x[j] = x[q];
+                        if (xj < v) {
+                            x[q] = xj;
+                        } else {
+                            x[q] = x[qq];
+                            x[qq] = xj;
+                            --qq;
+                        }
+                        --q;
+                    }
+                    // Here x[j] < v <= x[i]
+                    if (i >= j) {
+                        break;
+                    }
+                    //swap(x, i, j)
+                    final double xi = x[j];
+                    final double xj = x[i];
+                    x[i] = xi;
+                    x[j] = xj;
+                    if (xi == u) {
+                        x[i] = x[p];
+                        x[p] = xi;
+                        ++p;
+                    }
+                    if (xj < v) {
+                        x[j] = x[q];
+                        x[q] = xj;
+                        --q;
+                    } else if (xj == v) {
+                        x[j] = x[q];
+                        x[q] = x[qq];
+                        x[qq] = xj;
+                        --q;
+                        --qq;
+                    }
+                }
+                a = ll + i - p;
+                b = a + p - ll;
+                d = rr - q + j;
+                c = d - rr + qq;
+                vectorSwap(x, ll, p - 1, j);
+                vectorSwap(x, i, q, qq);
+                vectorSwap(x, c + 1, qq, rr);
+            }
+
+            // Step 5/6/7: Stopping test, reduction and recursion
+            // |l              |a      |b             c|      d|            r|
+            // |   x < u       | x = u |    u < x < v  | x = v |       x > v |
+            if (a <= k) {
+                l = b;
+            }
+            if (c < k) {
+                l = d + 1;
+            }
+            if (k <= d) {
+                r = c;
+            }
+            if (k < b) {
+                r = a - 1;
+            }
+            if (l >= r) {
+                if (l == r) {
+                    // [b, c]
+                    bounds[0] = bounds[1] = k;
+                } else {
+                    // l > r
+                    bounds[0] = r + 1;
+                    bounds[1] = l - 1;
+                }
+                return;
+            }
+        }
+    }
+
+    /**
+     * Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
+     * elements of the array x[a:c] are exchanged with its last m elements.
+     *
+     * @param x Array.
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     */
+    private static void vectorSwap(double[] x, int a, int b, int c) {
+        for (int i = a - 1, j = c + 1, m = Math.min(b + 1 - a, c - b); --m >= 0;) {
+            final double v = x[++i];
+            x[i] = x[--j];
+            x[j] = v;
         }
     }
 
@@ -5752,33 +6158,34 @@ final class Partition {
     static int partitionKBM(double[] x, int l, int r, int pivot, int[] upper) {
         // Single-pivot Bentley-McIlroy quicksort handling equal keys.
         //
-        // Partition data using pivot P into less-than, greater-than or equal.
-        // The basic idea is to work with the 5 inner parts of the array [l', r']
+        // Partition data using pivot v into less-than, greater-than or equal.
+        // The basic idea is to work with the 5 inner parts of the array [ll, rr]
         // by positioning sentinels at l and r:
         //
-        // l  ll    p           i            j          q    rr  r
-        // |<P|  ==P |     <P   |     ???    |   >P    | ==P  |>P|
+        // |l |ll   p|          |i          j|         |q   rr| r|           (6.1)
+        // |<v|  ==v |     <v   |     ???    |   >v    | ==v  |>v|
         //
         // until the middle part is empty or just contains an element equal to the pivot:
         //
-        // ll    p               j     i           q    rr
-        // |  ==P |     <P        |==P|     >P    | ==P  |
+        // |ll   p|              j|   |i          |q   rr|                   (6.2)
+        // |  ==v |     <v        |==v|     >v    | ==v  |
         //
         // i.e. j = i-1 or i-2, then swap the ends into the middle:
         //
-        // ll                a         d                rr
-        // |        <P      |     ==P   |      >P        |
+        // |ll              |a         d|              rr|                   (6.3)
+        // |        <v      |     ==v   |      >v        |
         //
         // Adapted from Kiwiel (2005) "On Floyd and Rivest's SELECT algorithm"
         // Theoretical Computer Science 347, 214-238.
         //
         // Note: The difference between this and Sedgewick's BM is the use of sentinals
-        // at either end to remove index checks at both ends.
+        // at either end to remove index checks at both ends and changing the behaviour
+        // when i and j meet on a pivot value.
         //
         // The listing in Kiwiel has been updated:
-        // - p and q mark the inclusive end of ==P regions.
+        // - p and q mark the *inclusive* end of ==v regions.
         // - Added a fast-forward over initial range containing the pivot.
-        // - vector swap is optimised given one side of the exchange ==P.
+        // - Vector swap is optimised given one side of the exchange is v.
 
         final double v = x[pivot];
         x[pivot] = x[l];

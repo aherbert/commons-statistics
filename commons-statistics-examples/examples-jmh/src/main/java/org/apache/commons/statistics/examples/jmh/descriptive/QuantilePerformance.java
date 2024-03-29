@@ -68,29 +68,30 @@ import org.openjdk.jmh.infra.Blackhole;
 @State(Scope.Benchmark)
 @Fork(value = 1, jvmArgs = {"-server", "-Xms512M", "-Xmx8192M"})
 public class QuantilePerformance {
-    /** Commons Statistics Quantile implementation with single-pivot partitioning using a heap.
+    /** Single-pivot partitioning using a heap.
      * This method is copied from Commons Math. */
     private static final String SPH = "SPH";
-    /** Commons Statistics Quantile implementation with single-pivot partitioning.
+    /** Single-pivot partitioning.
      * This method is adapted from Commons Math.
      * Evaluation couples the double[] data type to the EstimationMethod class. */
     private static final String SPE = "SPE";
-    /** Commons Statistics Quantile implementation with single-pivot partitioning. */
+    /** Single-pivot partitioning. */
     private static final String SP = "SP";
-    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
+    /** Bentley-McIlroy partitioning (Sedgewick). */
     private static final String SBM = "SBM";
-    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (original). */
+    /** Bentley-McIlroy partitioning (original). */
     private static final String BM = "BM";
-    /** Commons Statistics Quantile implementation with a dual-pivot strategy. */
+    /** Dual-pivot partitioning. */
     private static final String DP = "DP";
-    /** Commons Statistics Quantile implementation with Floyd-Rivest partitioning. */
+    /** Floyd-Rivest partitioning. */
     private static final String FR = "FR";
-    /** Commons Statistics Quantile implementation with a dual-pivot strategy
-     * with 5 sorted points to choose pivots. */
+    /** Floyd-Rivest partitioning (Kiwiel). */
+    private static final String KFR = "KFR";
+    /** Dual-pivot partitioning with 5 sorted points to choose pivots. */
     private static final String DP5 = "5DP";
     /** Commons Math Percentile implementation. */
     private static final String CM = "CM";
-    /** Partition implementation using a single-pivot strategy with Dutch National Flag partitioning. */
+    /** Dutch National Flag partitioning. */
     private static final String DNF = "DNF";
     /** Use the JDK sort function. */
     private static final String JDK = "JDK";
@@ -105,34 +106,25 @@ public class QuantilePerformance {
 
     // Second generation partition functions
 
-    /** Commons Statistics Quantile implementation with Bentley-McIlroy partitioning (Sedgewick). */
+    /** Bentley-McIlroy partitioning (Sedgewick). */
     private static final String SBM2 = "2SBM";
 
-    // Introselect functions
+    // Introselect functions - switch to heapselect when progress is poor
 
-    /** Commons Statistics Quantile introselect implementation with single pivot
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with single pivot partitioning. */
     private static final String ISP = "ISP";
-    /** Commons Statistics Quantile introselect implementation with Bentley-McIlroy
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with Bentley-McIlroy partitioning (original). */
     private static final String IBM = "IBM";
-    /** Commons Statistics Quantile introselect implementation with Sedgewick's Bentley-McIlroy
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with Bentley-McIlroy partitioning (Sedgewick). */
     private static final String ISBM = "ISBM";
-    /** Commons Statistics Quantile introselect implementation with Kiwiel's Bentley-McIlroy
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with Bentley-McIlroy partitioning (Kiwiel). */
     private static final String IKBM = "IKBM";
-    /** Commons Statistics Quantile introselect implementation with Dutch National Flag partitioning
-     * partitioning, switching to heapselect when progress is poor. The DNF algorithm is appended
-     * as a suffix. */
+    /** Introselect implementation with Dutch National Flag partitioning. */
     private static final String IDNF = "IDNF";
-    /** Commons Statistics Quantile introselect implementation with dual-pivot
-     * partitioning, switching to heapselect when progress is poor. */
+    /** Introselect implementation with dual-pivot partitioning. */
     private static final String IDP = "IDP";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
-     * select function across a range of input data. Current implementation uses
-     * an introselect variant with a dual-pivot quickselect; switching to heapselect when
-     * progress is poor. This algorithm currently cannot be configured. */
+     * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
 
     /** Pattern for the minimum quickselect size. */
@@ -2054,6 +2046,12 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, FR + "2", qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionFR2(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(KFR)) {
+                final Partition part = createPartition(name, KFR, qs, hc, sc);
+                function = (data, indices) -> {
+                    part.partitionKFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Introselect implementations
