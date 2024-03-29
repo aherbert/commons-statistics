@@ -4838,12 +4838,13 @@ final class Partition {
             }
 
             // Floyd-Rivest sub-sampling
-            // TODO: check this sampling. Does the Kiwiel paper provide code?
             ++n;
             // Step 1: Choose sample size s <= n-1 and gap g > 0
             final double z = Math.log(n);
-            // sample size = alpha * n^(2/3) * ln(n)^1/3
+            // sample size = alpha * n^(2/3) * ln(n)^1/3  (4.1)
+            // sample size = alpha * n^(2/3)              (4.17; original Floyd-Rivest size)
             final double s = 0.5 * Math.exp(0.6666666666666666 * z) * Math.cbrt(z);
+            //final double s = 0.5 * Math.exp(0.6666666666666666 * z);
             // gap = sqrt(beta * s * ln(n))
             final double g = Math.sqrt(0.25 * s * z);
             final int rs = (int) (l + s - 1);
