@@ -5104,6 +5104,11 @@ final class Partition {
             x[i] = x[--j];
             x[j] = v;
         }
+//        for (int i = a - 1, j = c - Math.min(b + 1 - a, c - b); j < c;) {
+//            final double v = x[++i];
+//            x[i] = x[++j];
+//            x[j] = v;
+//        }
     }
 
     /**
@@ -6240,10 +6245,10 @@ final class Partition {
             }
         }
         // Cannot overrun as the prior scan using p stopped before the end
-        int q = r - 1;
-        while (x[q] == v) {
+        int q = r;
+        do {
             --q;
-        }
+        } while (x[q] == v);
 
         // Position p and q for pre-in/decrement
         int i = --p;
@@ -7897,7 +7902,7 @@ final class Partition {
      * Source of randomness is a simple 64-bit LCG.
      * https://en.wikipedia.org/wiki/Linear_congruential_generator
      */
-    private static class Gen implements IntUnaryOperator {
+    private static final class Gen implements IntUnaryOperator {
         /** LCG state. */
         private long s = System.nanoTime();
 
