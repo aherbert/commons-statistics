@@ -167,6 +167,13 @@ final class Partition {
     /** Default compression. */
     static final int COMPRESSION_LEVEL = 1;
 
+    /** Control flag for the pivoting strategy. */
+    static final int FLAG_PIVOTING_STRATGEY = 0x1;
+    /** Control flag for random sampling. */
+    static final int FLAG_RANDOM_SAMPLING = 0x2;
+    /** Control flag for vector swap of the sample. */
+    static final int FLAG_MOVE_SAMPLE = 0x4;
+
     /**
      * Sort select size for the the distance of a single k from the edge of the range
      * length n. Benchmarking single-pivot in range [64+32, 128+64] and dual-pivot in
@@ -314,6 +321,8 @@ final class Partition {
     private int recursionConstant = RECURSION_CONSTANT;
     /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
     private int compression = COMPRESSION_LEVEL;
+    /** Control flags level for Floyd-Rivest sub-sampling. */
+    private int controlFlags;
     /** Consumer for the recursion level reached during partitioning. Used to analyse
      * the distribution of the recursion for different input data. */
     private IntConsumer recursionConsumer = i -> { /* no-op */ };
@@ -884,6 +893,17 @@ final class Partition {
             throw new IllegalArgumentException("Bad compression: " + v);
         }
         this.compression = v;
+        return this;
+    }
+
+    /**
+     * Sets the control flags for Floyd-Rivest sub-sampling.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setControlFlags(int v) {
+        this.controlFlags = v;
         return this;
     }
 
@@ -4520,7 +4540,7 @@ final class Partition {
      * @param k Indices (may be destructively modified).
      * @param count Count of indices.
      */
-    void partitionFR1(double[] a, int[] k, int count) {
+    void partitionFR(double[] a, int[] k, int count) {
         // Handle NaN / signed zeros
         final DoubleDataTransformer t = SORT_TRANSFORMER.get();
         // Assume this is in-place
@@ -4541,61 +4561,7 @@ final class Partition {
             }
             // Only handles a single k
             if (n != 0) {
-                selectFR(a, 0, end - 1, k[0], false);
-            }
-        }
-        // Restore signed zeros
-        t.postProcess(a, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data.
-     * It handles NaN and signed zeros in the data.
-     *
-     * <p>Uses the <a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">
-     * Floyd-Rivest Algorithm (Wikipedia)</a>.
-     *
-     * <p>WARNING: Currently this only supports a single {@code k}. For parity with other
-     * select methods this accepts an array {@code k} and pre/post processes the data for
-     * NaN and signed zeros.
-     *
-     * <p>This method differs from {@link #partitionFR1(double[], int[], int)} by using
-     * the pivoting strategy when the length is too small for subset sampling.
-     *
-     * @param a Values.
-     * @param k Indices (may be destructively modified).
-     * @param count Count of indices.
-     */
-    void partitionFR2(double[] a, int[] k, int count) {
-        // Handle NaN / signed zeros
-        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
-        // Assume this is in-place
-        t.preProcess(a);
-        final int end = t.length();
-        int n = count;
-        if (end > 1) {
-            // Filter indices invalidated by NaN check
-            if (end < a.length) {
-                for (int i = n; --i >= 0;) {
-                    final int v = k[i];
-                    if (v >= end) {
-                        // swap(k, i, --n)
-                        k[i] = k[--n];
-                        k[n] = v;
-                    }
-                }
-            }
-            // Only handles a single k
-            if (n != 0) {
-                selectFR(a, 0, end - 1, k[0], true);
+                selectFR(a, 0, end - 1, k[0], controlFlags);
             }
         }
         // Restore signed zeros
@@ -4619,10 +4585,9 @@ final class Partition {
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      * @param k Key of interest.
-     * @param usePivotingStrategy Set to true to use the pivoting strategy on small lengths;
-     * false will revert to using k (as per the original FR algorithm)
+     * @param flags Control behaviour.
      */
-    private void selectFR(double[] a, int left, int right, int k, boolean usePivotingStrategy) {
+    private void selectFR(double[] a, int left, int right, int k, int flags) {
         int l = left;
         int r = right;
         while (true) {
@@ -4651,37 +4616,73 @@ final class Partition {
             // (k-l+1)-th smallest element into a[k], biased slightly so that the (k-l+1)-th
             // element is expected to lie in the smaller set after partitioning.
             int pivot = k;
+            int p = l;
+            int q = r;
             if (n > 600) {
                 ++n;
-                final int i = k - l + 1;
+                final int ith = k - l + 1;
                 final double z = Math.log(n);
                 final double s = 0.5 * Math.exp(0.6666666666666666 * z);
-                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
-                final int ll = Math.max(l, (int) (k - i * s / n + sd));
-                final int rr = Math.min(r, (int) (k + (n - i) * s / n + sd));
-                selectFR(a, ll, rr, k, usePivotingStrategy);
-            } else if (usePivotingStrategy) {
-                // default pivot strategy
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+                final int ll = Math.max(l, (int) (k - ith * s / n + sd));
+                final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
+                // Optional: sample [l, r] into [ll, rr]
+                if ((flags & FLAG_RANDOM_SAMPLING) != 0) {
+                    final IntUnaryOperator rng = createRNG(n, k);
+                    // Shuffle [ll, k) from [l, k)
+                    for (int i = k; i > ll;) {
+                        // l + rand [0, i - l)
+                        final int j = l + rng.applyAsInt(i - l);
+                        final double t = a[--i];
+                        a[i] = a[j];
+                        a[j] = t;
+                    }
+                    // Shuffle (k, rr] from (k, r]
+                    for (int i = k; i < rr;) {
+                        // r - rand [0, r - i)
+                        final int j = r - rng.applyAsInt(r - i);
+                        final double t = a[++i];
+                        a[i] = a[j];
+                        a[j] = t;
+                    }
+                }
+                selectFR(a, ll, rr, k, flags);
+                // Current:
+                // |l                    |ll      |k|     rr|            r|
+                // |        ???          |  < v   |v|  > v  |      ???    |
+                // Optional: move partitioned data
+                // Unlikely to make a difference as the partitioning will skip
+                // over <v and >v.
+                // |l       |p                    |k|            q|      r|
+                // |  < v   |        ???          |v|      ???    |  > v  |
+                if ((flags & FLAG_MOVE_SAMPLE) != 0) {
+                    vectorSwap(a, l, ll - 1, k - 1);
+                    vectorSwap(a, k + 1, rr, r);
+                    p += k - ll;
+                    q -= rr - k;
+                }
+            } else if ((flags & FLAG_PIVOTING_STRATGEY) != 0) {
+                // Optional: use pivot strategy
                 pivot = pivotingStrategy.pivotIndex(a, l, r);
             }
 
-            // Partition a[l : r] about t.
+            // Partition a[p : q] about t.
             // Sub-script range checking has been eliminated by appropriate placement of t
-            // at the l or r end.
+            // at the p or q end.
             final double t = a[pivot];
             // swap(left, pivot)
-            a[pivot] = a[l];
-            if (a[r] > t) {
+            a[pivot] = a[p];
+            if (a[q] > t) {
                 // swap(right, left)
-                a[l] = a[r];
-                a[r] = t;
-                // Here after the first swap: a[l] = t; a[r] > t
+                a[p] = a[q];
+                a[q] = t;
+                // Here after the first swap: a[p] = t; a[q] > t
             } else {
-                a[l] = t;
-                // Here after the first swap: a[l] <= t; a[r] = t
+                a[p] = t;
+                // Here after the first swap: a[p] <= t; a[q] = t
             }
-            int i = l;
-            int j = r;
+            int i = p;
+            int j = q;
             while (i < j) {
                 // swap(i, j)
                 final double temp = a[i];
@@ -4694,13 +4695,13 @@ final class Partition {
                     --j;
                 } while (a[j] > t);
             }
-            if (a[l] == t) {
+            if (a[p] == t) {
                 // data[j] <= t : swap(left, j)
-                a[l] = a[j];
+                a[p] = a[j];
                 a[j] = t;
             } else {
                 // data[j+1] > t : swap(j+1, right)
-                a[r] = a[++j];
+                a[q] = a[++j];
                 a[j] = t;
             }
             // Continue on the correct side
@@ -4850,7 +4851,7 @@ final class Partition {
             // Step 2: Sample selection
             // Convenient to place the random sample in [l, rs]
             if (rng == null) {
-                rng = createRNG();
+                rng = createRNG(n, k);
             }
             final int r1 = r + 1;
             for (int i = l; i <= rs; i++) {
@@ -7895,14 +7896,16 @@ final class Partition {
     /**
      * Creates the source of random numbers in {@code [0, n)}.
      *
+     * @param n Data length.
+     * @param k Target index.
      * @return the RNG
      */
-    private static IntUnaryOperator createRNG() {
+    private static IntUnaryOperator createRNG(int n, int k) {
         // Middle-Square Weyl Sequence is fastest int generator
         // Should this be seeded with e.g. k, ku, kv
         // TODO: make generator configurable. Will a SplittableRandom be OK?
         //return RandomSource.MSWS.create()::nextInt;
-        return new Gen();
+        return new Gen((long) n * 31 + k);
     }
 
     /**
@@ -7915,7 +7918,14 @@ final class Partition {
      */
     private static final class Gen implements IntUnaryOperator {
         /** LCG state. */
-        private long s = System.nanoTime();
+        private long s;
+
+        /**
+         * @param s Seed.
+         */
+        Gen(long s) {
+            this.s = s;
+        }
 
         @Override
         public int applyAsInt(int n) {

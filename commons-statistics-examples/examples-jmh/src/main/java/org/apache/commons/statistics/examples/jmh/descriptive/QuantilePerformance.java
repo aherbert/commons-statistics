@@ -2075,16 +2075,17 @@ public class QuantilePerformance {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
-            } else if (name.startsWith(FR + "1")) {
-                final Partition part = createPartition(name, FR + "1", qs, hc, sc);
+            } else if (name.startsWith(FR)) {
+                // Behaviour defined by control flags appended to FR
+                String prefix = FR;
+                int v = 0;
+                if (name.length() > 2 && Character.isDigit(name.charAt(2))) {
+                    prefix = name.substring(0, 3);
+                    v = Character.digit(name.charAt(2), 10);
+                }
+                final Partition part = createPartition(name, prefix, qs, hc, sc).setControlFlags(v);
                 function = (data, indices) -> {
-                    part.partitionFR1(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(FR + "2")) {
-                final Partition part = createPartition(name, FR + "2", qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionFR2(data, indices.clone(), indices.length);
+                    part.partitionFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(KFR)) {
