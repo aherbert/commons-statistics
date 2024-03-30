@@ -4863,8 +4863,8 @@ final class Partition {
 
             // Step 3: pivot selection
             final double isn = (k - l + 1) * s / n;
-            final int ku = (int) Math.max(Math.floor(l - 1 + isn - g), l);
-            final int kv = (int) Math.min(Math.ceil(l - 1 + isn + g), rs);
+            int ku = (int) Math.max(Math.floor(l - 1 + isn - g), l);
+            int kv = (int) Math.min(Math.ceil(l - 1 + isn + g), rs);
             // Find u and v by recursion
             selectKFR(x, l, rs, ku, bounds, rng);
             final int kum = bounds[0];
@@ -4905,10 +4905,16 @@ final class Partition {
             // May work best if ku and kv straddle the median of [l, rs]
             // TODO: move quintary partitioning to methods.
 
-            if (u == v) {
+            // If one of ku or kv is at the end switch to single-pivot mode
+            a = -1;
+            if (u == v || ku == 0 || kv == 0) {
+                a = ku == 0 ? qq : pp;
+            }
+
+            if (a >= 0) {
                 // Can be optimised by omitting step A1 (moving of sentinels). Here the
                 // size of ??? is large and initialisation is insignificant.
-                a = partitionKBM(x, ll, rr, kup, bounds);
+                a = partitionKBM(x, ll, rr, a, bounds);
                 d = bounds[0];
                 // Make ternary and quintary partitioning compatible
                 b = d + 1;
