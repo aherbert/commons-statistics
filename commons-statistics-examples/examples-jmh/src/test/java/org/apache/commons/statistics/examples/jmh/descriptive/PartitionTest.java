@@ -1755,4 +1755,50 @@ class PartitionTest {
             printSubSamplingSize(ll, rr, k);
         }
     }
+
+    /**
+     * Prints the size of the Kiwiel Floyd-Rivest recursive subset samples.
+     * This method is for information purposes. It is intended to be pasted into JShell
+     * and called with various parameters. Example:
+     *
+     * <pre>{@code
+     * jshell> printSubSamplingSize(0, 1000000, 5000)
+     * 5000 [0, 1000000] (k=0.005 * 1000001) -> [4843, 9843] (k=0.032 * 5001)
+     * 5000 [4843, 9843] (k=0.032 * 5001) -> [4977, 5124] (k=0.162 * 148)
+     *
+     * jshell> printSubSamplingSize(0, 1000000, 500000)
+     * 500000 [0, 1000000] (k=0.500 * 1000001) -> [497631, 502631] (k=0.474 * 5001)
+     * 500000 [497631, 502631] (k=0.474 * 5001) -> [499913, 500059] (k=0.599 * 147)
+     * }</pre>
+     *
+     * @param l Left bound (inclusive).
+     * @param r Right bound (inclusive).
+     * @param k Target index.
+     */
+    static void printKSubSamplingSize(int l, int r, int k) {
+        int n = r - l;
+        if (n > 600) {
+            // Floyd-Rivest sub-sampling
+            ++n;
+            // Step 1: Choose sample size s <= n-1 and gap g > 0
+            final double z = Math.log(n);
+            // sample size = alpha * n^(2/3) * ln(n)^1/3  (4.1)
+            // sample size = alpha * n^(2/3)              (4.17; original Floyd-Rivest size)
+            final double s = 0.5 * Math.exp(0.6666666666666666 * z) * Math.cbrt(z);
+            //final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+            // gap = sqrt(beta * s * ln(n))
+            final double g = Math.sqrt(0.25 * s * z);
+            final int rs = (int) (l + s - 1);
+            // Step 3: pivot selection
+            final double isn = (k - l + 1) * s / n;
+            final int ku = (int) Math.max(Math.floor(l - 1 + isn - g), l);
+            final int kv = (int) Math.min(Math.ceil(l - 1 + isn + g), rs);
+            // CHECKSTYLE: stop regex
+            System.out.printf("%d [%d, %d] (k=%.3f * %d) -> [0, %d, %d, %d] (ku=%.3f; kv=%.3f)%n",
+                k, l, r, (double) (k - l + 1) / n, n, ku, kv, rs, (double) (ku + 1) / (rs + 1), (double) (kv + 1) / (rs + 1));
+            // CHECKSTYLE: start regex
+            printKSubSamplingSize(0, rs, ku);
+            printKSubSamplingSize(0, rs, kv);
+        }
+    }
 }

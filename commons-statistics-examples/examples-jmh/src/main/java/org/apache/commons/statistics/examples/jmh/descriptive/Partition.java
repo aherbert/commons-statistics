@@ -4861,10 +4861,10 @@ final class Partition {
                 x[j] = t;
             }
 
-            // Step 3: pivot selection (adjusted for 0-based indexing)
-            final double isn = (k - l) * s / n;
-            final int ku = (int) Math.max(Math.ceil(l + isn - g), l);
-            final int kv = (int) Math.min(Math.ceil(l + isn + g), rs);
+            // Step 3: pivot selection
+            final double isn = (k - l + 1) * s / n;
+            final int ku = (int) Math.max(Math.floor(l - 1 + isn - g), l);
+            final int kv = (int) Math.min(Math.ceil(l - 1 + isn + g), rs);
             // Find u and v by recursion
             selectKFR(x, l, rs, ku, bounds, rng);
             final int kum = bounds[0];
