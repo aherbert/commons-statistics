@@ -4777,7 +4777,7 @@ final class Partition {
             }
             // Only handles a single k
             if (n != 0) {
-                final int[] bounds = {0, 0};
+                final int[] bounds = new int[5];
                 selectKFR(a, 0, end - 1, k[0], bounds, null);
             }
         }
@@ -4953,54 +4953,60 @@ final class Partition {
                 // Swap the extreme parts with their neighbours:
                 // |ll             |a      |b             c|      d|           rr|     (6.9)
                 // |   x < u       | x = u |    u < x < v  | x = v |       x > v |
-                int p = kvm - 1;
-                int q = qq;
-                int i = p;
-                int j = q;
-                for (;;) {
-                    while (x[++i] < v) {
-                        if (x[i] < u) {
-                            continue;
-                        }
-                        // u <= xi < v
-                        final double xi = x[i];
-                        x[i] = x[++p];
-                        if (xi > u) {
-                            x[p] = xi;
-                        } else {
-                            x[p] = x[++pp];
-                            x[pp] = xi;
-                        }
-                    }
-                    while (x[--j] >= v) {
-                        if (x[j] == v) {
-                            final double xj = x[j];
-                            x[j] = x[--q];
-                            x[q] = xj;
-                        }
-                    }
-                    // Here x[j] < v <= x[i]
-                    if (i >= j) {
-                        break;
-                    }
-                    //swap(x, i, j)
-                    final double xi = x[j];
-                    final double xj = x[i];
-                    x[i] = xi;
-                    x[j] = xj;
-                    if (xi > u) {
-                        x[i] = x[++p];
-                        x[p] = xi;
-                    } else if (xi == u) {
-                        x[i] = x[++p];
-                        x[p] = x[++pp];
-                        x[pp] = xi;
-                    }
-                    if (xj == v) {
-                        x[j] = x[--q];
-                        x[q] = xj;
-                    }
-                }
+                quintaryPartitionL(x, pp, kvm - 1, qq, u, v, bounds);
+                pp = bounds[0];
+                int p = bounds[1];
+                int q = bounds[2];
+                int i = bounds[3];
+                int j = bounds[4];
+//                int p = kvm - 1;
+//                int q = qq;
+//                int i = p;
+//                int j = q;
+//                for (;;) {
+//                    while (x[++i] < v) {
+//                        if (x[i] < u) {
+//                            continue;
+//                        }
+//                        // u <= xi < v
+//                        final double xi = x[i];
+//                        x[i] = x[++p];
+//                        if (xi > u) {
+//                            x[p] = xi;
+//                        } else {
+//                            x[p] = x[++pp];
+//                            x[pp] = xi;
+//                        }
+//                    }
+//                    while (x[--j] >= v) {
+//                        if (x[j] == v) {
+//                            final double xj = x[j];
+//                            x[j] = x[--q];
+//                            x[q] = xj;
+//                        }
+//                    }
+//                    // Here x[j] < v <= x[i]
+//                    if (i >= j) {
+//                        break;
+//                    }
+//                    //swap(x, i, j)
+//                    final double xi = x[j];
+//                    final double xj = x[i];
+//                    x[i] = xi;
+//                    x[j] = xj;
+//                    if (xi > u) {
+//                        x[i] = x[++p];
+//                        x[p] = xi;
+//                    } else if (xi == u) {
+//                        x[i] = x[++p];
+//                        x[p] = x[++pp];
+//                        x[pp] = xi;
+//                    }
+//                    if (xj == v) {
+//                        x[j] = x[--q];
+//                        x[q] = xj;
+//                    }
+//                }
                 a = ll + i - p - 1;
                 b = a + pp + 1 - ll;
                 d = rr - q + 1 + j;
@@ -5024,55 +5030,62 @@ final class Partition {
                 //
                 // |ll               |a      |b                 c|      d|     rr|     (6.9)
                 // |   x < u         | x = u |        u < x < v  | x = v | x > v |
-                int p = pp;
-                int q = qq - kvm + kup + 1;
-                int i = p;
-                int j = q;
                 vectorSwap(x, pp + 1, kvm - 1, qq - 1);
-                for (;;) {
-                    while (x[++i] <= u) {
-                        if (x[i] == u) {
-                            final double xi = x[i];
-                            x[i] = x[++p];
-                            x[p] = xi;
-                        }
-                    }
-                    while (x[--j] > u) {
-                        if (x[j] > v) {
-                            continue;
-                        }
-                        // u < xj <= v
-                        final double xj = x[j];
-                        x[j] = x[--q];
-                        if (xj < v) {
-                            x[q] = xj;
-                        } else {
-                            x[q] = x[--qq];
-                            x[qq] = xj;
-                        }
-                    }
-                    // Here x[j] < v <= x[i]
-                    if (i >= j) {
-                        break;
-                    }
-                    //swap(x, i, j)
-                    final double xi = x[j];
-                    final double xj = x[i];
-                    x[i] = xi;
-                    x[j] = xj;
-                    if (xi == u) {
-                        x[i] = x[++p];
-                        x[p] = xi;
-                    }
-                    if (xj < v) {
-                        x[j] = x[--q];
-                        x[q] = xj;
-                    } else if (xj == v) {
-                        x[j] = x[--q];
-                        x[q] = x[--qq];
-                        x[qq] = xj;
-                    }
-                }
+                quintaryPartitionR(x, pp, qq - kvm + kup + 1, qq, u, v, bounds);
+                int p = bounds[0];
+                int q = bounds[1];
+                qq = bounds[2];
+                int i = bounds[3];
+                int j = bounds[4];
+//                int p = pp;
+//                int q = qq - kvm + kup + 1;
+//                int i = p;
+//                int j = q;
+//                vectorSwap(x, pp + 1, kvm - 1, qq - 1);
+//                for (;;) {
+//                    while (x[++i] <= u) {
+//                        if (x[i] == u) {
+//                            final double xi = x[i];
+//                            x[i] = x[++p];
+//                            x[p] = xi;
+//                        }
+//                    }
+//                    while (x[--j] > u) {
+//                        if (x[j] > v) {
+//                            continue;
+//                        }
+//                        // u < xj <= v
+//                        final double xj = x[j];
+//                        x[j] = x[--q];
+//                        if (xj < v) {
+//                            x[q] = xj;
+//                        } else {
+//                            x[q] = x[--qq];
+//                            x[qq] = xj;
+//                        }
+//                    }
+//                    // Here x[j] < v <= x[i]
+//                    if (i >= j) {
+//                        break;
+//                    }
+//                    //swap(x, i, j)
+//                    final double xi = x[j];
+//                    final double xj = x[i];
+//                    x[i] = xi;
+//                    x[j] = xj;
+//                    if (xi == u) {
+//                        x[i] = x[++p];
+//                        x[p] = xi;
+//                    }
+//                    if (xj < v) {
+//                        x[j] = x[--q];
+//                        x[q] = xj;
+//                    } else if (xj == v) {
+//                        x[j] = x[--q];
+//                        x[q] = x[--qq];
+//                        x[qq] = xj;
+//                    }
+//                }
                 a = ll + i - p - 1;
                 b = a + p + 1 - ll;
                 d = rr - q + 1 + j;
@@ -5173,6 +5186,151 @@ final class Partition {
             x[--j] = x[++i];
             x[i] = v;
         }
+    }
+
+    /**
+     * Quintary partition of the six-part array:
+     * <pre>
+     * |ll   pp|              p|          |i        j|       |q    rr|     (6.6)
+     * | x = u |    u < x < v  |   x < u  |   ???    | x > v | x = v |
+     *
+     * |ll   pp|              p|              j|i            |q    rr|     (6.7)
+     * | x = u |    u < x < v  |   x < u       |       x > v | x = v |
+     * </pre>
+     *
+     * @param x Data.
+     * @param pp Index.
+     * @param p Index.
+     * @param q Index.
+     * @param u Pivot value.
+     * @param v Pivot value.
+     * @param bounds Output [pp, p, q, i, j]
+     */
+    private static void quintaryPartitionL(double[] x, int pp, int p, int q, double u, double v,
+        int[] bounds) {
+        int i = p;
+        int j = q;
+        for (;;) {
+            while (x[++i] < v) {
+                if (x[i] < u) {
+                    continue;
+                }
+                // u <= xi < v
+                final double xi = x[i];
+                x[i] = x[++p];
+                if (xi > u) {
+                    x[p] = xi;
+                } else {
+                    x[p] = x[++pp];
+                    x[pp] = xi;
+                }
+            }
+            while (x[--j] >= v) {
+                if (x[j] == v) {
+                    final double xj = x[j];
+                    x[j] = x[--q];
+                    x[q] = xj;
+                }
+            }
+            // Here x[j] < v <= x[i]
+            if (i >= j) {
+                break;
+            }
+            //swap(x, i, j)
+            final double xi = x[j];
+            final double xj = x[i];
+            x[i] = xi;
+            x[j] = xj;
+            if (xi > u) {
+                x[i] = x[++p];
+                x[p] = xi;
+            } else if (xi == u) {
+                x[i] = x[++p];
+                x[p] = x[++pp];
+                x[pp] = xi;
+            }
+            if (xj == v) {
+                x[j] = x[--q];
+                x[q] = xj;
+            }
+        }
+        bounds[0] = pp;
+        bounds[1] = p;
+        bounds[2] = q;
+        bounds[3] = i;
+        bounds[4] = j;
+    }
+    /**
+     * Quintary partition of the six-part array:
+     * <pre>
+     * |ll    p|          |i        j|       |q              |qq   rr|     (6.10)
+     * | x = u |   x < u  |   ???    | x > v |    u < x < v  | x = v |
+     *
+     * |ll    p|                j|i      |q                  |qq   rr|     (6.11)
+     * | x = u |   x < u         | x > v |        u < x < v  | x = v |
+     * </pre>
+     *
+     * @param x Data.
+     * @param p Index.
+     * @param q Index.
+     * @param qq Index.
+     * @param u Pivot value.
+     * @param v Pivot value.
+     * @param bounds Output [p, q, qq, i, j]
+     */
+    private static void quintaryPartitionR(double[] x, int p, int q, int qq, double u, double v,
+        int[] bounds) {
+        int i = p;
+        int j = q;
+        for (;;) {
+            while (x[++i] <= u) {
+                if (x[i] == u) {
+                    final double xi = x[i];
+                    x[i] = x[++p];
+                    x[p] = xi;
+                }
+            }
+            while (x[--j] > u) {
+                if (x[j] > v) {
+                    continue;
+                }
+                // u < xj <= v
+                final double xj = x[j];
+                x[j] = x[--q];
+                if (xj < v) {
+                    x[q] = xj;
+                } else {
+                    x[q] = x[--qq];
+                    x[qq] = xj;
+                }
+            }
+            // Here x[j] < v <= x[i]
+            if (i >= j) {
+                break;
+            }
+            //swap(x, i, j)
+            final double xi = x[j];
+            final double xj = x[i];
+            x[i] = xi;
+            x[j] = xj;
+            if (xi == u) {
+                x[i] = x[++p];
+                x[p] = xi;
+            }
+            if (xj < v) {
+                x[j] = x[--q];
+                x[q] = xj;
+            } else if (xj == v) {
+                x[j] = x[--q];
+                x[q] = x[--qq];
+                x[qq] = xj;
+            }
+        }
+        bounds[0] = p;
+        bounds[1] = q;
+        bounds[2] = qq;
+        bounds[3] = i;
+        bounds[4] = j;
     }
 
     /**
