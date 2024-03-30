@@ -4631,7 +4631,7 @@ final class Partition {
                     final IntUnaryOperator rng = createRNG(n, k);
                     // Shuffle [ll, k) from [l, k)
                     for (int i = k; i > ll;) {
-                        // l + rand [0, i - l)
+                        // l + rand [0, i - l + 1) : i is currently i+1
                         final int j = l + rng.applyAsInt(i - l);
                         final double t = a[--i];
                         a[i] = a[j];
@@ -4639,7 +4639,7 @@ final class Partition {
                     }
                     // Shuffle (k, rr] from (k, r]
                     for (int i = k; i < rr;) {
-                        // r - rand [0, r - i)
+                        // r - rand [0, r - i + 1) : i is currently i-1
                         final int j = r - rng.applyAsInt(r - i);
                         final double t = a[++i];
                         a[i] = a[j];
@@ -4853,11 +4853,10 @@ final class Partition {
             if (rng == null) {
                 rng = createRNG(n, k);
             }
-            final int r1 = r + 1;
-            for (int i = l; i <= rs; i++) {
-                // i + rand [0, r - i]
-                final int j = i + rng.applyAsInt(r1 - i);
-                final double t = x[i];
+            for (int i = l - 1; i < rs;) {
+                // r - rand [0, r - i + 1) : i is currently i-1
+                final int j = r - rng.applyAsInt(r - i);
+                final double t = x[++i];
                 x[i] = x[j];
                 x[j] = t;
             }
