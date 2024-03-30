@@ -3033,7 +3033,7 @@ final class Partition {
         final int[] upper = {0};
         while (true) {
             // length - 1
-            final int n = r - l;
+            int n = r - l;
 
             // It is possible to use heapselect when ka and kb1 are close to the same end
             // |l|-----|ka1|--------|kb1|------|r|
@@ -3057,9 +3057,27 @@ final class Partition {
             }
 
             // Pick a pivot and partition
-            final int p0 = part.partition(a, l, r,
-                pivotingStrategy.pivotIndex(a, l, r),
-                upper);
+            int pivot;
+            if (n > subSamplingSize) {
+                // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+                // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+                // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+                // Note: This targets ka1 and ignores kb1 for pivot selection.
+                ++n;
+                final int i = ka1 - l + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
+                final int ll = Math.max(l, (int) (ka1 - i * s / n + sd));
+                final int rr = Math.min(r, (int) (ka1 + (n - i) * s / n + sd));
+                introselect(part, a, ll, rr, k, ka1, ka1, lnNtoMaxDepthSinglePivot(z));
+                pivot = ka1;
+            } else {
+                // default pivot strategy
+                pivot = pivotingStrategy.pivotIndex(a, l, r);
+            }
+
+            final int p0 = part.partition(a, l, r, pivot, upper);
             final int p1 = upper[0];
 
             // Recursion to max depth
