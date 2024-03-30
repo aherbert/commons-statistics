@@ -814,16 +814,34 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
-    void testPartitionFR1(double[] values, int[] indices) {
+    void testPartitionFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionFR1);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+            .setControlFlags(0)::partitionFR);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
-    void testPartitionFR2(double[] values, int[] indices) {
+    void testPartitionFRPivotingStrategy(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionFR2);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+            .setControlFlags(Partition.FLAG_PIVOTING_STRATGEY)::partitionFR);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionFRRandomSampling(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)::partitionFR);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionFRMoveSample(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+            .setControlFlags(Partition.FLAG_MOVE_SAMPLE)::partitionFR);
     }
 
     @ParameterizedTest
