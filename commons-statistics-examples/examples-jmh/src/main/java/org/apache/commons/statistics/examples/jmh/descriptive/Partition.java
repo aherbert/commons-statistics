@@ -5425,13 +5425,16 @@ final class Partition {
             select(a, 0, length - 1, k[0], k[0], singlePivotMaxDepth(length));
             return;
         }
+        if (n == 2 && Math.abs(k[0] - k[1]) < SORTSELECT_SIZE) {
+            final int k1 = Math.min(k[0], k[1]);
+            final int kn = Math.max(k[0], k[1]);
+            select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
+            return;
+        }
 
-//        if (n == 2 && Math.abs(k[0] - k[1]) < MIN_SEPARATION_DISTANCE) {
-//            final int k1 = Math.min(k[0], k[1]);
-//            final int kn = Math.max(k[0], k[1]);
-//            select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
-//            return;
-//        }
+        // TODO:
+        // If the range [k1, kn] < length / 2 then bracket the ends using single-pivot
+        // quickselect.
 
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(k, n);
         final int k1 = keys.left();
