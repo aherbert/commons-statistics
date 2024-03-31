@@ -5447,26 +5447,25 @@ final class Partition {
         // Dual-pivot mode with small range sort length configured using index density
         //select(a, 0, length - 1, keys, dualPivotMaxDepth(length),
         //    dualPivotSortSelectSize(k1, kn, n));
-        select(a, 0, length - 1, keys, dualPivotFlags(0, length - 1, k1, kn, n));
+        select(a, 0, length - 1, keys,
+            dualPivotFlags(0, length - 1, k1, kn, n));
     }
 
     /**
      * Partition the array such that indices {@code k} correspond to their
      * correctly sorted value in the equivalent fully sorted array.
      *
-     * <p>For all indices {@code [k1, kn]} and any index {@code i}:
+     * <p>For all indices {@code [ka, kb]} and any index {@code i}:
      *
      * <pre>{@code
-     * data[i < k1] <= data[k1] <= data[kn] <= data[kn < i]
+     * data[i < ka] <= data[ka] <= data[kb] <= data[kb < i]
      * }</pre>
      *
-     * <p>This function accepts a indices {@code [k1, kn]} that define the
-     * range of indices to partition. The interval can be narrowed or split as
-     * partitioning divides the range.
+     * <p>This function accepts indices {@code [ka, kb]} that define the
+     * range of indices to partition. It is expected that the range is small.
      *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method by Sedgewick; switching to heapselect when close to the edge or
-     * poor convergence of quickselect.
+     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy partition
+     * method by Kiwiel; switching to heapselect if convergence of quickselect is poor.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
      * destroyed (the mixture updated during partitioning). The caller is responsible for
@@ -5475,19 +5474,14 @@ final class Partition {
      * @param a Values.
      * @param left Lower bound of data (inclusive, assumed to be strictly positive).
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param k1 First key of interest.
-     * @param kn Last key of interest.
+     * @param ka First key of interest.
+     * @param kb Last key of interest.
      * @param maxDepth Maximum depth for recursion.
      */
     // package-private for benchmarking
-    static void select(double[] a, int left, int right, int k1, int kn, int maxDepth) {
-        // If partitioning splits the interval then recursion is used for the left-most side(s)
-        // and the right-most side remains within this function. If partitioning does
-        // not split the interval then it remains within this function.
+    static void select(double[] a, int left, int right, int ka, int kb, int maxDepth) {
         int l = left;
         int r = right;
-        int ka = k1;
-        int kb = kn;
         final int[] upper = {0};
         while (true) {
             // select when ka and kb are close to the same end
@@ -5497,7 +5491,7 @@ final class Partition {
                 return;
             }
             if (maxDepth == 0) {
-                // Excess recursion, switch to heap select
+                // quickselect convergence is poor, switch to heap select
                 heapSelectRange2(a, l, r, ka, kb);
                 return;
             }
@@ -5507,31 +5501,28 @@ final class Partition {
             final int p0 = partitionKBM(a, l, r, pivotIndex(a, l, r), upper);
             final int p1 = upper[0];
 
-            // Recursion to max depth
-            // Note: Here we possibly branch left and right with multiple keys.
-            // It is possible that the partition has split the range
-            // and the recursion proceeds with a reduced range in each region.
+            // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
             //                   p0 p1
-            // |l|--|ka|kkkkkkkkkk|P|kkkkkkkkk|kb|------|r|
-            //                  kb | ka
+            // |l|--|ka|kkkk|kb|--|P|-------------------|r|
+            // |l|----------------|P|--|ka|kkk|kb|------|r|
+            // |l|-----------|ka|k|P|k|kb|--------------|r|
             maxDepth--;
-            // Recurse left side if required
-            if (ka < p0) {
-                if (kb <= p1) {
-                    // Entirely on left side
-                    r = p0 - 1;
-                    kb = kb < r ? kb : r;
-                    continue;
+            if (kb < p0) {
+                // Entirely on left side
+                r = p0 - 1;
+            } else if (ka > p1) {
+                // Entirely on right side
+                l = p1 + 1;
+            } else {
+                // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
+                if (ka < p0) {
+                    sortSelectRight(a, l, p0, ka);
                 }
-                select(a, l, p0 - 1, ka, kb < r ? kb : r, maxDepth);
-            }
-            if (kb <= p1) {
-                // No right side
+                if (kb > p1) {
+                    sortSelectLeft(a, p1, r, kb);
+                }
                 return;
             }
-            // Continue on the right side
-            l = p1 + 1;
-            ka = ka > l ? ka : l;
         }
     }
 
