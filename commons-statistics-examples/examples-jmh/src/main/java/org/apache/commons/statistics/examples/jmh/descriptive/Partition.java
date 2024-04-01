@@ -4938,6 +4938,19 @@ final class Partition {
                 // Make ternary and quintary partitioning compatible
                 b = d + 1;
                 c = a - 1;
+//            } else {
+//                // Yaroslavskiy dual-pivot partitioning
+//                a = partitionDP(x, l, r, pp, qq, bounds);
+//                d = bounds[2];
+//                if (bounds[1] - bounds[0] > 1) {
+//                    b = bounds[0] + 1;
+//                    c = bounds[1] - 1;
+//                } else {
+//                    // No central region
+//                    b = d + 1;
+//                    c = a - 1;
+//                }
+//            }
             } else if (k < (r + l) >>> 1) {
                 // Left k: u < x[k] < v --> expects x > v.
                 // Quintary partitioning using the six-part array:
