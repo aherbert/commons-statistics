@@ -1070,7 +1070,8 @@ public class QuantilePerformance {
         /** Number of repeats. */
         @Param({"10"})
         private int repeats;
-        /** Distribution mode. K can be distributed randomly or uniformly. */
+        /** Distribution mode. K indices can be distributed randomly or uniformly.
+         * Index mode uses k as the target index. */
         @Param({"random"})
         private String mode;
         /** Separation. K can be single indices (s=0) or paired (s!=0). Paired indices are
@@ -1189,6 +1190,19 @@ public class QuantilePerformance {
                         indices[index++] = k1;
                     }
                 }
+            } else if ("index".equals(mode)) {
+                // Same single or paired indices for all samples.
+                // Check the index is valid.
+                for (int i = 0; i < noOfSamples; i++) {
+                    // Reduce length by the separation
+                    final int n = getDataSize(i) - s;
+                    if (k >= n) {
+                        throw new IllegalStateException("Invalid k: " + k + " >= " + n);
+                    }
+                }
+                final int[] kk = s > 0 ? new int[] {k, k + s} : new int[] {k};
+                Arrays.fill(indices, kk);
+                return;
             } else {
                 throw new IllegalStateException("Unknown index mode: " + mode);
             }
