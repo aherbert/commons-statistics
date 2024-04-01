@@ -5487,6 +5487,7 @@ final class Partition {
      *
      * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy partition
      * method by Kiwiel; switching to heapselect if convergence of quickselect is poor.
+     * Pivot selection uses Floyd-Rivest subset sampling.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
      * destroyed (the mixture updated during partitioning). The caller is responsible for
@@ -5531,6 +5532,24 @@ final class Partition {
                 final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
                 final int ll = Math.max(l, (int) (ka - i * s / n + sd));
                 final int rr = Math.min(r, (int) (ka + (n - i) * s / n + sd));
+                // Sample [l, r] into [ll, rr]
+                final IntUnaryOperator rng = createRNG(n, ka);
+                // Shuffle [ll, ka) from [l, ka)
+                for (int ii = ka; ii > ll;) {
+                    // l + rand [0, ii - l + 1) : ii is currently ii+1
+                    final int j = l + rng.applyAsInt(ii - l);
+                    final double t = a[--ii];
+                    a[ii] = a[j];
+                    a[j] = t;
+                }
+                // Shuffle (k, rr] from (ka, r]
+                for (int ii = ka; ii < rr;) {
+                    // r - rand [0, r - ii + 1) : ii is currently ii-1
+                    final int j = r - rng.applyAsInt(r - ii);
+                    final double t = a[++ii];
+                    a[ii] = a[j];
+                    a[j] = t;
+                }
                 // Convert ln(n) to 2 * log2(n) for recursion depth
                 select(a, ll, rr, ka, ka, (int) (z * LOG2_E * 2));
                 pivot = ka;
@@ -5623,7 +5642,8 @@ final class Partition {
             // select when ka and kb are close to the same end,
             // or the entire range is small
             // |l|-----|ka|--------|kb|------|r|
-            if (r - l < (flags & SORTSELECT_MASK) || Math.min(kb - l, r - ka) < SORTSELECT_SIZE) {
+            if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE ||
+                r - l < (flags & SORTSELECT_MASK)) {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
@@ -5632,6 +5652,9 @@ final class Partition {
                 heapSelectRange2(a, l, r, ka, kb);
                 return;
             }
+            // TODO
+            // Switch to single-pivot mode...
+
 //            // TODO:
 //            // Switch between sort and heapselect to finish the range [ka, kb].
 //            // Dynamically adapt the sort select size.
@@ -8110,9 +8133,8 @@ final class Partition {
      */
     private static IntUnaryOperator createRNG(int n, int k) {
         // Middle-Square Weyl Sequence is fastest int generator
-        // Should this be seeded with e.g. k, ku, kv
-        // TODO: make generator configurable. Will a SplittableRandom be OK?
         //return RandomSource.MSWS.create()::nextInt;
+        // TODO: make generator configurable. Will a SplittableRandom be OK?
         return new Gen((long) n * 31 + k);
     }
 
@@ -8121,7 +8143,7 @@ final class Partition {
      * The random sample should be fast in preference to statistically robust.
      * Here we implement a biased sampler for the range [0, n)
      * as n * f with f a fraction with base 2^32.
-     * Source of randomness is a simple 64-bit LCG.
+     * Source of randomness is a 64-bit LCG.
      * https://en.wikipedia.org/wiki/Linear_congruential_generator
      */
     private static final class Gen implements IntUnaryOperator {
