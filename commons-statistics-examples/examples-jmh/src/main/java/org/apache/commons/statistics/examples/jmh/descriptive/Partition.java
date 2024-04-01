@@ -61,6 +61,11 @@ import java.util.function.Supplier;
  * outperforms single-pivot quickselect when using multiple {@code k}; often significantly
  * when {@code k} or {@code n} are large.
  *
+ * <p>Use of sampling to identify a pivot that places {@code k} in the smaller partition is
+ * performed in the SELECT algorithm of Floyd and Rivest [4]. The original algorithm partitions
+ * on a single pivot. This was extended by Kiwiel to partition using two pivots either side
+ * of {@code k} with high probability [5].
+ *
  * <ol>
  * <li>
  * Hoare (1961)
@@ -75,6 +80,12 @@ import java.util.function.Supplier;
  * Wild, Nebel and Mahmoud (2013)
  * Analysis of Quickselect under Yaroslavskiy's Dual-Pivoting Algorithm
  * <a href="https://doi.org/10.48550/arXiv.1306.3819">arXiv:1306.3819</a>
+ * <li>Floyd and Rivest (1975)
+ * Algorithm 489: The Algorithm SELECT—for Finding the ith Smallest of n elements.
+ * Comm. ACM. 18 (3): 173.
+ * <li>Kiwiel (2005)
+ * On Floyd and Rivest's SELECT algorithm.
+ * Theoretical Computer Science 347, 214-238.
  * <li><a href="https://en.wikipedia.org/wiki/Quickselect">Quickselect (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introselect">Introselect (Wikipedia)</a>
