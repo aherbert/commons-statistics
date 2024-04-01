@@ -211,6 +211,10 @@ final class Partition {
      * quicksort. See {@link #dualPivotSortSelectSize(int, int, int)}.
      */
     static final int SORTSELECT_SIZE = 20;
+    /** Threshold to use sub-sampling of the range to identify the single pivot.
+     * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data to
+     * identify a pivot so that the target element is in the smaller set after partitioning. */
+    private static final int SUB_SAMPLING_SIZE = 600;
     /** Increment used for the recursion counter. The counter will overflow to negative when
      * recursion has exceeded the maximum level. The counter is maintained in the upper bits
      * of the dual-pivot control flags. */
@@ -5513,9 +5517,30 @@ final class Partition {
                 return;
             }
 
+            // Pick a pivot and partition
+            int pivot;
+            if (r - l > SUB_SAMPLING_SIZE) {
+                // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+                // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+                // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+                // Note: This targets ka and ignores kb for pivot selection.
+                final int n = r - l + 1;
+                final int i = ka - l + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
+                final int ll = Math.max(l, (int) (ka - i * s / n + sd));
+                final int rr = Math.min(r, (int) (ka + (n - i) * s / n + sd));
+                // Convert ln(n) to 2 * log2(n) for recursion depth
+                select(a, ll, rr, ka, ka, (int) (z * LOG2_E * 2));
+                pivot = ka;
+            } else {
+                // default pivot strategy
+                pivot = pivotIndex(a, l, r);
+            }
+
             // Single-pivot partitioning handling equal values.
-            // This is faster if the pivot is computed before the partition method.
-            final int p0 = partitionKBM(a, l, r, pivotIndex(a, l, r), upper);
+            final int p0 = partitionKBM(a, l, r, pivot, upper);
             final int p1 = upper[0];
 
             // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
