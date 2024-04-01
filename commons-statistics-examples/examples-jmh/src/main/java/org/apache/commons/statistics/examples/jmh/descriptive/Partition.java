@@ -4930,20 +4930,10 @@ final class Partition {
             int c;
             int d;
 
-            // TODO: u < v : try partitionDP here.
-            // May work best if ku and kv straddle the median of [l, rs]
-            // TODO: move quintary partitioning to methods.
-
-            // If one of ku or kv is at the end switch to single-pivot mode
-            a = -1;
-            if (u == v || ku == 0 || kv == 0) {
-                a = ku == 0 ? qq : pp;
-            }
-
-            if (a >= 0) {
+            if (u == v) {
                 // Can be optimised by omitting step A1 (moving of sentinels). Here the
                 // size of ??? is large and initialisation is insignificant.
-                a = partitionKBM(x, ll, rr, a, bounds);
+                a = partitionKBM(x, ll, rr, pp, bounds);
                 d = bounds[0];
                 // Make ternary and quintary partitioning compatible
                 b = d + 1;
