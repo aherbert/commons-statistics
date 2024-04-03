@@ -48,6 +48,12 @@
 
     <dependency>
       <groupId>org.apache.commons</groupId>
+      <artifactId>commons-statistics-inference</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
       <artifactId>commons-rng-simple</artifactId>
     </dependency>
 
