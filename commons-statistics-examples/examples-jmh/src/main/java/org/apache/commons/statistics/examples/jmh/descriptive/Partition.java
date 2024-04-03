@@ -8131,7 +8131,7 @@ final class Partition {
      * @param k Target index.
      * @return the RNG
      */
-    private static IntUnaryOperator createRNG(int n, int k) {
+    static IntUnaryOperator createRNG(int n, int k) {
         // Middle-Square Weyl Sequence is fastest int generator
         //return RandomSource.MSWS.create()::nextInt;
         // TODO: make generator configurable. Will a SplittableRandom be OK?

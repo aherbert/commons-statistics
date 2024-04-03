@@ -27,6 +27,7 @@ import java.util.BitSet;
 import java.util.Formatter;
 import java.util.LinkedList;
 import java.util.function.Consumer;
+import java.util.function.IntUnaryOperator;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -36,6 +37,8 @@ import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKe
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Distribution;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Modification;
+import org.apache.commons.statistics.inference.ChiSquareTest;
+import org.apache.commons.statistics.inference.SignificanceResult;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Disabled;
@@ -1527,6 +1530,58 @@ class PartitionTest {
         builder.add(Arguments.of(a, 10, 42));
         builder.add(Arguments.of(a, 1, 48));
         builder.add(Arguments.of(a, 48, 49));
+        return builder.build();
+    }
+
+    /**
+     * Test the RNG used for shuffling. This test creates a RNG seeded using
+     * {@code n} and {@code k}. Then an ascending array of size = 2^power is created
+     * and shuffled to create the given number of {@code samples}. Each sample
+     * is used to add counts to a histogram. Actual values {@code v} are mapped to buckets
+     * using {@code v >> shift}. The number of buckets is 2^(power - shift) and the
+     * width of the bucket is 2^shift. The histogram counts should be uniform.
+     *
+     * @param n Seed.
+     * @param k Seed.
+     * @param samples Number of samples.
+     * @param power Defines the length of the data.
+     * @param shift Defines the bucket size for histogram counts.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void testRNG(int n, int k, int samples, int power, int shift) {
+        final int size = 1 << power;
+        final int[] a = IntStream.range(0, size).toArray();
+        // histogram of index block count for each position
+        final long[][] h = new long[size][size >>> shift];
+        final IntUnaryOperator rng = Partition.createRNG(n, k);
+        for (int s = samples; --s >= 0;) {
+            // Shuffle the data
+            for (int i = a.length; i > 1;) {
+                final int j = rng.applyAsInt(i);
+                final int t = a[--i];
+                a[i] = a[j];
+                a[j] = t;
+            }
+            // Add to histogram
+            for (int i = 0; i < size; i++) {
+                h[i][a[i] >>> shift]++;
+            }
+        }
+        // Chi-square test the histogram is uniform
+        final SignificanceResult r = ChiSquareTest.withDefaults().test(h);
+        Assertions.assertFalse(r.reject(1e-3), () -> "Not uniform: " + r.getPValue());
+    }
+
+    static Stream<Arguments> testRNG() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        // Smallest sample size for n=600 ~ 37 ~ 2^32
+        builder.add(Arguments.of(600, 52, 100, 5, 1));
+        // Smallest sample size for n=6000 ~ 167 ~ 2^8
+        builder.add(Arguments.of(6000, 789, 100, 8, 3));
+        // Largest sample size for n=2^31 ~ 830192 ~ 2^20.
+        // This works but is slow
+        //builder.add(Arguments.of(830192, 678, 100, 20, 12));
         return builder.build();
     }
 
