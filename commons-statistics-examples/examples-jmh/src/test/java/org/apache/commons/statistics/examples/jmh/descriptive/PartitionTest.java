@@ -849,6 +849,14 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionFRSubsetSampling(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+            .setControlFlags(Partition.FLAG_SUBSET_SAMPLING)::partitionFR);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionKFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionKFR);

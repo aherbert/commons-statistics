@@ -184,6 +184,9 @@ final class Partition {
     static final int FLAG_RANDOM_SAMPLING = 0x2;
     /** Control flag for vector swap of the sample. */
     static final int FLAG_MOVE_SAMPLE = 0x4;
+    /** Control flag for random subset sampling. This creates the sample at the end
+     * of the data and requires moving regions to reposition around the target k. */
+    static final int FLAG_SUBSET_SAMPLING = 0x8;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -4660,39 +4663,63 @@ final class Partition {
                 final int ll = Math.max(l, (int) (k - ith * s / n + sd));
                 final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
                 // Optional: sample [l, r] into [ll, rr]
-                if ((flags & FLAG_RANDOM_SAMPLING) != 0) {
+                if ((flags & FLAG_SUBSET_SAMPLING) != 0) {
+                    // Create a random sample at the left end
                     final IntUnaryOperator rng = createRNG(n, k);
-                    // Shuffle [ll, k) from [l, k)
-                    for (int i = k; i > ll;) {
-                        // l + rand [0, i - l + 1) : i is currently i+1
-                        final int j = l + rng.applyAsInt(i - l);
-                        final double t = a[--i];
-                        a[i] = a[j];
-                        a[j] = t;
-                    }
-                    // Shuffle (k, rr] from (k, r]
-                    for (int i = k; i < rr;) {
+                    final int rs = rr - ll;
+                    for (int i = l - 1; i < rs;) {
                         // r - rand [0, r - i + 1) : i is currently i-1
                         final int j = r - rng.applyAsInt(r - i);
                         final double t = a[++i];
                         a[i] = a[j];
                         a[j] = t;
                     }
-                }
-                selectFR(a, ll, rr, k, flags);
-                // Current:
-                // |l                    |ll      |k|     rr|            r|
-                // |        ???          |  < v   |v|  > v  |      ???    |
-                // Optional: move partitioned data
-                // Unlikely to make a difference as the partitioning will skip
-                // over <v and >v.
-                // |l       |p                    |k|            q|      r|
-                // |  < v   |        ???          |v|      ???    |  > v  |
-                if ((flags & FLAG_MOVE_SAMPLE) != 0) {
-                    vectorSwap(a, l, ll - 1, k - 1);
-                    vectorSwap(a, k + 1, rr, r);
-                    p += k - ll;
-                    q -= rr - k;
+                    selectFR(a, l, rs, k - ll, flags);
+                    // Current:
+                    // |l       |k-ll|     rs|                               r|
+                    // |  < v   | v  |  > v  |              ???               |
+                    // Move partitioned data
+                    // |l       |p                    |k|            q|      r|
+                    // |  < v   |        ???          |v|      ???    |  > v  |
+                    p = k - ll;
+                    q = r - rs + p;
+                    vectorSwap(a, p + 1, rs, r);
+                    vectorSwap(a, p, p, k);
+                } else {
+                    if ((flags & FLAG_RANDOM_SAMPLING) != 0) {
+                        final IntUnaryOperator rng = createRNG(n, k);
+                        // Shuffle [ll, k) from [l, k)
+                        for (int i = k; i > ll;) {
+                            // l + rand [0, i - l + 1) : i is currently i+1
+                            final int j = l + rng.applyAsInt(i - l);
+                            final double t = a[--i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                        // Shuffle (k, rr] from (k, r]
+                        for (int i = k; i < rr;) {
+                            // r - rand [0, r - i + 1) : i is currently i-1
+                            final int j = r - rng.applyAsInt(r - i);
+                            final double t = a[++i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                    selectFR(a, ll, rr, k, flags);
+                    // Current:
+                    // |l                    |ll      |k|     rr|            r|
+                    // |        ???          |  < v   |v|  > v  |      ???    |
+                    // Optional: move partitioned data
+                    // Unlikely to make a difference as the partitioning will skip
+                    // over <v and >v.
+                    // |l       |p                    |k|            q|      r|
+                    // |  < v   |        ???          |v|      ???    |  > v  |
+                    if ((flags & FLAG_MOVE_SAMPLE) != 0) {
+                        vectorSwap(a, l, ll - 1, k - 1);
+                        vectorSwap(a, k + 1, rr, r);
+                        p += k - ll;
+                        q -= rr - k;
+                    }
                 }
             } else if ((flags & FLAG_PIVOTING_STRATGEY) != 0) {
                 // Optional: use pivot strategy
