@@ -49,11 +49,12 @@ final class BitIndexUpdatingInterval implements UpdatingInterval, IntervalAnalys
 
     /**
      * Create an instance to store indices within the range {@code [left, right]}.
+     * The range is not validated.
      *
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
      */
-    private BitIndexUpdatingInterval(int left, int right) {
+    BitIndexUpdatingInterval(int left, int right) {
         this.offset = left;
         this.left = left;
         this.right = right;

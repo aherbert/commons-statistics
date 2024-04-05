@@ -194,6 +194,141 @@ final class IndexIntervals {
     /**
      * Returns an interval that covers the specified indices {@code k}.
      *
+     * @param left Lower bound of data (inclusive).
+     * @param right Upper bound of data (inclusive).
+     * @param k Indices.
+     * @param n Count of indices (must be strictly positive).
+     * @throws IndexOutOfBoundsException if any index {@code k} is not within the
+     * sub-range {@code [left, right]}
+     * @return the interval
+     */
+    static UpdatingInterval createUpdatingInterval(int left, int right, int[] k, int n) {
+        // Note: A typical use case is to have a few indices. Thus the heuristics
+        // in this method should be very fast when n is small.
+        // We have a choice between a KeyUpdatingInterval which requires
+        // sorted keys or a BitIndexUpdatingInterval which handles keys in any order.
+        // The purpose of the heuristics is to avoid a very bad choice of data structure,
+        // rather than choosing the best data structure in all situations. As long as the
+        // choice is reasonable the speed will not impact a partition algorithm.
+
+        // Simple cases
+        if (n == 2) {
+            if (k[0] == k[1]) {
+                return newUpdatingInterval(left, right, k, 1);
+            }
+            if (k[1] < k[0]) {
+                final int v = k[0];
+                k[0] = k[1];
+                k[1] = v;
+            }
+            return newUpdatingInterval(left, right, k, 2);
+        }
+
+        // Strategy: Must be fast on already ascending data.
+        // Note: The recommended way to generate a lot of partition indices is to
+        // generate in sequence.
+
+        // n <= small:
+        //   Modified insertion sort (naturally finds ascending data)
+        // n > small:
+        //   Look for ascending sequence and compact
+        // else:
+        //   Remove duplicates using an order(1) data structure and sort
+
+        if (n <= INDICES_INSERTION_SORT_SIZE) {
+            final int unique = Sorting.sortIndicesInsertionSort(k, n);
+            return newUpdatingInterval(left, right, k, unique);
+        }
+
+        if (isAscending(k, n)) {
+            // For sorted keys the KeyUpdatingInterval is fast. It may be slower than the
+            // BitIndexUpdatingInterval depending on data length but not significantly
+            // slower and the difference is lost in the time taken for partitioning.
+            // So always use the keys.
+            final int unique = compressDuplicates(k, n);
+            return newUpdatingInterval(left, right, k, unique);
+        }
+
+        // At least 20 indices that are partially unordered.
+
+        // Find min/max to understand the range.
+        int min = k[n - 1];
+        int max = min;
+        for (int i = n - 1; --i >= 0;) {
+            min = Math.min(min, k[i]);
+            max = Math.max(max, k[i]);
+        }
+        Selection.checkIndex(left, right, min);
+        Selection.checkIndex(left, right, max);
+
+        // Here we use a simple test based on the number of comparisons required
+        // to perform the expected next/previous look-ups after a split.
+        // It is expected that we can cut n keys a maximum of n-1 times.
+        // Each cut requires a scan next/previous to divide the interval into two intervals:
+        //
+        //            cut
+        //             |
+        //        k1--------k2---------k3---- ... ---------kn    initial interval
+        //         <--| find previous
+        //    find next |-->
+        //        k1        k2---------k3---- ... ---------kn    divided intervals
+        //
+        // An BitSet will scan from the cut location and find a match in time proportional to
+        // the index density. Average density is (size / n) and the scanning covers 64
+        // indices together: Order(2 * n * (size / n) / 64) = Order(size / 32)
+
+        // Sorted keys: Sort time Order(n log(n)) : Splitting time Order(log(n)) (binary search approx)
+        // Bit keys   : Sort time Order(1)        : Splitting time Order(size / 32)
+
+        // Transition when n * n ~ size / 32
+        // Benchmarking shows this is a reasonable approximation when size < 2^20.
+        // The speed of the bit keys is approximately independent of n and proportional to size.
+        // Large size observes degrading performance of the bit keys vs sorted keys.
+        // We introduce a penalty for each 4x increase over size = 2^20.
+        // n * n = size/32 * 2^log4(size / 2^20)
+        // The transition point still favours the bit keys when sorted keys would be faster.
+        // However the difference is held within 4x and the BitSet type structure is still fast
+        // enough to be negligible against the speed of partitioning.
+
+        // Transition point: n = sqrt(size/32)
+        // size n
+        // 2^10 5.66
+        // 2^15 32.0
+        // 2^20 181.0
+
+        // Transition point: n = sqrt(size/32 * 2^(log4(size/2^20))))
+        // size n
+        // 2^22 512.0
+        // 2^24 1448.2
+        // 2^28 11585
+        // 2^31 55108
+
+        final int size = max - min + 1;
+
+        // Divide by 32 is a shift of 5. This is reduced for each 4-fold size above 2^20.
+        // At 2^31 the shift reduces to 0.
+        int shift = 5;
+        if (size > (1 << 20)) {
+            // log4(size/2^20) == (log2(size) - 20) / 2
+            shift -= (ceilLog2(size) - 20) >>> 1;
+        }
+
+        if ((long) n * n > (size >> shift)) {
+            final BitIndexUpdatingInterval interval = new BitIndexUpdatingInterval(min, max);
+            for (int i = n; --i >= 0;) {
+                interval.set(k[i]);
+            }
+            return interval;
+        }
+
+        // Sort with a hash set to filter indices
+        final int unique = Sorting.sortIndicesHashIndexSet(k, n);
+        return new KeyUpdatingInterval(k, unique);
+    }
+
+    /**
+     * Returns an interval that covers the specified indices {@code k}.
+     *
      * @param k Indices.
      * @param n Count of indices (must be strictly positive).
      * @return the interval
@@ -379,8 +514,26 @@ final class IndexIntervals {
      * @param x Value.
      * @return {@code ceil(log2(x))}
      */
-    static int ceilLog2(int x) {
+    private static int ceilLog2(int x) {
         return 32 - Integer.numberOfLeadingZeros(x - 1);
+    }
+
+    /**
+     * Returns an interval that covers the specified indices {@code k}.
+     * The indices must be sorted.
+     *
+     * @param left Lower bound of data (inclusive).
+     * @param right Upper bound of data (inclusive).
+     * @param k Indices.
+     * @param n Count of indices (must be strictly positive).
+     * @throws IndexOutOfBoundsException if any index {@code k} is not within the
+     * sub-range {@code [left, right]}
+     * @return the interval
+     */
+    private static UpdatingInterval newUpdatingInterval(int left, int right, int[] k, int n) {
+        Selection.checkIndex(left, right, k[0]);
+        Selection.checkIndex(left, right, k[n - 1]);
+        return new KeyUpdatingInterval(k, n);
     }
 
     /**

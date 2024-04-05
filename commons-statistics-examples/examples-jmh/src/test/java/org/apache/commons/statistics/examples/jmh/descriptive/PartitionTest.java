@@ -868,6 +868,12 @@ class PartitionTest {
         assertPartition(values, indices, Partition::select);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testSelection(double[] values, int[] indices) {
+        assertPartition(values, indices, (a, k, n) -> Selection.select(a, Arrays.copyOf(k, n)));
+    }
+
     static void assertPartitionPaired(double[] values, int[] indices, DoublePartitionFunction2 function) {
         // Create a paired version of the indices.
         // We apply the partition function to this and test the result as if values
