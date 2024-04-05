@@ -5636,14 +5636,17 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-            // TODO: dynamic ss threshold is not working. It is too high.
-            // Q. How to determine what the threshold should be...
-
-            // select when ka and kb are close to the same end,
+            final int n = r - l;
+            if (kb - ka < SORTSELECT_SIZE && n > SUB_SAMPLING_SIZE) {
+                // Switch to single-pivot mode with Floyd-Rivest sub-sampling
+                select(a, l, r, ka, kb, singlePivotMaxDepth(n));
+                return;
+            }
+            // Select when ka and kb are close to the same end,
             // or the entire range is small
             // |l|-----|ka|--------|kb|------|r|
             if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE ||
-                r - l < (flags & SORTSELECT_MASK)) {
+                n < (flags & SORTSELECT_MASK)) {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
@@ -5652,35 +5655,6 @@ final class Partition {
                 heapSelectRange2(a, l, r, ka, kb);
                 return;
             }
-            // TODO
-            // Switch to single-pivot mode...
-
-//            // TODO:
-//            // Switch between sort and heapselect to finish the range [ka, kb].
-//            // Dynamically adapt the sort select size.
-//            //ss = kb - ka < MIN_SEPARATION_DISTANCE ? SORTSELECT_SIZE : ss;
-//            //ss = kb - ka <= 1 ? 0 : ss;
-//
-//            //if (r - l < ss) {
-//
-//            // TODO - test this condition...
-//            // sortselect when [ka, kb] is a significant part of [l, r], and the size is small
-//            // Approximate speed: heapselect(n/4) == sort(n)
-//            if (r - l < ((kb - ka) << 2 > (r - l) ? ss : 0)) {
-//                // Switch to a sort of small data to avoid partition overhead
-//                //Sorting.sort(a, l, r, l > 0);
-//                //Sorting.sort(a, l, r);
-//                sortSelectRange(a, l, r, ka, kb);
-//                return;
-//            }
-//
-//            // heapselect when ka and kb are close to the same end, or too much recursion
-//            // |l|-----|ka|--------|kb|------|r|
-//            if (maxDepth == 0 ||
-//                Math.min(kb - l, r - ka) < HEAPSELECT_SIZE) {
-//                heapSelectRange(a, l, r, ka, kb);
-//                return;
-//            }
 
             // Dual-pivot partitioning
 //            final int n = r - l;
@@ -5765,7 +5739,7 @@ final class Partition {
 //                    }
 //                    continue;
 //                }
-//                select(a, p3 + 1, r, k.splitRight(p2, p3), maxDepth);
+//                select(a, p3 + 1, r, k.splitRight(p2, p3), flags);
 //                // Here we must process middle
 //                kb = k.right();
 //            }
