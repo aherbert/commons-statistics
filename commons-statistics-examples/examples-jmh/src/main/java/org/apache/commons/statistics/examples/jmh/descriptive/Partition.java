@@ -1147,7 +1147,7 @@ final class Partition {
     /**
      * Sort the elements using a heap sort algorithm.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1170,7 +1170,7 @@ final class Partition {
      * {@link #heapSelectRange(double[], int, int, int, int)}. The result is the same but
      * the decision choice is simpler for the range function.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1217,7 +1217,7 @@ final class Partition {
      * Partition the elements between {@code ka} and {@code kb} using a heap select
      * algorithm. It is assumed {@code left <= ka <= kb <= right}.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1264,7 +1264,7 @@ final class Partition {
      * to partition a value in the lower half of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Does not respects the ordering of signed zeros.
+     * Does not respect the ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
@@ -1339,7 +1339,7 @@ final class Partition {
                 // No left child
                 break;
             }
-            // Use the left child if it is greater, or right doesn't exist
+            // Use the left child if right doesn't exist, or it is greater 
             if (c == end || a[c] < a[c - 1]) {
                 --c;
             }
@@ -1367,7 +1367,7 @@ final class Partition {
      * to partition a value in the upper half of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Does not respects the ordering of signed zeros.
+     * Does not respect the ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
@@ -1439,9 +1439,10 @@ final class Partition {
             // Right child
             int c = (p << 1) - root - 2;
             if (c < end) {
+                // No left child
                 break;
             }
-            // Use the left child if it is less, or right doesn't exist
+            // Use the left child if right doesn't exist, or it is less 
             if (c == end || a[c] > a[c + 1]) {
                 ++c;
             }
@@ -1460,7 +1461,7 @@ final class Partition {
      * Partition the elements between {@code ka} and {@code kb} using a heap select
      * algorithm. It is assumed {@code left <= ka <= kb <= right}.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1492,7 +1493,7 @@ final class Partition {
      * <p>For best performance this should be called with {@code k} in the lower
      * half of the range.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1541,7 +1542,7 @@ final class Partition {
      * <p>For best performance this should be called with {@code k} in the upper
      * half of the range.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1587,7 +1588,7 @@ final class Partition {
      * Partition the elements between {@code ka} and {@code kb} using a sort select
      * algorithm. It is assumed {@code left <= ka <= kb <= right}.
      *
-     * <p>Note: Requires that the range contains no NaN values. Does not respects the
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
      * ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
@@ -1604,7 +1605,6 @@ final class Partition {
             return;
         }
         // Sort the smallest side
-        // |l|-----|ka|--------|kb|------|r|
         if (kb - left < right - ka) {
             sortSelectLeft(a, left, right, kb);
         } else {
@@ -1624,7 +1624,7 @@ final class Partition {
      * to partition a value in the lower half of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Does not respects the ordering of signed zeros.
+     * Does not respect the ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
@@ -1673,7 +1673,7 @@ final class Partition {
      * to partition a value in the upper half of the range.
      *
      * <p>Note: Requires that the range contains no NaN values.
-     * Does not respects the ordering of signed zeros.
+     * Does not respect the ordering of signed zeros.
      *
      * @param a Data array to use to find out the K<sup>th</sup> value.
      * @param left Lower bound (inclusive).
