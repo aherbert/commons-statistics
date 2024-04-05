@@ -8159,7 +8159,7 @@ final class Partition {
         // Middle-Square Weyl Sequence is fastest int generator
         //return RandomSource.MSWS.create()::nextInt;
         // TODO: make generator configurable. Will a SplittableRandom be OK?
-        return new Gen((long) n * 31 + k);
+        return new Gen(n * 31L + k);
     }
 
     /**
@@ -8167,7 +8167,7 @@ final class Partition {
      * The random sample should be fast in preference to statistically robust.
      * Here we implement a biased sampler for the range [0, n)
      * as n * f with f a fraction with base 2^32.
-     * Source of randomness is a 64-bit LCG.
+     * Source of randomness is a 64-bit LCG using the constants from MMIX by Donald Knuth.
      * https://en.wikipedia.org/wiki/Linear_congruential_generator
      */
     private static final class Gen implements IntUnaryOperator {
@@ -8175,19 +8175,21 @@ final class Partition {
         private long s;
 
         /**
-         * @param s Seed.
+         * @param seed Seed.
          */
-        Gen(long s) {
-            this.s = s;
+        Gen(long seed) {
+            // Update state
+            this.s = seed * 6364136223846793005L + 1442695040888963407L;
         }
 
         @Override
         public int applyAsInt(int n) {
-            // Update state. Use the constants from MMIX by Donald Knuth.
+            final long x = s;
+            // Update state
             s = s * 6364136223846793005L + 1442695040888963407L;
             // Use the upper 32-bits from the state as the random 32-bit sample
             // result = n * [0, 2^32) / 2^32
-            return (int) ((n * (s >>> Integer.SIZE)) >>> Integer.SIZE);
+            return (int) ((n * (x >>> Integer.SIZE)) >>> Integer.SIZE);
         }
     }
 }
