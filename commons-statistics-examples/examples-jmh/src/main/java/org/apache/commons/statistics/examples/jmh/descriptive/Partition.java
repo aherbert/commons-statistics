@@ -4664,9 +4664,11 @@ final class Partition {
                 final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
                 // Optional: sample [l, r] into [ll, rr]
                 if ((flags & FLAG_SUBSET_SAMPLING) != 0) {
-                    // Create a random sample at the left end
+                    // Create a random sample at the left end.
+                    // This creates an unbiased random sample.
+                    // This method is not as fast as sampling into [ll, rr] (see below).
                     final IntUnaryOperator rng = createRNG(n, k);
-                    final int rs = rr - ll;
+                    final int rs = l + rr - ll;
                     for (int i = l - 1; i < rs;) {
                         // r - rand [0, r - i + 1) : i is currently i-1
                         final int j = r - rng.applyAsInt(r - i);
@@ -4674,19 +4676,22 @@ final class Partition {
                         a[i] = a[j];
                         a[j] = t;
                     }
-                    selectFR(a, l, rs, k - ll, flags);
+                    selectFR(a, l, rs, k - ll + l, flags);
                     // Current:
-                    // |l       |k-ll|     rs|                               r|
-                    // |  < v   | v  |  > v  |              ???               |
+                    // |l      |k-ll+l|     rs|                               r|
+                    // |  < v  |   v  |  > v  |              ???               |
                     // Move partitioned data
-                    // |l       |p                    |k|            q|      r|
-                    // |  < v   |        ???          |v|      ???    |  > v  |
-                    p = k - ll;
+                    // |l       |p                     |k|            q|      r|
+                    // |  < v   |         ???          |v|      ???    |  > v  |
+                    p = k - ll + l;
                     q = r - rs + p;
                     vectorSwap(a, p + 1, rs, r);
                     vectorSwap(a, p, p, k);
                 } else {
                     if ((flags & FLAG_RANDOM_SAMPLING) != 0) {
+                        // This is not a random sample from [l, r] when k is not exactly
+                        // in the middle. By sampling either side of k the sample
+                        // will maintain sorted/partially sorted data around k.
                         final IntUnaryOperator rng = createRNG(n, k);
                         // Shuffle [ll, k) from [l, k)
                         if (ll > l) {
@@ -5543,6 +5548,8 @@ final class Partition {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
+            // Q. Is recursion check required when using Floyd-Rivest sampling?
+            // This condition is never hit using the B&M test data.
             if (maxDepth == 0) {
                 // quickselect convergence is poor, switch to heap select
                 heapSelectRange2(a, l, r, ka, kb);
