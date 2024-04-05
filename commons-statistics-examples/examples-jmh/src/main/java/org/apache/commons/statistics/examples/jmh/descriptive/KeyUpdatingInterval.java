@@ -35,11 +35,12 @@ final class KeyUpdatingInterval implements UpdatingInterval {
 
     /**
      * Create an instance with the provided {@code indices}.
+     * Indices must be sorted.
      *
      * @param indices Indices.
      * @param n Number of indices.
      */
-    private KeyUpdatingInterval(int[] indices, int n) {
+    KeyUpdatingInterval(int[] indices, int n) {
         this(indices, 0, n - 1);
     }
 
@@ -174,5 +175,14 @@ final class KeyUpdatingInterval implements UpdatingInterval {
         r = i;
         // return right
         return new KeyUpdatingInterval(keys, upperLeft, upperRight);
+    }
+
+    /**
+     * Return the current number of indices in the interval.
+     *
+     * @return the size
+     */
+    int size() {
+        return r - l + 1;
     }
 }

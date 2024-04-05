@@ -1338,7 +1338,7 @@ final class Partition {
                 // No left child
                 break;
             }
-            // Use the left child if right doesn't exist, or it is greater 
+            // Use the left child if right doesn't exist, or it is greater
             if (c == end || a[c] < a[c - 1]) {
                 --c;
             }
@@ -1441,7 +1441,7 @@ final class Partition {
                 // No left child
                 break;
             }
-            // Use the left child if right doesn't exist, or it is less 
+            // Use the left child if right doesn't exist, or it is less
             if (c == end || a[c] > a[c + 1]) {
                 ++c;
             }
