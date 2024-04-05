@@ -4688,10 +4688,18 @@ final class Partition {
                     vectorSwap(a, p + 1, rs, r);
                     vectorSwap(a, p, p, k);
                 } else {
+                    // Note: Random sampling is a redundant overhead on fully random data
+                    // and will part destroy sorted data. On data that is: partially partitioned;
+                    // has many repeat elements; or is structured with repeat patterns, the
+                    // shuffle removes side-effects of patterns and stabilises performance.
                     if ((flags & FLAG_RANDOM_SAMPLING) != 0) {
                         // This is not a random sample from [l, r] when k is not exactly
                         // in the middle. By sampling either side of k the sample
-                        // will maintain sorted/partially sorted data around k.
+                        // will maintain the value of k if the data is already partitioned
+                        // around k. However sorted data will be part scrambled by the shuffle.
+                        // A second FR sample on the next smaller partition will have shuffled
+                        // data at one end. The majority of the sorted data is unchanged.
+                        // This sampling has the best performance overall across datasets.
                         final IntUnaryOperator rng = createRNG(n, k);
                         // Shuffle [ll, k) from [l, k)
                         if (ll > l) {
