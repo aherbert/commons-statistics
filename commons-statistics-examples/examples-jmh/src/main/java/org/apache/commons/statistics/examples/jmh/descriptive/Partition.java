@@ -4689,20 +4689,24 @@ final class Partition {
                     if ((flags & FLAG_RANDOM_SAMPLING) != 0) {
                         final IntUnaryOperator rng = createRNG(n, k);
                         // Shuffle [ll, k) from [l, k)
-                        for (int i = k; i > ll;) {
-                            // l + rand [0, i - l + 1) : i is currently i+1
-                            final int j = l + rng.applyAsInt(i - l);
-                            final double t = a[--i];
-                            a[i] = a[j];
-                            a[j] = t;
+                        if (ll > l) {
+                            for (int i = k; i > ll;) {
+                                // l + rand [0, i - l + 1) : i is currently i+1
+                                final int j = l + rng.applyAsInt(i - l);
+                                final double t = a[--i];
+                                a[i] = a[j];
+                                a[j] = t;
+                            }
                         }
                         // Shuffle (k, rr] from (k, r]
-                        for (int i = k; i < rr;) {
-                            // r - rand [0, r - i + 1) : i is currently i-1
-                            final int j = r - rng.applyAsInt(r - i);
-                            final double t = a[++i];
-                            a[i] = a[j];
-                            a[j] = t;
+                        if (rr < r) {
+                            for (int i = k; i < rr;) {
+                                // r - rand [0, r - i + 1) : i is currently i-1
+                                final int j = r - rng.applyAsInt(r - i);
+                                final double t = a[++i];
+                                a[i] = a[j];
+                                a[j] = t;
+                            }
                         }
                     }
                     selectFR(a, ll, rr, k, flags);
@@ -4923,8 +4927,8 @@ final class Partition {
 
             // Step 3: pivot selection
             final double isn = (k - l + 1) * s / n;
-            int ku = (int) Math.max(Math.floor(l - 1 + isn - g), l);
-            int kv = (int) Math.min(Math.ceil(l - 1 + isn + g), rs);
+            final int ku = (int) Math.max(Math.floor(l - 1 + isn - g), l);
+            final int kv = (int) Math.min(Math.ceil(l - 1 + isn + g), rs);
             // Find u and v by recursion
             selectKFR(x, l, rs, ku, bounds, rng);
             final int kum = bounds[0];
@@ -5000,10 +5004,10 @@ final class Partition {
                 // |   x < u       | x = u |    u < x < v  | x = v |       x > v |
                 quintaryPartitionL(x, pp, kvm - 1, qq, u, v, bounds);
                 pp = bounds[0];
-                int p = bounds[1];
-                int q = bounds[2];
-                int i = bounds[3];
-                int j = bounds[4];
+                final int p = bounds[1];
+                final int q = bounds[2];
+                final int i = bounds[3];
+                final int j = bounds[4];
 //                int p = kvm - 1;
 //                int q = qq;
 //                int i = p;
@@ -5077,11 +5081,11 @@ final class Partition {
                 // |   x < u         | x = u |        u < x < v  | x = v | x > v |
                 vectorSwap(x, pp + 1, kvm - 1, qq - 1);
                 quintaryPartitionR(x, pp, qq - kvm + kup + 1, qq, u, v, bounds);
-                int p = bounds[0];
-                int q = bounds[1];
+                final int p = bounds[0];
+                final int q = bounds[1];
                 qq = bounds[2];
-                int i = bounds[3];
-                int j = bounds[4];
+                final int i = bounds[3];
+                final int j = bounds[4];
 //                int p = pp;
 //                int q = qq - kvm + kup + 1;
 //                int i = p;
@@ -5562,20 +5566,24 @@ final class Partition {
                 // Sample [l, r] into [ll, rr]
                 final IntUnaryOperator rng = createRNG(n, ka);
                 // Shuffle [ll, ka) from [l, ka)
-                for (int ii = ka; ii > ll;) {
-                    // l + rand [0, ii - l + 1) : ii is currently ii+1
-                    final int j = l + rng.applyAsInt(ii - l);
-                    final double t = a[--ii];
-                    a[ii] = a[j];
-                    a[j] = t;
+                if (l < ll) {
+                    for (int ii = ka; ii > ll;) {
+                        // l + rand [0, ii - l + 1) : ii is currently ii+1
+                        final int j = l + rng.applyAsInt(ii - l);
+                        final double t = a[--ii];
+                        a[ii] = a[j];
+                        a[j] = t;
+                    }
                 }
                 // Shuffle (k, rr] from (ka, r]
-                for (int ii = ka; ii < rr;) {
-                    // r - rand [0, r - ii + 1) : ii is currently ii-1
-                    final int j = r - rng.applyAsInt(r - ii);
-                    final double t = a[++ii];
-                    a[ii] = a[j];
-                    a[j] = t;
+                if (rr < r) {
+                    for (int ii = ka; ii < rr;) {
+                        // r - rand [0, r - ii + 1) : ii is currently ii-1
+                        final int j = r - rng.applyAsInt(r - ii);
+                        final double t = a[++ii];
+                        a[ii] = a[j];
+                        a[j] = t;
+                    }
                 }
                 // Convert ln(n) to 2 * log2(n) for recursion depth
                 select(a, ll, rr, ka, ka, (int) (z * LOG2_E * 2));
@@ -8164,7 +8172,7 @@ final class Partition {
             s = s * 6364136223846793005L + 1442695040888963407L;
             // Use the upper 32-bits from the state as the random 32-bit sample
             // result = n * [0, 2^32) / 2^32
-            return (int) (((long) n * (s >>> Integer.SIZE)) >>> Integer.SIZE);
+            return (int) ((n * (s >>> Integer.SIZE)) >>> Integer.SIZE);
         }
     }
 }
