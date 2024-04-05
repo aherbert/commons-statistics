@@ -68,7 +68,7 @@ class PartitionTest {
     /** Default sort select constant. */
     private static final int SC = 0;
     /** Default sub-sampling size. */
-    private static final int SU = 500;
+    private static final int SU = 600;
 
     /**
      * Partition function. Used to test different implementations.
@@ -863,7 +863,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
+    @MethodSource(value = {"testPartition", "testFR"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
     }
@@ -1038,6 +1038,12 @@ class PartitionTest {
             builder.add(Arguments.of(x.clone(), new int[] {1}));
             builder.add(Arguments.of(x.clone(), new int[] {2}));
         }
+        // Hit FR sub-sampling conditions.
+        // Close to edge but outside edge select size.
+        final int n = 7000;
+        final double[] x = IntStream.range(0, n).asDoubleStream().toArray();
+        builder.add(Arguments.of(x.clone(), new int[] {20}));
+        builder.add(Arguments.of(x, new int[] {n - 1 - 20}));
 
         return builder.build();
     }
