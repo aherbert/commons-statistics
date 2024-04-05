@@ -1025,7 +1025,6 @@ final class Partition {
         }
     }
 
-
     /**
      * Move the minimum value to the start of the range.
      *
