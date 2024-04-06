@@ -619,6 +619,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
             ::partitionISP);
     }
 
@@ -664,6 +665,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
             ::partitionISBM);
     }
 
