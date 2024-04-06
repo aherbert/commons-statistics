@@ -2750,12 +2750,36 @@ final class Partition {
                 // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
                 // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
                 ++n;
-                final int i = k - l + 1;
+                final int ith = k - l + 1;
                 final double z = Math.log(n);
                 final double s = 0.5 * Math.exp(0.6666666666666666 * z);
-                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
-                final int ll = Math.max(l, (int) (k - i * s / n + sd));
-                final int rr = Math.min(r, (int) (k + (n - i) * s / n + sd));
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+                final int ll = Math.max(l, (int) (k - ith * s / n + sd));
+                final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
+                // Optional random sampling
+                if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+                    final IntUnaryOperator rng = createRNG(n, k);
+                    // Shuffle [ll, k) from [l, k)
+                    if (ll > l) {
+                        for (int i = k; i > ll;) {
+                            // l + rand [0, i - l + 1) : i is currently i+1
+                            final int j = l + rng.applyAsInt(i - l);
+                            final double t = a[--i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                    // Shuffle (k, rr] from (k, r]
+                    if (rr < r) {
+                        for (int i = k; i < rr;) {
+                            // r - rand [0, r - i + 1) : i is currently i-1
+                            final int j = r - rng.applyAsInt(r - i);
+                            final double t = a[++i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                }
                 introselect(part, a, ll, rr, k, lnNtoMaxDepthSinglePivot(z));
                 pivot = k;
             } else {
@@ -3081,12 +3105,36 @@ final class Partition {
                 // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
                 // Note: This targets ka1 and ignores kb1 for pivot selection.
                 ++n;
-                final int i = ka1 - l + 1;
+                final int ith = ka1 - l + 1;
                 final double z = Math.log(n);
                 final double s = 0.5 * Math.exp(0.6666666666666666 * z);
-                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
-                final int ll = Math.max(l, (int) (ka1 - i * s / n + sd));
-                final int rr = Math.min(r, (int) (ka1 + (n - i) * s / n + sd));
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+                final int ll = Math.max(l, (int) (ka1 - ith * s / n + sd));
+                final int rr = Math.min(r, (int) (ka1 + (n - ith) * s / n + sd));
+                // Optional random sampling
+                if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+                    final IntUnaryOperator rng = createRNG(n, ka1);
+                    // Shuffle [ll, k) from [l, k)
+                    if (ll > l) {
+                        for (int i = ka1; i > ll;) {
+                            // l + rand [0, i - l + 1) : i is currently i+1
+                            final int j = l + rng.applyAsInt(i - l);
+                            final double t = a[--i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                    // Shuffle (k, rr] from (k, r]
+                    if (rr < r) {
+                        for (int i = ka1; i < rr;) {
+                            // r - rand [0, r - i + 1) : i is currently i-1
+                            final int j = r - rng.applyAsInt(r - i);
+                            final double t = a[++i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                }
                 introselect(part, a, ll, rr, k, ka1, ka1, lnNtoMaxDepthSinglePivot(z));
                 pivot = ka1;
             } else {
