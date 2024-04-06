@@ -321,9 +321,10 @@ final class Selection {
         }
         if (n == 1) {
             checkIndex(left, right, k[0]);
-            select(a, left, right, k[0], k[0], Partition.singlePivotMaxDepth(right - left));
+            Partition.select(a, left, right, k[0], k[0], Partition.singlePivotMaxDepth(right - left));
             return -1;
         }
+
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(left, right, k, n);
 
         // Save number of used indices
