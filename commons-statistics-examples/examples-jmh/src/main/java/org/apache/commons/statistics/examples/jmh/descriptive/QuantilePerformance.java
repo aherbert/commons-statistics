@@ -145,6 +145,8 @@ public class QuantilePerformance {
     private static final Pattern RC_PATTERN = Pattern.compile("RC(\\d+)");
     /** Pattern for the compression level. */
     private static final Pattern CL_PATTERN = Pattern.compile("CL(\\d+)");
+    /** Pattern for the control flags. */
+    private static final Pattern CF_PATTERN = Pattern.compile("CF(\\d+)");
 
     /** Random source. */
     private static final RandomSource RANDOM_SOURCE = RandomSource.XO_RO_SHI_RO_128_PP;
@@ -2090,14 +2092,7 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(FR)) {
-                // Behaviour defined by control flags appended to FR
-                String prefix = FR;
-                int v = 0;
-                if (name.length() > 2 && Character.isDigit(name.charAt(2))) {
-                    prefix = name.substring(0, 3);
-                    v = Character.digit(name.charAt(2), 10);
-                }
-                final Partition part = createPartition(name, prefix, qs, hc, sc).setControlFlags(v);
+                final Partition part = createPartition(name, FR, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
@@ -2581,6 +2576,7 @@ public class QuantilePerformance {
         final double recursionMultiple = getRecursionMultiple(s);
         final int recursionConstant = getRecursionConstant(s);
         final int compressionLevel = getCompressionLevel(s);
+        final int controlFlags = getControlFlags(s);
         // Check for unharvested parameters
         for (int i = prefix.length(); i < s[0].length(); i++) {
             if (s[0].charAt(i) != '_') {
@@ -2598,6 +2594,7 @@ public class QuantilePerformance {
         p.setRecursionMultiple(recursionMultiple);
         p.setRecursionConstant(recursionConstant);
         p.setCompression(compressionLevel);
+        p.setControlFlags(controlFlags);
         return p;
     }
 
@@ -2746,6 +2743,23 @@ public class QuantilePerformance {
             return i;
         }
         return Partition.COMPRESSION_LEVEL;
+    }
+
+    /**
+     * Gets the control flags. These are used to enable additional features, for example
+     * random sampling in the Floyd-Rivest algorithm.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @return the control flags
+     */
+    static int getControlFlags(String[] name) {
+        final Matcher m = CF_PATTERN.matcher(name[0]);
+        if (m.find()) {
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
+        }
+        return Partition.CONTROL_FLAGS;
     }
 
     /**

@@ -77,6 +77,11 @@ class QuantilePerformanceTest {
     }
 
     @Test
+    void testGetControlFlags() {
+        assertIntParameter(Partition.CONTROL_FLAGS, "CF", QuantilePerformance::getControlFlags);
+    }
+
+    @Test
     void testGetPivotingStrategy() {
         assertEnumParameter(Partition.PIVOTING_STRATEGY, QuantilePerformance::getPivotStrategy);
     }

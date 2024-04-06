@@ -177,6 +177,8 @@ final class Partition {
     static final int RECURSION_CONSTANT = 0;
     /** Default compression. */
     static final int COMPRESSION_LEVEL = 1;
+    /** Default control flags. */
+    static final int CONTROL_FLAGS = 0;
 
     /** Control flag for the pivoting strategy. */
     static final int FLAG_PIVOTING_STRATGEY = 0x1;
@@ -340,7 +342,7 @@ final class Partition {
     /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
     private int compression = COMPRESSION_LEVEL;
     /** Control flags level for Floyd-Rivest sub-sampling. */
-    private int controlFlags;
+    private int controlFlags = CONTROL_FLAGS;
     /** Consumer for the recursion level reached during partitioning. Used to analyse
      * the distribution of the recursion for different input data. */
     private IntConsumer recursionConsumer = i -> { /* no-op */ };
