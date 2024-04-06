@@ -1888,7 +1888,7 @@ public final class Quantile {
             if (i >= n - 1) {
                 return values[n - 1];
             }
-            return estimatePartitioned(values, i, g, n);
+            return estimatePartitioned(values, i, g);
         }
 
         /**
@@ -1912,10 +1912,9 @@ public final class Quantile {
          * @param values Values.
          * @param i Integer part of the position index.
          * @param g Fractional part of the position index.
-         * @param n Size.
          * @return estimated quantile
          */
-        double estimatePartitioned(double[] values, int i, double g, int n) {
+        double estimatePartitioned(double[] values, int i, double g) {
             // Note position index is 1-based:
             if (g == 0) {
                 // No interpolation
