@@ -84,6 +84,8 @@ public final class Quantile {
     private final NaNPolicy nanPolicy;
     /** Transformer factory for double data. */
     private final Supplier<DoubleDataTransformer> transformer;
+    /** Transformer for NaN data. */
+    private final NaNTransformer nanTransformer;
     /** Selector for the K-th element in an array. */
     private final KthSelector kthSelector;
     /** Partition method for partial sort of an array. */
@@ -173,6 +175,7 @@ public final class Quantile {
         this.partition = partition;
         this.estimationType = estimationType;
         transformer = DoubleDataTransformers.createFactory(nanPolicy, !overwrite);
+        nanTransformer = DoubleDataTransformers.createNaNTransformer(nanPolicy, !overwrite);
     }
 
     /**
@@ -770,16 +773,17 @@ public final class Quantile {
     public double evaluate(double[] values, double p) {
         checkProbability(p);
         // Floating-point data handling
-        final DoubleDataTransformer t = transformer.get();
-        final double[] x = t.preProcess(values);
-        final int n = t.size();
+        final int[] bounds = new int[3];
+        final double[] x = nanTransformer.apply(values, bounds);
+        final int n = bounds[2];
         // Special cases
         if (n <= 1) {
-            t.postProcess(x, null, 0);
             return n == 0 ? Double.NaN : values[0];
         }
-        // Length of data to partition
-        final int len = t.length();
+        // Range of data to partition: [bounds[0], bounds[1])
+        // Currently bounds[0] is always zero.
+        final int from = bounds[0];
+        final int to = bounds[1];
 
         final double pos = estimationType.index(p, n);
         final int i = (int) pos;
@@ -787,22 +791,17 @@ public final class Quantile {
         // Partition and compute
         // Do the minimal partition work below the data length.
         if (pos > i) {
-            final int[] k = new int[] {i, i + 1};
-            if (i < len) {
-                final int kn = i + 1 < len ? 2 : 1;
-                Partition.select(x, len, k, kn);
-                t.postProcess(x, k, kn);
-            } else {
-                t.postProcess(x, null, 0);
+            if (i < to) {
+                if (i + 1 < to) {
+                    Selection.select(from, to, x, i, i + 1);
+                } else {
+                    Selection.select(from, to, x, i);
+                }
             }
             return DoubleMath.interpolate(x[i], x[i + 1], pos - i);
         }
-        if (i < len) {
-            final int[] k = new int[] {i};
-            Partition.select(x, len, k, 1);
-            t.postProcess(x, k, 1);
-        } else {
-            t.postProcess(x, null, 0);
+        if (i < to) {
+            Selection.select(from, to, x, i);
         }
         return x[i];
     }
@@ -822,31 +821,32 @@ public final class Quantile {
     public double[] evaluate(double[] values, double... p) {
         checkProbabilities(p);
         // Floating-point data handling
-        final DoubleDataTransformer t = transformer.get();
-        final double[] x = t.preProcess(values);
-        final int n = t.size();
+        final int[] bounds = new int[3];
+        final double[] x = nanTransformer.apply(values, bounds);
+        final int n = bounds[2];
         // Special cases
         final double[] q = new double[p.length];
         if (n <= 1) {
-            t.postProcess(x, null, 0);
             Arrays.fill(q, n == 0 ? Double.NaN : values[0]);
             return q;
         }
 
-        // Length of data to partition
-        final int len = t.length();
+        // Range of data to partition: [bounds[0], bounds[1])
+        // Currently bounds[0] is always zero.
+        final int from = bounds[0];
+        final int to = bounds[1];
 
         // Collect interpolation positions. We use the output q to store factors.
-        final int[] indices = new int[p.length * 2];
+        final int[] indices = new int[p.length << 1];
         int count = 0;
         for (int k = 0; k < p.length; k++) {
             final double pos = estimationType.index(p[k], n);
             q[k] = pos;
             final int i = (int) pos;
             // Only have to partition up to length
-            if (i < len) {
+            if (i < to) {
                 indices[count++] = i;
-                if (pos > i && i <= len) {
+                if (pos > i && i + 1 < to) {
                     // Require the next index for interpolation
                     indices[count++] = i + 1;
                 }
@@ -854,10 +854,7 @@ public final class Quantile {
         }
 
         // Partition
-        if (count != 0) {
-            Partition.select(x, len, indices, count);
-        }
-        t.postProcess(x, indices, count);
+        Selection.select(from, to, x, Arrays.copyOf(indices, count));
 
         // Compute
         for (int k = 0; k < p.length; k++) {
@@ -891,25 +888,23 @@ public final class Quantile {
     public double[] evaluateRange(double[] values, int c) {
         checkNumberOfProbabilities(c);
         // Floating-point data handling
-        final DoubleDataTransformer t = transformer.get();
-        final double[] x = t.preProcess(values);
-        final int n = t.size();
+        final int[] bounds = new int[3];
+        final double[] x = nanTransformer.apply(values, bounds);
+        final int n = bounds[2];
         // Special cases
         final double[] q = new double[c];
         if (n <= 1) {
-            t.postProcess(x, null, 0);
             Arrays.fill(q, n == 0 ? Double.NaN : values[0]);
             return q;
         }
 
-        // Length of data to partition
-        final int len = t.length();
-
-        // TODO:
-        // If the number of quantiles saturates the range then perform a sort
+        // Range of data to partition: [bounds[0], bounds[1])
+        // Currently bounds[0] is always zero.
+        final int from = bounds[0];
+        final int to = bounds[1];
 
         // Collect interpolation positions. We use the output q to store factors.
-        final int[] indices = new int[c * 2];
+        final int[] indices = new int[c << 1];
         int count = 0;
         final double c1 = c + 1.0;
         for (int k = 0; k < c; k++) {
@@ -917,9 +912,9 @@ public final class Quantile {
             q[k] = pos;
             final int i = (int) pos;
             // Only have to partition up to length
-            if (i < len) {
+            if (i < to) {
                 indices[count++] = i;
-                if (pos > i && i <= len) {
+                if (pos > i && i + 1 < to) {
                     // Require the next index for interpolation
                     indices[count++] = i + 1;
                 }
@@ -927,10 +922,7 @@ public final class Quantile {
         }
 
         // Partition
-        if (count != 0) {
-            Partition.select(x, len, indices, count);
-        }
-        t.postProcess(x, indices, count);
+        Selection.select(from, to, x, Arrays.copyOf(indices, count));
 
         // Compute
         for (int k = 0; k < c; k++) {
