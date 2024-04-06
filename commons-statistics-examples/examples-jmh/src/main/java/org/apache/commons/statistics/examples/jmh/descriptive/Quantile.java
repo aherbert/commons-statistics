@@ -726,7 +726,7 @@ public final class Quantile {
             // Only have to partition up to length
             if (i < len) {
                 indices[count++] = i;
-                if (pos > i && i <= len) {
+                if (pos > i && i + 1 < len) {
                     // Require the next index for interpolation
                     indices[count++] = i + 1;
                 }
