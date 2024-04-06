@@ -782,6 +782,10 @@ public final class Quantile {
         }
         // Range of data to partition: [bounds[0], bounds[1])
         // Currently bounds[0] is always zero.
+        // TODO: Is lower bound support required?
+        // Requires NaNPolicy to be set to something in
+        // o.a.c.statistics.ranking.NaNStrategy, e.g. MINIMAL
+        // where NaN are -infinity and can be ignored at the low end.
         final int from = bounds[0];
         final int to = bounds[1];
 
@@ -795,6 +799,10 @@ public final class Quantile {
                 if (i + 1 < to) {
                     Selection.select(from, to, x, i, i + 1);
                 } else {
+                    // TODO - This currently cannot be reached.
+                    // Requires NaNPolicy to be set to something in
+                    // o.a.c.statistics.ranking.NaNStrategy, e.g. MAXIMAL
+                    // where NaN are +infinity and can be ignored at the high end.
                     Selection.select(from, to, x, i);
                 }
             }
