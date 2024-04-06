@@ -48,6 +48,8 @@ public final class Median {
     private final NaNPolicy nanPolicy;
     /** Transformer factory for double data. */
     private final Supplier<DoubleDataTransformer> transformer;
+    /** Transformer for NaN data. */
+    private final NaNTransformer nanTransformer;
     /** Selector for the K-th element in an array. */
     private final KthSelector kthSelector;
     /** Partition method for partial sort of an array. */
@@ -66,6 +68,7 @@ public final class Median {
         this.kthSelector = kthSelector;
         this.partition = partition;
         transformer = DoubleDataTransformers.createFactory(nanPolicy, !overwrite);
+        nanTransformer = DoubleDataTransformers.createNaNTransformer(nanPolicy, !overwrite);
     }
 
     /**
@@ -693,14 +696,19 @@ public final class Median {
      */
     public double evaluate(double[] values) {
         // Floating-point data handling
-        final DoubleDataTransformer t = transformer.get();
-        final double[] x = t.preProcess(values);
-        final int n = t.size();
+        final int[] bounds = new int[3];
+        final double[] x = nanTransformer.apply(values, bounds);
+        final int n = bounds[2];
         // Special cases
         if (n <= 2) {
-            t.postProcess(x, null, 0);
             switch (n) {
             case 2:
+                // Sort data handling signed zeros and NaN
+                if (Double.compare(x[1], x[0]) < 0) {
+                    final double t = x[0];
+                    x[0] = x[1];
+                    x[1] = t;
+                }
                 return DoubleMath.mean(x[0], x[1]);
             case 1:
                 return x[0];
@@ -710,29 +718,27 @@ public final class Median {
         }
         // Median index
         final int m = n >>> 1;
-        // Length of data to partition
-        final int len = t.length();
+        // Range of data to partition: [bounds[0], bounds[1])
+        // Currently bounds[0] is always zero.
+        final int from = bounds[0];
+        final int to = bounds[1];
         // Odd
         if ((n & 0x1) == 0x1) {
-            if (m < len) {
-                final int[] k = new int[] {m};
-                Partition.select(x, len, k, 1);
-                t.postProcess(x, k, 1);
-            } else {
-                t.postProcess(x, null, 0);
+            if (m < to) {
+                Selection.select(from, to, x, m);
             }
             return x[m];
         }
         // Even: require (m-1, m)
         // Do the minimal partition work
-        final int[] k = new int[] {m - 1, m};
-        if (m - 1 < len) {
-            final int kn = m < len ? 2 : 1;
-            Partition.select(x, len, k, kn);
-            t.postProcess(x, k, kn);
-        } else {
-            t.postProcess(x, null, 0);
+        final int mm1 = m - 1;
+        if (mm1 < to) {
+            if (m < to) {
+                Selection.select(from, to, x, mm1, m);
+            } else {
+                Selection.select(from, to, x, mm1);
+            }
         }
-        return DoubleMath.mean(x[m - 1], x[m]);
+        return DoubleMath.mean(x[mm1], x[m]);
     }
 }

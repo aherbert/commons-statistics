@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.function.Supplier;
 
 /**
- * Support for creating {@link DoubleDataTransformer} implementations.
+ * Support for creating {@link DoubleDataTransformer} and {@link NaNTransformer} implementations.
  *
  * @since 1.1
  */
@@ -44,9 +44,30 @@ final class DoubleDataTransformers {
         if (nanPolicy == NaNPolicy.ERROR) {
             return () -> new NaNErrorTransformer(copy);
         }
-        // Support including NaN / exclusing NaN from the data size
+        // Support including NaN / excluding NaN from the data size
         final boolean includeNaN = nanPolicy == NaNPolicy.INCLUDE;
         return () -> new SortTransformer(includeNaN, copy);
+    }
+
+    /**
+     * Creates a {@link NaNTransformer} based on the
+     * {@code nanPolicy} and data {@code copy} policy.
+     *
+     * <p>The transformer is thread-safe.
+     *
+     * @param nanPolicy NaN policy.
+     * @param copy Set to {@code true} to use a copy of the data.
+     * @return the transformer
+     */
+    static NaNTransformer createNaNTransformer(NaNPolicy nanPolicy, boolean copy) {
+        if (nanPolicy == NaNPolicy.INCLUDE) {
+            return new CopyTransformer(copy);
+        }
+        if (nanPolicy == NaNPolicy.ERROR) {
+            return new NaNErrorTransformer(copy);
+        }
+        // NaNPolicy.EXCLUDE
+        return new SortTransformer(false, copy);
     }
 
     /**
@@ -66,7 +87,7 @@ final class DoubleDataTransformers {
                 // reordering is OK).
                 int j = -1;
                 for (int i = 0; i < n; i++) {
-                    if (k[i] < 0) {
+                    if (data[k[i]] < 0) {
                         j = Math.max(j, k[i]);
                     }
                 }
@@ -105,7 +126,8 @@ final class DoubleDataTransformers {
      * A transformer that moves {@code NaN} to the upper end of the array.
      * Signed zeros are counted.
      */
-    private static final class SortTransformer extends ReplaceSignedZerosTransformer {
+    private static final class SortTransformer extends ReplaceSignedZerosTransformer
+        implements NaNTransformer {
         /** Set to {@code true} to include NaN in the size of the data. */
         private final boolean includeNaN;
         /** Set to {@code true} to use a copy of the data. */
@@ -162,13 +184,33 @@ final class DoubleDataTransformers {
         public int length() {
             return len;
         }
+
+        @Override
+        public double[] apply(double[] data, int[] bounds) {
+            final double[] a = copy ? data.clone() : data;
+            // Sort NaN
+            int end = a.length;
+            for (int i = end; i > 0;) {
+                final double v = a[--i];
+                if (v != v) {
+                    // Move NaN to end
+                    a[i] = a[--end];
+                    a[end] = v;
+                }
+            }
+            bounds[0] = 0;
+            bounds[1] = end;
+            bounds[2] = includeNaN ? a.length : end;
+            return a;
+        }
     }
 
     /**
      * A transformer that errors on {@code NaN}.
      * Signed zeros are counted and restored.
      */
-    private static final class NaNErrorTransformer extends ReplaceSignedZerosTransformer {
+    private static final class NaNErrorTransformer extends ReplaceSignedZerosTransformer
+        implements NaNTransformer {
         /** Set to {@code true} to use a copy of the data. */
         private final boolean copy;
         /** Size of the data. */
@@ -225,6 +267,51 @@ final class DoubleDataTransformers {
         @Override
         public int length() {
             return size;
+        }
+
+        @Override
+        public double[] apply(double[] data, int[] bounds) {
+            // Here we delay copy to not change the data if a NaN is found.
+            // But we commit to a double scan for signed zeros.
+            double[] a = data;
+            // Error on NaN
+            for (int i = a.length; i > 0;) {
+                final double v = a[--i];
+                if (v != v) {
+                    throw new IllegalArgumentException("NaN at " + i);
+                }
+            }
+            bounds[0] = 0;
+            bounds[1] = a.length;
+            bounds[2] = a.length;
+            // No NaNs so copy the data if required
+            if (copy) {
+                a = a.clone();
+            }
+            return a;
+        }
+    }
+
+    /**
+     * A NaN transformer that optionally copies the data.
+     */
+    private static final class CopyTransformer implements NaNTransformer {
+        /** Set to {@code true} to use a copy of the data. */
+        private final boolean copy;
+
+        /**
+         * @param copy Set to {@code true} to use a copy of the data.
+         */
+        private CopyTransformer(boolean copy) {
+            this.copy = copy;
+        }
+
+        @Override
+        public double[] apply(double[] data, int[] bounds) {
+            bounds[0] = 0;
+            bounds[1] = data.length;
+            bounds[2] = data.length;
+            return copy ? data.clone() : data;
         }
     }
 }

@@ -34,6 +34,11 @@ class DoubleDataTransformersTest {
         Assertions.assertThrows(IllegalArgumentException.class, () -> t1.preProcess(a));
         final DoubleDataTransformer t2 = DoubleDataTransformers.createFactory(NaNPolicy.ERROR, true).get();
         Assertions.assertThrows(IllegalArgumentException.class, () -> t2.preProcess(a));
+        final int[] bound = new int[3];
+        final NaNTransformer t3 = DoubleDataTransformers.createNaNTransformer(NaNPolicy.ERROR, false);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> t3.apply(a, bound));
+        final NaNTransformer t4 = DoubleDataTransformers.createNaNTransformer(NaNPolicy.ERROR, true);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> t4.apply(a, bound));
     }
 
     @ParameterizedTest
@@ -41,6 +46,8 @@ class DoubleDataTransformersTest {
     void testNaNError(double[] a) {
         assertSortTransformer(a, DoubleDataTransformers.createFactory(NaNPolicy.ERROR, false).get(), true, false);
         assertSortTransformer(a, DoubleDataTransformers.createFactory(NaNPolicy.ERROR, true).get(), true, true);
+        assertNaNTransformer(a, DoubleDataTransformers.createNaNTransformer(NaNPolicy.ERROR, false), true, false);
+        assertNaNTransformer(a, DoubleDataTransformers.createNaNTransformer(NaNPolicy.ERROR, true), true, true);
     }
 
     @ParameterizedTest
@@ -48,6 +55,8 @@ class DoubleDataTransformersTest {
     void testNaNInclude(double[] a) {
         assertSortTransformer(a, DoubleDataTransformers.createFactory(NaNPolicy.INCLUDE, false).get(), true, false);
         assertSortTransformer(a, DoubleDataTransformers.createFactory(NaNPolicy.INCLUDE, true).get(), true, true);
+        assertNaNTransformer(a, DoubleDataTransformers.createNaNTransformer(NaNPolicy.INCLUDE, false), true, false);
+        assertNaNTransformer(a, DoubleDataTransformers.createNaNTransformer(NaNPolicy.INCLUDE, true), true, true);
     }
 
     @ParameterizedTest
@@ -55,6 +64,8 @@ class DoubleDataTransformersTest {
     void testNaNExclude(double[] a) {
         assertSortTransformer(a, DoubleDataTransformers.createFactory(NaNPolicy.EXCLUDE, false).get(), false, false);
         assertSortTransformer(a, DoubleDataTransformers.createFactory(NaNPolicy.EXCLUDE, true).get(), false, true);
+        assertNaNTransformer(a, DoubleDataTransformers.createNaNTransformer(NaNPolicy.EXCLUDE, false), false, false);
+        assertNaNTransformer(a, DoubleDataTransformers.createNaNTransformer(NaNPolicy.EXCLUDE, true), false, true);
     }
 
     /**
@@ -63,7 +74,7 @@ class DoubleDataTransformersTest {
      * should be correctly ordered.
      *
      * @param a Data.
-     * @param t Trransformer
+     * @param t Transformer.
      * @param includeNaN True if the size should include NaN
      * @param copy True if the pre-processed data should be a copy
      */
@@ -90,6 +101,37 @@ class DoubleDataTransformersTest {
             t.postProcess(b, new int[] {b.length - 1}, 1);
         }
         Assertions.assertArrayEquals(original, b);
+    }
+
+    /**
+     * Assert the NaN transformer allows including or excluding NaN.
+     *
+     * @param a Data.
+     * @param t Transformer.
+     * @param includeNaN True if the size should include NaN
+     * @param copy True if the pre-processed data should be a copy
+     */
+    private static void assertNaNTransformer(double[] a, NaNTransformer t,
+            boolean includeNaN, boolean copy) {
+        final int[] bounds = new int[3];
+        final double[] b = t.apply(a, bounds);
+        if (copy) {
+            Assertions.assertNotSame(a, b);
+        } else {
+            Assertions.assertSame(a, b);
+        }
+        // Count NaN
+        final int nanCount = (int) Arrays.stream(a).filter(Double::isNaN).count();
+        Assertions.assertEquals(0, bounds[0], "from");
+        final int size = a.length - (includeNaN ? 0 : nanCount);
+        Assertions.assertEquals(size, bounds[1], "to");
+        Assertions.assertEquals(size, bounds[2], "Size of data");
+        if (!includeNaN) {
+            // No NaN in the unsorted range
+            for (int i = bounds[0]; i < bounds[1]; i++) {
+                Assertions.assertNotEquals(Double.NaN, b[i]);
+            }
+        }
     }
 
     static Stream<double[]> nanData() {
