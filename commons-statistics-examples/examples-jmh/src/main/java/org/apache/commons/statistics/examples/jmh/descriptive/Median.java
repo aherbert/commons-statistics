@@ -130,7 +130,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot quicksort partition method with equivalent of
@@ -169,7 +169,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a single-pivot quicksort partition method with special NaN/zero handling.
@@ -207,7 +207,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method handling equal keys by Sedgewick.
@@ -245,7 +245,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition handling equal keys(original).
@@ -283,7 +283,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a dual-pivot quicksort partition method handling equal keys.
@@ -321,7 +321,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a dual-pivot quicksort partition method handling equal keys
@@ -360,7 +360,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses a Bentley-McIlroy quicksort partition method handling equal keys by Sedgewick.
@@ -398,7 +398,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant. The quickselect is a single-pivot partition method;
@@ -455,7 +455,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
@@ -512,7 +512,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
@@ -570,7 +570,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
@@ -628,7 +628,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a dual-pivot quickselect partition method;
@@ -685,7 +685,7 @@ public final class Median {
     /**
      * Evaluate the median.
      *
-     * <p>Note: This method may partially sort this input values if configured to
+     * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * @param values Values.

@@ -21,7 +21,6 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-// TODO - support this within the Quantile and Median class
 public enum NaNPolicy {
     /** NaNs are included in the data. */
     INCLUDE,
