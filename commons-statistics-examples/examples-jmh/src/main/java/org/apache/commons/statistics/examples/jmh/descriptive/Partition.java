@@ -227,8 +227,11 @@ final class Partition {
     static final int SORTSELECT_SIZE = 20;
     /** Threshold to use sub-sampling of the range to identify the single pivot.
      * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data to
-     * identify a pivot so that the target element is in the smaller set after partitioning. */
-    private static final int SUB_SAMPLING_SIZE = 600;
+     * identify a pivot so that the target element is in the smaller set after partitioning.
+     * The original FR paper used 600 otherwise reverted to the target index as the pivot.
+     * This implementation uses a sample to identify a median pivot which increases robustness
+     * at small size on a variety of data and allows raising the original FR threshold. */
+    private static final int SUB_SAMPLING_SIZE = 1200;
     /** Increment used for the recursion counter. The counter will overflow to negative when
      * recursion has exceeded the maximum level. The counter is maintained in the upper bits
      * of the dual-pivot control flags. */
