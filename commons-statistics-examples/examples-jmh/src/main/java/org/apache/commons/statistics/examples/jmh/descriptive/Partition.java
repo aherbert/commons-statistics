@@ -232,6 +232,15 @@ final class Partition {
      * This implementation uses a sample to identify a median pivot which increases robustness
      * at small size on a variety of data and allows raising the original FR threshold. */
     private static final int SUB_SAMPLING_SIZE = 1200;
+    /** Threshold to use a random sub-sample for the Floyd-Rivest algorithm.
+     * Note: Random sampling is a redundant overhead on fully random data and will part
+     * destroy sorted data. On data that is structured with repeat patterns, the
+     * shuffle removes side-effects of patterns and stabilises performance. Using
+     * random sampling on small data has little benefit for the overhead so this is
+     * reserved for a size where the impact is minimal on random data and can provide
+     * significant gains over the standard Floyd-Rivest algorithm (where a local sample
+     * is not representative of the entire data to partition). */
+    private static final int RANDOM_SUB_SAMPLING_SIZE = 25000;
     /** Increment used for the recursion counter. The counter will overflow to negative when
      * recursion has exceeded the maximum level. The counter is maintained in the upper bits
      * of the dual-pivot control flags. */
@@ -5639,26 +5648,28 @@ final class Partition {
                 final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(i - (n >> 1));
                 final int ll = Math.max(l, (int) (ka - i * s / n + sd));
                 final int rr = Math.min(r, (int) (ka + (n - i) * s / n + sd));
-                // Sample [l, r] into [ll, rr]
-                final IntUnaryOperator rng = createFastRNG(n, ka);
-                // Shuffle [ll, ka) from [l, ka)
-                if (l < ll) {
-                    for (int ii = ka; ii > ll;) {
-                        // l + rand [0, ii - l + 1) : ii is currently ii+1
-                        final int j = l + rng.applyAsInt(ii - l);
-                        final double t = a[--ii];
-                        a[ii] = a[j];
-                        a[j] = t;
+                if (n > RANDOM_SUB_SAMPLING_SIZE) {
+                    // Create a representative sample from [l, r] into [ll, rr]
+                    final IntUnaryOperator rng = createFastRNG(n, ka);
+                    // Shuffle [ll, ka) from [l, ka)
+                    if (l < ll) {
+                        for (int ii = ka; ii > ll;) {
+                            // l + rand [0, ii - l + 1) : ii is currently ii+1
+                            final int j = l + rng.applyAsInt(ii - l);
+                            final double t = a[--ii];
+                            a[ii] = a[j];
+                            a[j] = t;
+                        }
                     }
-                }
-                // Shuffle (k, rr] from (ka, r]
-                if (rr < r) {
-                    for (int ii = ka; ii < rr;) {
-                        // r - rand [0, r - ii + 1) : ii is currently ii-1
-                        final int j = r - rng.applyAsInt(r - ii);
-                        final double t = a[++ii];
-                        a[ii] = a[j];
-                        a[j] = t;
+                    // Shuffle (k, rr] from (ka, r]
+                    if (rr < r) {
+                        for (int ii = ka; ii < rr;) {
+                            // r - rand [0, r - ii + 1) : ii is currently ii-1
+                            final int j = r - rng.applyAsInt(r - ii);
+                            final double t = a[++ii];
+                            a[ii] = a[j];
+                            a[j] = t;
+                        }
                     }
                 }
                 // Convert ln(n) to 2 * log2(n) for recursion depth
