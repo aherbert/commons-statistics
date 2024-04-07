@@ -19,9 +19,12 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.SplittableRandom;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
+import org.apache.commons.rng.UniformRandomProvider;
+import org.apache.commons.rng.simple.RandomSource;
 
 /**
  * Partition array data.
@@ -189,6 +192,12 @@ final class Partition {
     /** Control flag for random subset sampling. This creates the sample at the end
      * of the data and requires moving regions to reposition around the target k. */
     static final int FLAG_SUBSET_SAMPLING = 0x8;
+    /** Control flag for biased nextInt(n) RNG. */
+    static final int FLAG_BIASED_RANDOM = 0x10;
+    /** Control flag for SplittableRandom RNG. */
+    static final int FLAG_SPLITTABLE_RANDOM = 0x20;
+    /** Control flag for MSWS RNG. */
+    static final int FLAG_MSWS = 0x40;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -5628,7 +5637,7 @@ final class Partition {
                 final int ll = Math.max(l, (int) (ka - i * s / n + sd));
                 final int rr = Math.min(r, (int) (ka + (n - i) * s / n + sd));
                 // Sample [l, r] into [ll, rr]
-                final IntUnaryOperator rng = createRNG(n, ka);
+                final IntUnaryOperator rng = createFastRNG(n, ka);
                 // Shuffle [ll, ka) from [l, ka)
                 if (l < ll) {
                     for (int ii = ka; ii > ll;) {
@@ -8199,15 +8208,42 @@ final class Partition {
 
     /**
      * Creates the source of random numbers in {@code [0, n)}.
+     * This is configurable via the control flags.
      *
      * @param n Data length.
      * @param k Target index.
      * @return the RNG
      */
-    static IntUnaryOperator createRNG(int n, int k) {
-        // Middle-Square Weyl Sequence is fastest int generator
-        //return RandomSource.MSWS.create()::nextInt;
-        // TODO: make generator configurable. Will a SplittableRandom be OK?
+    private IntUnaryOperator createRNG(int n, int k) {
+        // Configurable
+        if ((controlFlags & FLAG_MSWS) != 0) {
+            // Middle-Square Weyl Sequence is fastest int generator
+            final UniformRandomProvider rng = RandomSource.MSWS.create(n * 31L + k);
+            if ((controlFlags & FLAG_BIASED_RANDOM) != 0) {
+                // result = i * [0, 2^32) / 2^32
+                return i -> (int) ((i * Integer.toUnsignedLong(rng.nextInt())) >>> Integer.SIZE);
+            }
+            return rng::nextInt;
+        }
+        if ((controlFlags & FLAG_SPLITTABLE_RANDOM) != 0) {
+            final SplittableRandom rng = new SplittableRandom(n * 31L + k);
+            if ((controlFlags & FLAG_BIASED_RANDOM) != 0) {
+                // result = i * [0, 2^32) / 2^32
+                return i -> (int) ((i * Integer.toUnsignedLong(rng.nextInt())) >>> Integer.SIZE);
+            }
+            return rng::nextInt;
+        }
+        return createFastRNG(n, k);
+    }
+
+    /**
+     * Creates the source of random numbers in {@code [0, n)}.
+     *
+     * @param n Data length.
+     * @param k Target index.
+     * @return the RNG
+     */
+    static IntUnaryOperator createFastRNG(int n, int k) {
         return new Gen(n * 31L + k);
     }
 

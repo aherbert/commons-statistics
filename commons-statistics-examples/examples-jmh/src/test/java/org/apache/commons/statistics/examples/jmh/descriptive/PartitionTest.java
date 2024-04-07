@@ -1576,7 +1576,7 @@ class PartitionTest {
         final int[] a = IntStream.range(0, size).toArray();
         // histogram of index block count for each position
         final long[][] h = new long[size][size >>> shift];
-        final IntUnaryOperator rng = Partition.createRNG(n, k);
+        final IntUnaryOperator rng = Partition.createFastRNG(n, k);
         for (int s = samples; --s >= 0;) {
             // Shuffle the data
             for (int i = a.length; i > 1;) {
