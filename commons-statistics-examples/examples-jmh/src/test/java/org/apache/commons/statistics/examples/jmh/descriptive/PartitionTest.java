@@ -1896,4 +1896,75 @@ class PartitionTest {
             printKSubSamplingSize(0, rs, kv);
         }
     }
+
+    /**
+     * This is not a test. It runs the introselect algorithm with data that may trigger excess
+     * recursion when using the Floyd-Rivest algorithm. Use of a random sample can avoid
+     * excess recursion when the local data is non-representative of the range to partition.
+     */
+    @ParameterizedTest
+    @MethodSource
+    //@Disabled("Used for testing")
+    void testFloydRivestRecursion(int n, int subSamplingSize, PivotingStrategy sp, int controlFlags) {
+        final AbstractDataSource source = new AbstractDataSource() {
+            @Override
+            protected int getLength() {
+                return n;
+            }
+        };
+        source.setRange(0);
+        source.setup();
+        // Target the "median"
+        final int[] k = {source.getLength() >> 1};
+        final Partition p = new Partition(sp, QS, HS, HC, SC, subSamplingSize)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS);
+        p.setControlFlags(controlFlags);
+        TestUtils.printf("%nn=%d, su=%d, %s, flags=%d%n", n, subSamplingSize, sp, controlFlags);
+        for (int i = 0; i < source.size(); i++) {
+            final int index = i;
+            p.setRecursionConsumer(v -> TestUtils.printf("%d: %s%n", index, source.getDataSampleInfo(index)));
+            p.partitionIKBM(source.getDataSample(i), k, 1);
+        }
+    }
+
+    static Stream<Arguments> testFloydRivestRecursion() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+
+        // The following test cases show that using FR is better than median of 3 at avoiding
+        // excess recursion; but not as good as median of 9.
+        // However FR is faster than median of 9 on many datasets (over two-fold on large data).
+        // To mitigate worst-case recursion when using FR we can use a random sub-sample
+        // allowing the speed of FR without the weakness of excess recursion on patterned data.
+
+        // n=5000 : # samples = 402
+        // These use the original FR size of 600.
+
+        // Median-of-3 : 21 cases of excess recursion
+        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_3, 0));
+        // Use FR at length 600 : 8 cases of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, 0));
+        // Use FR at length 600 with median-of-9 : 3 cases of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, 0));
+        // Use FR at length 600 with random sampling : 1 case of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, Partition.FLAG_RANDOM_SAMPLING));
+        // Median-of-9 : 0 cases of excess recursion
+        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_9, 0));
+        // Use FR at length 600 with random sampling and median-of-9 : 0 cases of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING));
+
+        // At the threshold for random sub-sampling
+        // n=25000 : # samples = 462
+
+        // No FR : 0 cases of excess recursion
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Integer.MAX_VALUE,
+            PivotingStrategy.MEDIAN_OF_9, 0));
+        // Use FR : 4 cases of excess recursion
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SUB_SAMPLING_SIZE,
+            PivotingStrategy.MEDIAN_OF_9, 0));
+        // Use FR with random sample : 0 cases of excess recursion
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SUB_SAMPLING_SIZE,
+            PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING));
+
+        return builder.build();
+    }
 }

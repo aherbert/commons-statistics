@@ -231,16 +231,20 @@ final class Partition {
      * The original FR paper used 600 otherwise reverted to the target index as the pivot.
      * This implementation uses a sample to identify a median pivot which increases robustness
      * at small size on a variety of data and allows raising the original FR threshold. */
-    private static final int SUB_SAMPLING_SIZE = 1200;
+    static final int SUB_SAMPLING_SIZE = 1200;
     /** Threshold to use a random sub-sample for the Floyd-Rivest algorithm.
      * Note: Random sampling is a redundant overhead on fully random data and will part
      * destroy sorted data. On data that is structured with repeat patterns, the
-     * shuffle removes side-effects of patterns and stabilises performance. Using
-     * random sampling on small data has little benefit for the overhead so this is
-     * reserved for a size where the impact is minimal on random data and can provide
-     * significant gains over the standard Floyd-Rivest algorithm (where a local sample
-     * is not representative of the entire data to partition). */
-    private static final int RANDOM_SUB_SAMPLING_SIZE = 25000;
+     * shuffle removes side-effects of patterns and stabilises performance where the
+     * standard Floyd-Rivest algorithm (with a non-random local sample) will recurse excessively
+     * and trigger a switch to heapselect. The threshold has been chosen at a level
+     * where average performance over a variety of data distributions shows no performance loss.
+     * Individual distributions may be better or worse at different thresholds. On random
+     * data the impact is minimal; on sorted data the impact is approximately 10%. On data with
+     * patterns that trigger excess recursion this can increase performance by an order of
+     * magnitude. Note that heapselect will still be used to avoid worst-case quickselect
+     * performance if this threshold is not appropriate for the input data. */
+    static final int RANDOM_SUB_SAMPLING_SIZE = 25000;
     /** Increment used for the recursion counter. The counter will overflow to negative when
      * recursion has exceeded the maximum level. The counter is maintained in the upper bits
      * of the dual-pivot control flags. */
@@ -2754,6 +2758,11 @@ final class Partition {
             final int d2 = r - k;
             if (maxDepth == 0 || Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
                 // Too much recursion, or k is close to the end
+                // Note: For testing the Floyd-Rivest algorithm we trigger the recursion
+                // consumer as a signal that FR failed due to a non-representative sample.
+                if (maxDepth == 0) {
+                    recursionConsumer.accept(maxDepth);
+                }
                 heapSelectPair(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
