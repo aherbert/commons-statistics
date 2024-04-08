@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
@@ -206,7 +206,7 @@ public class QuantilePerformance {
         /** Flag to determine if the data size should be logged. This is useful to be
          * able to determine the execution time per sample when the number of samples
          * is dynamically created based on the data length, range and seed. */
-        private static final AtomicBoolean LOG_SIZE = new AtomicBoolean();
+        private static final AtomicInteger LOG_SIZE = new AtomicInteger();
 
         /**
          * The type of distribution.
@@ -261,6 +261,98 @@ public class QuantilePerformance {
             DITHER;
         }
 
+        /**
+         * Sample information. Used to obtain information about samples that may be slow
+         * for a particular partition method, e.g. they use excessive recursion during quickselect.
+         */
+        public static final class SampleInfo {
+            /** Distribution. */
+            private final Distribution dist;
+            /** Modification. */
+            private final Modification mod;
+            /** Length. */
+            private final int n;
+            /** Seed. */
+            private final int m;
+            /** Offset. */
+            private final int o;
+
+            /**
+             * @param dist Distribution.
+             * @param mod Modification.
+             * @param n Length.
+             * @param m Seed.
+             * @param o Offset.
+             */
+            SampleInfo(Distribution dist, Modification mod, int n, int m, int o) {
+                this.dist = dist;
+                this.mod = mod;
+                this.n = n;
+                this.m = m;
+                this.o = o;
+            }
+
+            /**
+             * Create an instance with the specified distribution.
+             *
+             * @param v Value.
+             * @return the instance
+             */
+            SampleInfo with(Distribution v) {
+                return new SampleInfo(v, mod, n, m, o);
+            }
+
+            /**
+             * Create an instance with the specified modification.
+             *
+             * @param v Value.
+             * @return the instance
+             */
+            SampleInfo with(Modification v) {
+                return new SampleInfo(dist, v, n, m, o);
+            }
+
+            /**
+             * @return the distribution
+             */
+            Distribution getDistribution() {
+                return dist;
+            }
+
+            /**
+             * @return the modification
+             */
+            Modification getModification() {
+                return mod;
+            }
+
+            /**
+             * @return the data length
+             */
+            int getN() {
+                return n;
+            }
+
+            /**
+             * @return the distribution seed
+             */
+            int getM() {
+                return m;
+            }
+
+            /**
+             * @return the distribution offset
+             */
+            int getO() {
+                return o;
+            }
+
+            @Override
+            public String toString() {
+                return String.format("%s, %s, n=%d, m=%d, o=%d", dist, mod, n, m, o);
+            }
+        }
+
         /** Order. This is randomized to ensure that successive calls do not partition
          * similar distributions. Randomized per invocation to avoid the JVM 'learning'
          * branch decisions to take in small data sets. */
@@ -313,6 +405,9 @@ public class QuantilePerformance {
          * partitioning methods. */
         private int[][] data;
 
+        /** Sample information. */
+        private List<SampleInfo> sampleInfo;
+
         /**
          * Gets the sample for the given {@code index}.
          *
@@ -348,6 +443,17 @@ public class QuantilePerformance {
          */
         public int getDataSize(int index) {
             return data[index].length;
+        }
+
+        /**
+         * Gets the sample information for the given {@code index}.
+         * Matches the (native) order returned by {@link #getDataSample(int)}.
+         *
+         * @param index Index.
+         * @return the data sample information
+         */
+        SampleInfo getDataSampleInfo(int index) {
+            return sampleInfo.get(index);
         }
 
         /**
@@ -404,6 +510,7 @@ public class QuantilePerformance {
             // Special case for random distribution mode
             if (dist.contains(Distribution.RANDOM) && dist.size() == 1 && samples > 0) {
                 data = new int[samples][];
+                sampleInfo = new ArrayList<>(samples);
                 final int upper = seed > 0 ? seed : Integer.MAX_VALUE;
                 final SharedStateDiscreteSampler s1 = DiscreteUniformSampler.of(rng, 0, upper);
                 final SharedStateDiscreteSampler s2 = DiscreteUniformSampler.of(rng, length, length2);
@@ -413,6 +520,7 @@ public class QuantilePerformance {
                         a[j] = s1.sample();
                     }
                     data[i] = a;
+                    sampleInfo.add(new SampleInfo(Distribution.RANDOM, Modification.COPY, a.length, 0, 0));
                 }
                 return;
             }
@@ -428,6 +536,8 @@ public class QuantilePerformance {
             // Here we use the same seed for parity across methods.
             // Note that most distributions do not use the source of randomness.
             final ArrayList<int[]> sampleData = new ArrayList<>();
+            sampleInfo = new ArrayList<>();
+            final List<SampleInfo> info = new ArrayList<>();
             for (int n = length; n <= length2; n++) {
                 // Note: Large lengths may wish to limit the range of m to limit
                 // the memory required to store the samples. Currently a single
@@ -444,20 +554,27 @@ public class QuantilePerformance {
                 // However this is then used to create double[] data thus requiring an extra
                 // ~16GiB memory for the sample to partition.
                 for (final int m : createSeeds(seed, n)) {
-                    for (final int[] x : createDistributions(dist, rng, n, m, o)) {
+                    final List<int[]> d = createDistributions(dist, rng, n, m, o, info);
+                    for (int i = 0; i < d.size(); i++) {
+                        final int[] x = d.get(i);
+                        final SampleInfo si = info.get(i);
                         if (mod.contains(Modification.COPY)) {
                             // Don't copy! All other methods generate copies
                             // so we can use this in-place.
                             sampleData.add(x);
+                            sampleInfo.add(si.with(Modification.COPY));
                         }
                         if (mod.contains(Modification.REVERSE)) {
                             sampleData.add(reverse(x, 0, n));
+                            sampleInfo.add(si.with(Modification.REVERSE));
                         }
                         if (mod.contains(Modification.REVERSE_FRONT)) {
-                            sampleData.add(reverse(x, 0, n / 2));
+                            sampleData.add(reverse(x, 0, n >>> 1));
+                            sampleInfo.add(si.with(Modification.REVERSE_FRONT));
                         }
                         if (mod.contains(Modification.REVERSE_BACK)) {
-                            sampleData.add(reverse(x, n / 2, n));
+                            sampleData.add(reverse(x, n >>> 1, n));
+                            sampleInfo.add(si.with(Modification.REVERSE_BACK));
                         }
                         // Only sort once
                         if (mod.contains(Modification.SORT) ||
@@ -466,19 +583,22 @@ public class QuantilePerformance {
                             Arrays.sort(y);
                             if (mod.contains(Modification.DESCENDING)) {
                                 sampleData.add(reverse(y, 0, n));
+                                sampleInfo.add(si.with(Modification.DESCENDING));
                             }
                             if (mod.contains(Modification.SORT)) {
                                 sampleData.add(y);
+                                sampleInfo.add(si.with(Modification.SORT));
                             }
                         }
                         if (mod.contains(Modification.DITHER)) {
                             sampleData.add(dither(x));
+                            sampleInfo.add(si.with(Modification.DITHER));
                         }
                     }
                 }
             }
             data = sampleData.toArray(int[][]::new);
-            if (LOG_SIZE.compareAndSet(false, true)) {
+            if (LOG_SIZE.getAndSet(length) != length) {
                 Logger.getLogger(getClass().getName()).info(
                     () -> String.format("Data length: [%d, %d] n=%d", length, length2, data.length));
             }
@@ -575,7 +695,7 @@ public class QuantilePerformance {
             // Bentley-McIlroy use:
             // for: m = 1; m < 2 * n; m *= 2
             // This has been modified here to handle n up to MAX_VALUE
-            // by knowing the count of m to generate.
+            // by knowing the count of m to generate as the power of 2 >= n.
 
             // ceil(log2(n)) + 1 == ceil(log2(2*n)) but handles MAX_VALUE
             int c = 33 - Integer.numberOfLeadingZeros(n - 1);
@@ -588,12 +708,14 @@ public class QuantilePerformance {
         }
 
         /**
-         * Creates the distribution samples. Handles {@code m = 2^31} using {@link Integer#MIN_VALUE}.
+         * Creates the distribution samples. Handles {@code m = 2^31} using
+         * {@link Integer#MIN_VALUE}.
          *
-         * <p>The offset is used to adjust each distribution to generate a different output.
-         * Only applies to distributions that do not use the source of randomness.
+         * <p>The offset is used to adjust each distribution to generate a different
+         * output. Only applies to distributions that do not use the source of randomness.
          *
-         * <p>Distributions that are a constant value at {@code m == 1} are not generated.
+         * <p>Distributions are generated in enum order and recorded in the output {@code sampleDist}.
+         * Distributions that are a constant value at {@code m == 1} are not generated.
          * This case is handled by the plateau distribution which will be a constant value
          * except one occurrence of zero.
          *
@@ -602,14 +724,17 @@ public class QuantilePerformance {
          * @param n Length of the sample.
          * @param m Sample seed (in [1, 2^31])
          * @param o Offset.
+         * @param info Sample information.
          * @return the samples
          */
         private static List<int[]> createDistributions(EnumSet<Distribution> dist,
-                UniformRandomProvider rng, int n, int m, int o) {
-            final ArrayList<int[]> distData = new ArrayList<>(5);
+                UniformRandomProvider rng, int n, int m, int o, List<SampleInfo> info) {
+            final ArrayList<int[]> distData = new ArrayList<>(6);
             int[] x;
+            info.clear();
+            SampleInfo si = new SampleInfo(null, null, n, m, o);
             if (dist.contains(Distribution.SAWTOOTH) && m != 1) {
-                distData.add(x = new int[n]);
+                x = createSample(distData, info, si.with(Distribution.SAWTOOTH));
                 // i % m
                 // Typical case m is a power of 2 so we can use a mask
                 // Use the offset.
@@ -620,7 +745,7 @@ public class QuantilePerformance {
                     }
                 } else {
                     // User input seed. Start at the offset.
-                    int j = o & Integer.MAX_VALUE;
+                    int j = Integer.remainderUnsigned(o, m);
                     for (int i = -1; ++i < n;) {
                         j = j % m;
                         x[i] = j++;
@@ -628,7 +753,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.RANDOM) && m != 1) {
-                distData.add(x = new int[n]);
+                x = createSample(distData, info, si.with(Distribution.RANDOM));
                 // rand() % m
                 // A sampler is faster than rng.nextInt(m); the sampler has an inclusive upper.
                 final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
@@ -637,16 +762,17 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.STAGGER)) {
-                distData.add(x = new int[n]);
+                x = createSample(distData, info, si.with(Distribution.STAGGER));
                 // Overflow safe: (i * m + i) % n
                 final long nn = n;
+                final long oo = Integer.toUnsignedLong(o);
                 for (int i = -1; ++i < n;) {
-                    final int j = i + o;
-                    x[i] = (int) (Integer.toUnsignedLong(j * m + j) % nn);
+                    final long j = i + oo;
+                    x[i] = (int) ((j * m + j) % nn);
                 }
             }
             if (dist.contains(Distribution.PLATEAU)) {
-                distData.add(x = new int[n]);
+                x = createSample(distData, info, si.with(Distribution.PLATEAU));
                 // min(i, m)
                 for (int i = Math.min(n, m); --i >= 0;) {
                     x[i] = i;
@@ -655,7 +781,7 @@ public class QuantilePerformance {
                     x[i] = m;
                 }
                 // Rotate
-                final int n1 = (o & Integer.MAX_VALUE) % n;
+                final int n1 = Integer.remainderUnsigned(o, n);
                 if (n1 != 0) {
                     final int[] a = x.clone();
                     final int n2 = n - n1;
@@ -664,7 +790,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.SHUFFLE) && m != 1) {
-                distData.add(x = new int[n]);
+                x = createSample(distData, info, si.with(Distribution.SHUFFLE));
                 // rand() % m ? (j += 2) : (k += 2)
                 final SharedStateDiscreteSampler s = DiscreteUniformSampler.of(rng, 0, m - 1);
                 for (int i = -1, j = 0, k = 1; ++i < n;) {
@@ -672,7 +798,7 @@ public class QuantilePerformance {
                 }
             }
             if (dist.contains(Distribution.SHARKTOOTH) && m != 1) {
-                distData.add(x = new int[n]);
+                x = createSample(distData, info, si.with(Distribution.SHARKTOOTH));
                 // ascending-descending runs
                 int i = -1;
                 int j = (o & Integer.MAX_VALUE) % m - 1;
@@ -693,6 +819,22 @@ public class QuantilePerformance {
                 }
             }
             return distData;
+        }
+
+        /**
+         * Create the sample array and add it to the {@code data}; add the information to the {@code info}.
+         *
+         * @param data Data samples.
+         * @param info Sample information.
+         * @param s Sample information.
+         * @return the new sample array
+         */
+        private static int[] createSample(ArrayList<int[]> data, List<SampleInfo> info,
+            SampleInfo s) {
+            final int[] x = new int[s.getN()];
+            data.add(x);
+            info.add(s);
+            return x;
         }
 
         /**
