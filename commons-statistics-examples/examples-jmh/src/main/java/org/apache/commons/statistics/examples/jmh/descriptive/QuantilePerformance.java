@@ -154,9 +154,12 @@ public class QuantilePerformance {
     /**
      * Source of {@code double} array data.
      *
-     * <p>This uses the adverse input test suite from figure 1 in Bentley and McIlroy
-     * (1993) Engineering a sort function, SOFTWARE—PRACTICE AND EXPERIENCE, VOL.23(11),
+     * <p>By default this uses the adverse input test suite from figure 1 in Bentley and McIlroy
+     * (1993) Engineering a sort function, Software, practice & experience, Vol.23(11),
      * 1249–1265.
+     *
+     * <p>An alternative set of data is from Valois (2000) Introspective sorting and selection
+     * revisited, Software, practice & experience, Vol.30(6), 617-638.
      *
      * <p>Note
      *
@@ -187,7 +190,7 @@ public class QuantilePerformance {
      *
      * <p>Random distribution mode
      *
-     * <p>The default configuration includes random samples generated as a family of
+     * <p>The default B&M configuration includes random samples generated as a family of
      * single samples created from ranges that are powers of two [0, 2^i). This small set
      * of samples is only a small representation of randomness. For small lengths this may
      * only be a few random samples.
@@ -195,14 +198,18 @@ public class QuantilePerformance {
      * <p>The data source can be changed to generate a fixed number of random samples
      * using a uniform distribution [0, n]. For this purpose the distribution must be set
      * to {@link Distribution#RANDOM} and the {@link #setSamples(int) samples} set above
-     * zero. The length range is ignored. The inclusive upper bound {@code n} is set using
-     * the {@link #setSeed(int) seed}. If this is zero then the default is
-     * {@link Integer#MAX_VALUE}.
+     * zero. The inclusive upper bound {@code n} is set using the {@link #setSeed(int) seed}.
+     * If this is zero then the default is {@link Integer#MAX_VALUE}.
      */
     @State(Scope.Benchmark)
     public abstract static class AbstractDataSource {
         /** All distributions / modifications. */
         private static final String ALL = "all";
+        /** All distributions / modifications in the Bentley and McIlroy test suite. */
+        private static final String BM = "bm";
+        /** All distributions in the Valois test suite. These currently ignore the seed.
+         * To replicate Valois used a fixed seed and the copy modification. */
+        private static final String VALOIS = "valois";
         /** Flag to determine if the data size should be logged. This is useful to be
          * able to determine the execution time per sample when the number of samples
          * is dynamically created based on the data length, range and seed. */
@@ -212,6 +219,8 @@ public class QuantilePerformance {
          * The type of distribution.
          */
         enum Distribution {
+            // B&M (1993)
+
             /** sawtooth distribution. */
             SAWTOOTH,
             /** random distribution. */
@@ -222,6 +231,7 @@ public class QuantilePerformance {
             PLATEAU,
             /** shuffle distribution. */
             SHUFFLE,
+
             /** sharktooth distribution. This is an addition to the original suite of B & M
              * and is not included in the test suite by default and must be specified.
              *
@@ -230,7 +240,22 @@ public class QuantilePerformance {
              * Introspective sorting and selection revisited,
              * Software–Practice and Experience 30, 617–638.
              * This version allows multiple ascending/descending runs in the same length. */
-            SHARKTOOTH;
+            SHARKTOOTH,
+
+            // Valois (2000)
+
+            /** Sorted. */
+            SORTED,
+            /** Permutation of ones and zeros. */
+            ONEZERO,
+            /** Musser's median-of-3 killer. */
+            M3KILLER,
+            /** A sorted sequence rotated left once. */
+            ROTATED,
+            /** Musser's two-faced sequence (the median-of-3 killer with two random permutations). */
+            TWOFACED,
+            /** An ascending then descending sequence. */
+            ORGANPIPE;
         }
 
         /**
@@ -255,7 +280,7 @@ public class QuantilePerformance {
              * <p>This is not included in the test suite by default and must be specified.
              * Note that the Shuffle distribution with a very large seed 'm' is effectively an
              * ascending sequence and will be reversed to descending as part of the original
-             * suite of data. */
+             * B&M suite of data. */
             DESCENDING,
             /** dither modification. */
             DITHER;
@@ -362,13 +387,13 @@ public class QuantilePerformance {
 
         /** Type of data. Multiple types can be specified in the same string using
          * lower/upper case, delimited using ':'. */
-        @Param({ALL})
-        private String distribution = ALL;
+        @Param({BM})
+        private String distribution = BM;
 
         /** Type of data modification. Multiple types can be specified in the same string using
          * lower/upper case, delimited using ':'. */
-        @Param({ALL})
-        private String modification = ALL;
+        @Param({BM})
+        private String modification = BM;
 
         /** Extra range to add to the data length.
          * E.g. Use 1 to force use of odd and even length samples for the median. */
@@ -624,22 +649,44 @@ public class QuantilePerformance {
          * @return the distributions
          */
         private EnumSet<Distribution> getDistributions() {
-            final EnumSet<Distribution> mod = getEnumFromParam(Distribution.class, distribution);
-            // Require the sharktooth distribution to be explicitly requested.
-            if (ALL.equals(distribution)) {
-                mod.remove(Distribution.SHARKTOOTH);
+            EnumSet<Distribution> dist;
+            if (BM.equals(distribution)) {
+                dist = EnumSet.of(
+                    Distribution.SAWTOOTH,
+                    Distribution.RANDOM,
+                    Distribution.STAGGER,
+                    Distribution.PLATEAU,
+                    Distribution.SHUFFLE);
+            } else if (VALOIS.equals(distribution)) {
+                dist = EnumSet.of(
+                    Distribution.RANDOM,
+                    Distribution.SORTED,
+                    Distribution.ONEZERO,
+                    Distribution.M3KILLER,
+                    Distribution.ROTATED,
+                    Distribution.TWOFACED,
+                    Distribution.ORGANPIPE);
+            } else {
+                dist = getEnumFromParam(Distribution.class, distribution);
             }
-            return mod;
+            return dist;
         }
 
         /**
          * @return the modifications
          */
         private EnumSet<Modification> getModifications() {
-            final EnumSet<Modification> mod = getEnumFromParam(Modification.class, modification);
-            // Require the descending modification to be explicitly requested.
-            if (ALL.equals(modification)) {
+            EnumSet<Modification> mod;
+            if (BM.equals(modification)) {
+                // Modifications are from Bentley and McIlroy
+                mod = EnumSet.allOf(Modification.class);
+                // ... except descending
                 mod.remove(Modification.DESCENDING);
+            } else if (VALOIS.equals(modification)) {
+                // For convenience alias Valois to copy
+                mod = EnumSet.of(Modification.COPY);
+            } else {
+                mod = getEnumFromParam(Modification.class, modification);
             }
             return mod;
         }
@@ -733,6 +780,7 @@ public class QuantilePerformance {
             int[] x;
             info.clear();
             SampleInfo si = new SampleInfo(null, null, n, m, o);
+            // B&M (1993)
             if (dist.contains(Distribution.SAWTOOTH) && m != 1) {
                 x = createSample(distData, info, si.with(Distribution.SAWTOOTH));
                 // i % m
@@ -797,6 +845,7 @@ public class QuantilePerformance {
                     x[i] = s.sample() != 0 ? (j += 2) : (k += 2);
                 }
             }
+            // Extra - based on organpipe with a variable ascending/descending length
             if (dist.contains(Distribution.SHARKTOOTH) && m != 1) {
                 x = createSample(distData, info, si.with(Distribution.SHARKTOOTH));
                 // ascending-descending runs
@@ -818,6 +867,63 @@ public class QuantilePerformance {
                     }
                 }
             }
+            // Valois (2000)
+            if (dist.contains(Distribution.SORTED)) {
+                x = createSample(distData, info, si.with(Distribution.SORTED));
+                for (int i = -1; ++i < n;) {
+                    x[i] = i;
+                }
+            }
+            if (dist.contains(Distribution.ONEZERO)) {
+                x = createSample(distData, info, si.with(Distribution.ONEZERO));
+                // permutation of floor(n/2) ones and ceil(n/2) zeroes.
+                // For convenience this uses random ones and zeros to avoid a shuffle
+                // and simply reads bits from integers. The distribution will not
+                // be exactly 50:50.
+                final int end = n & ~31;
+                for (int i = 0; i < end; i += 32) {
+                    int z = rng.nextInt();
+                    for (int j = -1; ++j < 32;) {
+                        x[i + j] = z & 1;
+                        z >>>= 1;
+                    }
+                }
+                for (int i = end; ++i < n;) {
+                    x[i] = rng.nextBoolean() ? 1 : 0;
+                }
+            }
+            if (dist.contains(Distribution.M3KILLER)) {
+                x = createSample(distData, info, si.with(Distribution.M3KILLER));
+                medianOf3Killer(x);
+            }
+            if (dist.contains(Distribution.ROTATED)) {
+                x = createSample(distData, info, si.with(Distribution.ROTATED));
+                // sorted sequence rotated left once
+                // 1, 2, 3, ..., n-1, n, 0
+                for (int i = 0; i < n;) {
+                    x[i] = ++i;
+                }
+                x[n - 1] = 0;
+            }
+            if (dist.contains(Distribution.TWOFACED)) {
+                x = createSample(distData, info, si.with(Distribution.TWOFACED));
+                // Musser's two faced randomly permutes a median-of-3 killer in
+                // 4 floor(log2(n)) through n/2 and n/2 + 4 floor(log2(n)) through n
+                medianOf3Killer(x);
+                final int j = 4 * (31 - Integer.numberOfLeadingZeros(n));
+                final int n2 = n >>> 1;
+                shuffle(rng, x, j, n2);
+                shuffle(rng, x, n2 + j, n);
+            }
+            if (dist.contains(Distribution.ORGANPIPE)) {
+                x = createSample(distData, info, si.with(Distribution.ORGANPIPE));
+                // 0, 1, 2, 3, ..., 3, 2, 1, 0
+                // n should be even to leave two equal values in the middle, otherwise a single
+                for (int i = -1, j = n; ++i <= --j;) {
+                    x[i] = i;
+                    x[j] = i;
+                }
+            }
             return distData;
         }
 
@@ -835,6 +941,32 @@ public class QuantilePerformance {
             data.add(x);
             info.add(s);
             return x;
+        }
+
+        /**
+         * Create Musser's median-of-3 killer sequence (in-place).
+         *
+         * @param x Data.
+         */
+        private static void medianOf3Killer(int[] x) {
+            // This uses the original K_2k sequence from Musser (1997)
+            // Introspective sorting and selection algorithms,
+            // Software—Practice and Experience, 27(8), 983–993.
+            // A true median-of-3 killer requires n to be an even integer divisible by 4,
+            // i.e. k is an even positive integer. This causes a median-of-3 partition
+            // strategy to produce a sequence of n/4 partitions into sub-sequences of
+            // length 2 and n-2, 2 and n-4, ..., 2 and n/2.
+            // 1   2   3   4   5       k-2   k-1  k   k+1 k+2 k+3     2k-1  2k
+            // 1, k+1, 3, k+3, 5, ..., 2k-3, k-1 2k-1  2   4   6  ... 2k-2  2k
+            final int n = x.length;
+            final int k = n >>> 1;
+            for (int i = 0; i < k; i++) {
+                x[i] = ++i;
+                x[i] = k + i;
+            }
+            for (int i = k - 1, j = 2; ++i < n; j += 2) {
+                x[i] = j;
+            }
         }
 
         /**
@@ -870,6 +1002,34 @@ public class QuantilePerformance {
                 a[i] += i % 5;
             }
             return a;
+        }
+
+        /**
+         * Shuffles the entries of the given array.
+         *
+         * @param rng Source of randomness.
+         * @param array Array whose entries will be shuffled (in-place).
+         * @param from Lower-bound (inclusive) of the sub-range.
+         * @param to Upper-bound (exclusive) of the sub-range.
+         */
+        private static void shuffle(UniformRandomProvider rng, int[] array, int from, int to) {
+            final int length = to - from;
+            for (int i = length; i > 1; i--) {
+                swap(array, from + i - 1, from + rng.nextInt(i));
+            }
+        }
+
+        /**
+         * Swaps the two specified elements in the array.
+         *
+         * @param array Array.
+         * @param i First index.
+         * @param j Second index.
+         */
+        private static void swap(int[] array, int i, int j) {
+            final int tmp = array[i];
+            array[i] = array[j];
+            array[j] = tmp;
         }
 
         /**
@@ -3188,11 +3348,6 @@ public class QuantilePerformance {
             bh.consume(fun.apply(source.getData(j), source.getIndices(j)));
         }
     }
-
-    // TODO
-    // Benchmark for EdgeFunctionSource and KSource to be used with k=1 and length
-    // 6 to test the various versions of heapselect with a random index. This prevents
-    // branch prediction learning the heap size (as is possible with the EdgeSource).
 
     /**
      * Benchmark the search of an ordered set of indices.
