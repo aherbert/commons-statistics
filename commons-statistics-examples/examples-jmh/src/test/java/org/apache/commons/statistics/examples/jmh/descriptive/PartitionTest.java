@@ -628,7 +628,8 @@ class PartitionTest {
     void testPartitionIBM(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
-            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_2)
+            .setRecursionConstant(2)
             ::partitionIBM);
     }
 
@@ -637,7 +638,7 @@ class PartitionTest {
     void testPartitionISBM(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
-            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_LEN)
             ::partitionISBM);
     }
 
