@@ -1960,10 +1960,10 @@ class PartitionTest {
         builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Integer.MAX_VALUE,
             PivotingStrategy.MEDIAN_OF_9, 0));
         // Use FR : 4 cases of excess recursion
-        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SUB_SAMPLING_SIZE,
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SELECT_SUB_SAMPLING_SIZE,
             PivotingStrategy.MEDIAN_OF_9, 0));
         // Use FR with random sample : 0 cases of excess recursion
-        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SUB_SAMPLING_SIZE,
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SELECT_SUB_SAMPLING_SIZE,
             PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING));
 
         return builder.build();
