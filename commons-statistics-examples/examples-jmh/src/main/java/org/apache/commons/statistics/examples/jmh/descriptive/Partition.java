@@ -231,7 +231,7 @@ final class Partition {
      * The original FR paper used 600 otherwise reverted to the target index as the pivot.
      * This implementation uses a sample to identify a median pivot which increases robustness
      * at small size on a variety of data and allows raising the original FR threshold. */
-    static final int SUB_SAMPLING_SIZE = 1200;
+    static final int SELECT_SUB_SAMPLING_SIZE = 1200;
     /** Threshold to use a random sub-sample for the Floyd-Rivest algorithm.
      * Note: Random sampling is a redundant overhead on fully random data and will part
      * destroy sorted data. On data that is structured with repeat patterns, the
@@ -359,10 +359,14 @@ final class Partition {
     private PairedKeyStrategy pairedKeyStrategy = PAIRED_KEY_STRATEGY;
 
     /** Multiplication factor {@code m} applied to the length based recursion factor {@code x}.
-     * The recursion is set using {@code m * x + c}. */
+     * The recursion is set using {@code m * x + c}.
+     * Also used for the multiple of the original length to check the sum of the partition length
+     * for poor quickselect partitions. */
     private double recursionMultiple = RECURSION_MULTIPLE;
     /** Constant {@code c} added to the length based recursion factor {@code x}.
-     * The recursion is set using {@code m * x + c}. */
+     * The recursion is set using {@code m * x + c}.
+     * Also used for the number of iterations before checking the partition length has been
+     * reduced by a given factor, e.g. half. */
     private int recursionConstant = RECURSION_CONSTANT;
     /** Compression level for a {@link CompressedIndexSet} (in [1, 31]). */
     private int compression = COMPRESSION_LEVEL;
@@ -407,8 +411,15 @@ final class Partition {
      * Define the strategy for processing 1 or 2 keys.
      */
     enum PairedKeyStrategy {
-        /** Use a dedicated single key method that returns information about (k+1). */
+        /** Use a dedicated single key method that returns information about (k+1).
+         * Use recursion depth to trigger the stopper select. */
         PAIRED_KEYS,
+        /** Use a dedicated single key method that returns information about (k+1).
+         * Use division of the length by 2 every k iterations to trigger the stopper select. */
+        PAIRED_KEYS_2,
+        /** Use a dedicated single key method that returns information about (k+1).
+         * Use a multiple of the sum of the length of all partitions to trigger the stopper select. */
+        PAIRED_KEYS_LEN,
         /** Use a method that accepts two keys. */
         TWO_KEYS,
         /** Use an {@link SearchableInterval} covering the keys. This will reuse a multi-key
@@ -2618,9 +2629,16 @@ final class Partition {
         final int maxDepth = createMaxDepthSinglePivot(right + 1);
         // Handle cases without multiple keys
         if (n == 1) {
+            // Dedicated methods for a single key. These use different strategies
+            // to trigger the stopper on quickselect recursion
             if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
-                // Dedicated method for a single key
                 introselect(part, a, 0, right, k[0], maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS_2) {
+                // This uses the configured recursion constant c.
+                // The length must halve every c iterations.
+                introselect2(part, a, 0, right, k[0]);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS_LEN) {
+                introselect(part, a, 0, right, k[0]);
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
                 // Dedicated method for two keys using the same key
                 introselect(part, a, 0, right, k[0], k[0], maxDepth);
@@ -2637,11 +2655,21 @@ final class Partition {
         }
         // Special case for partition around adjacent indices (for interpolation)
         if (n == 2 && k[0] + 1 == k[1]) {
+            // Dedicated method for a single key, returns information about k+1
             if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS) {
-                // Dedicated method for a single key, returns information about k+1
                 final int p = introselect(part, a, 0, right, k[0], maxDepth);
                 // p <= k to signal k+1 is unsorted, or p+1 is a pivot.
                 // if k is sorted, and p+1 is sorted, k+1 is sorted if k+1 == p.
+                if (p > k[1]) {
+                    selectMinIgnoreZeros(a, k[1], p);
+                }
+            } else if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS_2) {
+                final int p = introselect2(part, a, 0, right, k[0]);
+                if (p > k[1]) {
+                    selectMinIgnoreZeros(a, k[1], p);
+                }
+            } else if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS_LEN) {
+                final int p = introselect(part, a, 0, right, k[0]);
                 if (p > k[1]) {
                     selectMinIgnoreZeros(a, k[1], p);
                 }
@@ -2823,6 +2851,279 @@ final class Partition {
             final int p1 = upper[0];
 
             maxDepth--;
+            if (k < p0) {
+                // The element is in the left partition
+                r = p0 - 1;
+            } else if (k > p1) {
+                // The element is in the right partition
+                l = p1 + 1;
+            } else {
+                // The range contains the element we wanted.
+                // Signal if k+1 is sorted.
+                // This can be true if the pivot was a range [p0, p1]
+                return k < p1 ? k : r;
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that index {@code k} corresponds to its
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * <p>Returns information {@code p} on whether {@code k+1} is sorted.
+     * If {@code p <= k} then {@code k+1} is sorted.
+     * If {@code p > k} then {@code p+1} is a pivot.
+     *
+     * <p>Recursion is monitored by checking the partition is cut in half every {@code c}
+     * iterations where {@code c} is the {@link #setRecursionConstant(int) recursion constant}.
+     * Ideally {@code c} should be a value above 1.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Index.
+     * @return the index {@code p}
+     */
+    private int introselect2(SPEPartition part, double[] a, int left, int right, int k) {
+        int l = left;
+        int r = right;
+        final int[] upper = {0};
+        int check = recursionConstant;
+        int threshold = (right - left) >>> 1;
+        int depth = singlePivotMaxDepth(right - left);
+        while (true) {
+            // length - 1
+            int n = r - l;
+
+            if (--check < 0) {
+                depth -= recursionConstant;
+                if (n > threshold) {
+                    // Did not half the length after c iterations
+                    // Note: For testing we trigger the recursion consumer
+                    recursionConsumer.accept(depth);
+                    heapSelectPair(a, l, r, k, k);
+                    // Last known unsorted value >= k
+                    return r;
+                }
+                check = recursionConstant;
+                threshold >>>= 1;
+            }
+
+            // It is possible to use heapselect when k is close to the end
+            // |l|-----|k|---------|k|--------|r|
+            //  ---d1----
+            //                      -----d2----
+            final int d1 = k - l;
+            final int d2 = r - k;
+            if (Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                heapSelectPair(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            if (n < minQuickSelectSize || Math.min(d1, d2) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            // Pick a pivot and partition
+            int pivot;
+            if (n > subSamplingSize) {
+                // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+                // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+                // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+                ++n;
+                final int ith = k - l + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+                final int ll = Math.max(l, (int) (k - ith * s / n + sd));
+                final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
+                // Optional random sampling
+                if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+                    final IntUnaryOperator rng = createRNG(n, k);
+                    // Shuffle [ll, k) from [l, k)
+                    if (ll > l) {
+                        for (int i = k; i > ll;) {
+                            // l + rand [0, i - l + 1) : i is currently i+1
+                            final int j = l + rng.applyAsInt(i - l);
+                            final double t = a[--i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                    // Shuffle (k, rr] from (k, r]
+                    if (rr < r) {
+                        for (int i = k; i < rr;) {
+                            // r - rand [0, r - i + 1) : i is currently i-1
+                            final int j = r - rng.applyAsInt(r - i);
+                            final double t = a[++i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                }
+                // Sample recursion restarts from [ll, rr]
+                introselect2(part, a, ll, rr, k);
+                pivot = k;
+            } else {
+                // default pivot strategy
+                pivot = pivotingStrategy.pivotIndex(a, l, r);
+            }
+
+            final int p0 = part.partition(a, l, r, pivot, upper);
+            final int p1 = upper[0];
+
+            if (k < p0) {
+                // The element is in the left partition
+                r = p0 - 1;
+            } else if (k > p1) {
+                // The element is in the right partition
+                l = p1 + 1;
+            } else {
+                // The range contains the element we wanted.
+                // Signal if k+1 is sorted.
+                // This can be true if the pivot was a range [p0, p1]
+                return k < p1 ? k : r;
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that index {@code k} corresponds to its
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * <p>Returns information {@code p} on whether {@code k+1} is sorted.
+     * If {@code p <= k} then {@code k+1} is sorted.
+     * If {@code p > k} then {@code p+1} is a pivot.
+     *
+     * <p>Recursion is monitored by checking the sum of partition lengths is less than
+     * {@code m * (r - l)} where {@code m} is the
+     * {@link #setRecursionMultiple(double) recursion multiple}.
+     * Ideally {@code c} should be a value above 1.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Index.
+     * @return the index {@code p}
+     */
+    private int introselect(SPEPartition part, double[] a, int left, int right, int k) {
+        int l = left;
+        int r = right;
+        final int[] upper = {0};
+        // Set the limit on the sum of the length. Since the length is subtracted at the start
+        // of the loop use (1 + recursionMultiple).
+        long limit = (long) ((1 + recursionMultiple) * (right - left));
+        int depth = singlePivotMaxDepth(right - left);
+        while (true) {
+            // length - 1
+            int n = r - l;
+            limit -= n;
+            depth--;
+
+            if (limit < 0) {
+                // Excess total partition length
+                // Note: For testing we trigger the recursion consumer
+                recursionConsumer.accept(depth);
+                heapSelectPair(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            // It is possible to use heapselect when k is close to the end
+            // |l|-----|k|---------|k|--------|r|
+            //  ---d1----
+            //                      -----d2----
+            final int d1 = k - l;
+            final int d2 = r - k;
+            if (Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                heapSelectPair(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            if (n < minQuickSelectSize || Math.min(d1, d2) < sortSelectConstant) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            // Pick a pivot and partition
+            int pivot;
+            if (n > subSamplingSize) {
+                // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+                // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+                // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+                ++n;
+                final int ith = k - l + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+                final int ll = Math.max(l, (int) (k - ith * s / n + sd));
+                final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
+                // Optional random sampling
+                if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+                    final IntUnaryOperator rng = createRNG(n, k);
+                    // Shuffle [ll, k) from [l, k)
+                    if (ll > l) {
+                        for (int i = k; i > ll;) {
+                            // l + rand [0, i - l + 1) : i is currently i+1
+                            final int j = l + rng.applyAsInt(i - l);
+                            final double t = a[--i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                    // Shuffle (k, rr] from (k, r]
+                    if (rr < r) {
+                        for (int i = k; i < rr;) {
+                            // r - rand [0, r - i + 1) : i is currently i-1
+                            final int j = r - rng.applyAsInt(r - i);
+                            final double t = a[++i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                }
+                // Sample recursion restarts from [ll, rr]
+                introselect(part, a, ll, rr, k);
+                pivot = k;
+            } else {
+                // default pivot strategy
+                pivot = pivotingStrategy.pivotIndex(a, l, r);
+            }
+
+            final int p0 = part.partition(a, l, r, pivot, upper);
+            final int p1 = upper[0];
+
             if (k < p0) {
                 // The element is in the left partition
                 r = p0 - 1;
@@ -5645,7 +5946,7 @@ final class Partition {
 
             // Pick a pivot and partition
             int pivot;
-            if (r - l > SUB_SAMPLING_SIZE) {
+            if (r - l > SELECT_SUB_SAMPLING_SIZE) {
                 // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
                 // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
                 // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
@@ -5768,7 +6069,7 @@ final class Partition {
         final int[] upper = {0, 0, 0};
         while (true) {
             final int n = r - l;
-            if (kb - ka < SORTSELECT_SIZE && n > SUB_SAMPLING_SIZE) {
+            if (kb - ka < SORTSELECT_SIZE) {
                 // Switch to single-pivot mode with Floyd-Rivest sub-sampling
                 select(a, l, r, ka, kb, singlePivotMaxDepth(n));
                 return;
