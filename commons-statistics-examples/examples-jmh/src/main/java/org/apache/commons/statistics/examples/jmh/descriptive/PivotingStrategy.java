@@ -29,17 +29,17 @@ enum PivotingStrategy {
     CENTRAL {
         @Override
         int pivotIndex(double[] data, int left, int right) {
-            return (left + right) >>> 1;
+            return med(left, right);
         }
 
         @Override
         int pivotIndex(int[] data, int left, int right) {
-            return (left + right) >>> 1;
+            return med(left, right);
         }
 
         @Override
         int[] getSampledIndices(int left, int right) {
-            return new int[] {(left + right) >>> 1};
+            return new int[] {med(left, right)};
         }
 
         @Override
@@ -53,17 +53,17 @@ enum PivotingStrategy {
     MEDIAN_OF_3 {
         @Override
         int pivotIndex(double[] data, int left, int right) {
-            return med3(data, left, (left + right) >>> 1, right);
+            return med3(data, left, med(left, right), right);
         }
 
         @Override
         int pivotIndex(int[] data, int left, int right) {
-            return med3(data, left, (left + right) >>> 1, right);
+            return med3(data, left, med(left, right), right);
         }
 
         @Override
         int[] getSampledIndices(int left, int right) {
-            return new int[] {left, (left + right) >>> 1, right};
+            return new int[] {left, med(left, right), right};
         }
 
         @Override
@@ -78,7 +78,7 @@ enum PivotingStrategy {
         @Override
         int pivotIndex(double[] data, int left, int right) {
             final int s = (right - left) >>> 3;
-            final int m = (left + right) >>> 1;
+            final int m = med(left, right);
             final int x = med3(data, left, left + s, left + (s << 1));
             final double a = data[x];
             final int y = med3(data, m - s, m, m + s);
@@ -90,7 +90,7 @@ enum PivotingStrategy {
         @Override
         int pivotIndex(int[] data, int left, int right) {
             final int s = (right - left) >>> 3;
-            final int m = (left + right) >>> 1;
+            final int m = med(left, right);
             final int x = med3(data, left, left + s, left + (s << 1));
             final double a = data[x];
             final int y = med3(data, m - s, m, m + s);
@@ -102,7 +102,7 @@ enum PivotingStrategy {
         @Override
         int[] getSampledIndices(int left, int right) {
             final int s = (right - left) >>> 3;
-            final int m = (left + right) >>> 1;
+            final int m = med(left, right);
             return new int[] {
                 left, left + s, left + (s << 1),
                 m - s, m, m + s,
@@ -168,6 +168,8 @@ enum PivotingStrategy {
             // This is safe if len >= 4.
             final int len = right - left;
             final int sixth = 1 + (len >>> 3) + (len >>> 5) + (len >>> 6);
+            // Note: No use of median(left, right). This is not targeted by median of 3 killer
+            // input as it does not use the end points left and right.
             final int p3 = left + (len >>> 1);
             final int p2 = p3 - sixth;
             final int p1 = p2 - sixth;
@@ -263,6 +265,24 @@ enum PivotingStrategy {
     static final int SORT = 0x2;
     /** Size to pivot around the median of 9. */
     private static final int MED_9 = 40;
+
+    /**
+     * Compute the median index.
+     *
+     * <p>Note: This intentionally uses the median as {@code left + (right - left + 1) / 2}.
+     * If the median is {@code left + (right - left) / 2} then the median is 1 position lower
+     * for even length due to using an inclusive right bound. This median is not as affected
+     * by median-of-3 killer sequences. For benchmarking it is useful to maintain the classic
+     * median-of-3 behaviour to be able to trigger worst case performance on input
+     * used in the literature.
+     *
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @return the median index
+     */
+    private static int med(int left, int right) {
+        return (left + right + 1) >>> 1;
+    }
 
     /**
      * Find the median index of 3.
