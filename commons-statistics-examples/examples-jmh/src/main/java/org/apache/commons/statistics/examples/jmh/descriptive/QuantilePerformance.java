@@ -155,11 +155,11 @@ public class QuantilePerformance {
      * Source of {@code double} array data.
      *
      * <p>By default this uses the adverse input test suite from figure 1 in Bentley and McIlroy
-     * (1993) Engineering a sort function, Software, practice & experience, Vol.23(11),
+     * (1993) Engineering a sort function, Software, practice and experience, Vol.23(11),
      * 1249–1265.
      *
      * <p>An alternative set of data is from Valois (2000) Introspective sorting and selection
-     * revisited, Software, practice & experience, Vol.30(6), 617-638.
+     * revisited, Software, practice and experience, Vol.30(6), 617-638.
      *
      * <p>Note
      *
@@ -190,7 +190,7 @@ public class QuantilePerformance {
      *
      * <p>Random distribution mode
      *
-     * <p>The default B&M configuration includes random samples generated as a family of
+     * <p>The default BM configuration includes random samples generated as a family of
      * single samples created from ranges that are powers of two [0, 2^i). This small set
      * of samples is only a small representation of randomness. For small lengths this may
      * only be a few random samples.
