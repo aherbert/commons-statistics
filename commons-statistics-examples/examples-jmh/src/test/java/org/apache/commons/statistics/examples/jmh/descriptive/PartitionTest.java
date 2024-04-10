@@ -1904,7 +1904,7 @@ class PartitionTest {
      */
     @ParameterizedTest
     @MethodSource
-    //@Disabled("Used for testing")
+    @Disabled("Used for testing")
     void testFloydRivestRecursion(int n, int subSamplingSize, PivotingStrategy sp, int controlFlags) {
         final AbstractDataSource source = new AbstractDataSource() {
             @Override
