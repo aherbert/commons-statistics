@@ -321,7 +321,7 @@ final class Selection {
         }
         if (n == 1) {
             checkIndex(left, right, k[0]);
-            Partition.select(a, left, right, k[0], k[0], Partition.singlePivotMaxDepth(right - left));
+            Partition.select(a, left, right, k[0], k[0]);
             return -1;
         }
 
@@ -336,7 +336,7 @@ final class Selection {
         final int k1 = keys.left();
         final int kn = keys.right();
         if (kn - k1 < Partition.SORTSELECT_SIZE) {
-            Partition.select(a, left, right, k1, kn, Partition.singlePivotMaxDepth(right - left));
+            Partition.select(a, left, right, k1, kn);
         } else {
             // Dual-pivot mode with small range sort length configured using index density
             Partition.select(a, left, right, keys,
