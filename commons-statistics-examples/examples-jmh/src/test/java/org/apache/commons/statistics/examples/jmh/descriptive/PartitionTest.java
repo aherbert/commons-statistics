@@ -629,7 +629,8 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_2)
-            .setRecursionConstant(2)
+            .setRecursionMultiple(5)
+            .setRecursionConstant(1)
             ::partitionIBM);
     }
 
@@ -639,6 +640,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_LEN)
+            .setRecursionMultiple(2)
             ::partitionISBM);
     }
 
@@ -1906,7 +1908,8 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource
     @Disabled("Used for testing")
-    void testFloydRivestRecursion(int n, int subSamplingSize, PivotingStrategy sp, int controlFlags) {
+    void testFloydRivestRecursion(int n, int subSamplingSize, PivotingStrategy sp, int controlFlags,
+        PairedKeyStrategy pk, double recursionMultiple, int recursionConstant) {
         final AbstractDataSource source = new AbstractDataSource() {
             @Override
             protected int getLength() {
@@ -1918,7 +1921,9 @@ class PartitionTest {
         // Target the "median"
         final int[] k = {source.getLength() >> 1};
         final Partition p = new Partition(sp, QS, HS, HC, SC, subSamplingSize)
-            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS);
+            .setPairedKeyStrategy(pk)
+            .setRecursionMultiple(recursionMultiple)
+            .setRecursionConstant(recursionConstant);
         p.setControlFlags(controlFlags);
         TestUtils.printf("%nn=%d, su=%d, %s, flags=%d%n", n, subSamplingSize, sp, controlFlags);
         for (int i = 0; i < source.size(); i++) {
@@ -1940,31 +1945,62 @@ class PartitionTest {
         // n=5000 : # samples = 402
         // These use the original FR size of 600.
 
-        // Median-of-3 : 21 cases of excess recursion
-        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_3, 0));
+        // Recursion stopper using max depth
+
+        // Median-of-3 : 25 cases of excess recursion
+        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_3, 0, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
         // Use FR at length 600 : 8 cases of excess recursion
-        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, 0));
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, 0, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
         // Use FR at length 600 with median-of-9 : 3 cases of excess recursion
-        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, 0));
-        // Use FR at length 600 with random sampling : 1 case of excess recursion
-        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, Partition.FLAG_RANDOM_SAMPLING));
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
+        // Use FR at length 600 with random sampling : 2 case of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, Partition.FLAG_RANDOM_SAMPLING, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
         // Median-of-9 : 0 cases of excess recursion
-        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_9, 0));
+        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
         // Use FR at length 600 with random sampling and median-of-9 : 0 cases of excess recursion
-        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING));
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
 
         // At the threshold for random sub-sampling
         // n=25000 : # samples = 462
 
         // No FR : 0 cases of excess recursion
         builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Integer.MAX_VALUE,
-            PivotingStrategy.MEDIAN_OF_9, 0));
-        // Use FR : 4 cases of excess recursion
+            PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
+        // Use FR : 3 cases of excess recursion
         builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SELECT_SUB_SAMPLING_SIZE,
-            PivotingStrategy.MEDIAN_OF_9, 0));
+            PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
         // Use FR with random sample : 0 cases of excess recursion
         builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SELECT_SUB_SAMPLING_SIZE,
-            PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING));
+            PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING, PairedKeyStrategy.PAIRED_KEYS, 2, 0));
+
+        // Recursion stopper using halving after c iterations.
+        // Use c=5 for 98% confidence the length will half.
+
+        // Median-of-3 : 27 cases of excess recursion
+        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_3, 0, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Use FR at length 600 : 27 cases of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, 0, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Use FR at length 600 with median-of-9 : 10 cases of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Use FR at length 600 with random sampling : 0 case of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_3, Partition.FLAG_RANDOM_SAMPLING, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Median-of-9 : 0 cases of excess recursion
+        builder.add(Arguments.of(5000, Integer.MAX_VALUE, PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Use FR at length 600 with random sampling and median-of-9 : 0 cases of excess recursion
+        builder.add(Arguments.of(5000, 600, PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+
+        // At the threshold for random sub-sampling
+        // n=25000 : # samples = 462
+
+        // No FR : 0 cases of excess recursion
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Integer.MAX_VALUE,
+            PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Use FR : 25 cases of excess recursion
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SELECT_SUB_SAMPLING_SIZE,
+            PivotingStrategy.MEDIAN_OF_9, 0, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
+        // Use FR with random sample : 0 cases of excess recursion
+        builder.add(Arguments.of(Partition.RANDOM_SUB_SAMPLING_SIZE, Partition.SELECT_SUB_SAMPLING_SIZE,
+            PivotingStrategy.MEDIAN_OF_9, Partition.FLAG_RANDOM_SAMPLING, PairedKeyStrategy.PAIRED_KEYS_2, 5, 1));
 
         return builder.build();
     }

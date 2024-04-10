@@ -69,6 +69,9 @@ import org.apache.commons.rng.simple.RandomSource;
  * on a single pivot. This was extended by Kiwiel to partition using two pivots either side
  * of {@code k} with high probability [5].
  *
+ * <p>Confidence bounds for the number of iterations to reduce a partition length by 2<sup>-x</sup>
+ * are provided in Valois [6].
+ *
  * <ol>
  * <li>
  * Hoare (1961)
@@ -89,6 +92,10 @@ import org.apache.commons.rng.simple.RandomSource;
  * <li>Kiwiel (2005)
  * On Floyd and Rivest's SELECT algorithm.
  * Theoretical Computer Science 347, 214-238.
+ * <li>Valois (2000)
+ * Introspective sorting and selection revisited
+ * <a href="https://doi.org/10.1002/(SICI)1097-024X(200005)30:6%3C617::AID-SPE311%3E3.0.CO;2-A">
+ * Software: Practice and Experience 30, 617-638.</a>
  * <li><a href="https://en.wikipedia.org/wiki/Quickselect">Quickselect (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introselect">Introselect (Wikipedia)</a>
@@ -2885,9 +2892,23 @@ final class Partition {
      * If {@code p <= k} then {@code k+1} is sorted.
      * If {@code p > k} then {@code p+1} is a pivot.
      *
-     * <p>Recursion is monitored by checking the partition is cut in half every {@code c}
-     * iterations where {@code c} is the {@link #setRecursionConstant(int) recursion constant}.
-     * Ideally {@code c} should be a value above 1.
+     * <p>Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> every
+     * {@code c} iterations where {@code x} is the
+     * {@link #setRecursionConstant(int) recursion constant} and {@code c} is the
+     * {@link #setRecursionMultiple(double) recursion multiple} (variables reused for convenience).
+     * Confidence bounds for dividing a length by 2<sup>-x</sup> are provided in Valois (2000)
+     * as {@code floor((6/5)x) + b}:
+     * <pre>
+     * b  confidence (%)
+     * 2  76.56
+     * 3  92.92
+     * 4  97.83
+     * 5  99.33
+     * 6  99.79
+     * </pre>
+     * <p>Ideally {@code c >= 3} using {@code x = 1}. E.g. We can use 3 iterations to be 76%
+     * confident the sequence will divide in half; or 7 iterations to be 99% confident the
+     * sequence will divide into a quarter.
      *
      * @param part Partition function.
      * @param a Values.
@@ -2900,15 +2921,15 @@ final class Partition {
         int l = left;
         int r = right;
         final int[] upper = {0};
-        int check = recursionConstant;
-        int threshold = (right - left) >>> 1;
+        int check = (int) recursionMultiple;
+        int threshold = (right - left) >>> recursionConstant;
         int depth = singlePivotMaxDepth(right - left);
         while (true) {
             // length - 1
             int n = r - l;
 
             if (--check < 0) {
-                depth -= recursionConstant;
+                depth -= recursionMultiple;
                 if (n > threshold) {
                     // Did not half the length after c iterations
                     // Note: For testing we trigger the recursion consumer
@@ -2917,8 +2938,8 @@ final class Partition {
                     // Last known unsorted value >= k
                     return r;
                 }
-                check = recursionConstant;
-                threshold >>>= 1;
+                check = (int) recursionMultiple;
+                threshold >>>= recursionConstant;
             }
 
             // It is possible to use heapselect when k is close to the end
