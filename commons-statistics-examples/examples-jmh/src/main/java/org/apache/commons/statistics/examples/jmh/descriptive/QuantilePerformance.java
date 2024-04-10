@@ -2448,6 +2448,18 @@ public class QuantilePerformance {
                     Partition.select(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
+            } else if (name.startsWith(HEAP_SELECT)) {
+                // Used to test heapselect as the stopper for quickselect
+                function = (data, indices) -> {
+                    int min = indices[indices.length - 1];
+                    int max = min;
+                    for (int i = indices.length - 1; --i >= 0;) {
+                        min = Math.min(min, indices[i]);
+                        max = Math.max(max, indices[i]);
+                    }
+                    Partition.heapSelectRange(data, 0, data.length - 1, min, max);
+                    return extractIndices(data, indices);
+                };
             }
             if (function == null) {
                 throw new IllegalStateException("Unknown selector function: " + name);
