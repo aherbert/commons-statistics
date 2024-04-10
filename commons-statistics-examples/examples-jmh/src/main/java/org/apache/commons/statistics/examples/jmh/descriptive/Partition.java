@@ -2908,7 +2908,8 @@ final class Partition {
      * </pre>
      * <p>Ideally {@code c >= 3} using {@code x = 1}. E.g. We can use 3 iterations to be 76%
      * confident the sequence will divide in half; or 7 iterations to be 99% confident the
-     * sequence will divide into a quarter.
+     * sequence will divide into a quarter. A larger factor {@code b} reduces the sensitivity
+     * of introspection.
      *
      * @param part Partition function.
      * @param a Values.
@@ -2921,25 +2922,33 @@ final class Partition {
         int l = left;
         int r = right;
         final int[] upper = {0};
-        int check = (int) recursionMultiple;
+        int counter = (int) recursionMultiple;
         int threshold = (right - left) >>> recursionConstant;
         int depth = singlePivotMaxDepth(right - left);
         while (true) {
             // length - 1
             int n = r - l;
+            depth--;
 
-            if (--check < 0) {
-                depth -= recursionMultiple;
+            if (--counter < 0) {
                 if (n > threshold) {
-                    // Did not half the length after c iterations
+                    // Did not reduce the length after set number of iterations.
+                    // Here riselect (Valois (2000)) would use random points to choose the pivot
+                    // to inject entropy and restart. This continues until the sum of the partition
+                    // lengths is too high (twice the original length). Here we just switch.
+
                     // Note: For testing we trigger the recursion consumer
                     recursionConsumer.accept(depth);
                     heapSelectPair(a, l, r, k, k);
                     // Last known unsorted value >= k
                     return r;
                 }
-                check = (int) recursionMultiple;
-                threshold >>>= recursionConstant;
+                // Once the confidence has been achieved we use (6/5)x with x=1.
+                // So check every 5/6 iterations that the length is halving.
+                if (counter == -5) {
+                    counter = 1;
+                }
+                threshold >>>= 1;
             }
 
             // It is possible to use heapselect when k is close to the end
