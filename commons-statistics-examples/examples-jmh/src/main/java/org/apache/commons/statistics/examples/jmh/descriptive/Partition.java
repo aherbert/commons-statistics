@@ -5894,13 +5894,13 @@ final class Partition {
         // If the keys saturate the range then partitioning -> sorting.
 
         if (n == 1) {
-            select(a, 0, length - 1, k[0], k[0], singlePivotMaxDepth(length));
+            select(a, 0, length - 1, k[0], k[0]);
             return;
         }
         if (n == 2 && Math.abs(k[0] - k[1]) < SORTSELECT_SIZE) {
             final int k1 = Math.min(k[0], k[1]);
             final int kn = Math.max(k[0], k[1]);
-            select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
+            select(a, 0, length - 1, k1, kn);
             return;
         }
 
@@ -5915,7 +5915,7 @@ final class Partition {
         // Use the sort select size. Any split of keys separated by this distance
         // will be finished on the next iteration.
         if (kn - k1 < SORTSELECT_SIZE) {
-            select(a, 0, length - 1, k1, kn, singlePivotMaxDepth(length));
+            select(a, 0, length - 1, k1, kn);
             return;
         }
 
@@ -5952,13 +5952,18 @@ final class Partition {
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
      * @param ka First key of interest.
      * @param kb Last key of interest.
-     * @param maxDepth Maximum depth for recursion.
      */
     // package-private for benchmarking
-    static void select(double[] a, int left, int right, int ka, int kb, int maxDepth) {
+    static void select(double[] a, int left, int right, int ka, int kb) {
         int l = left;
         int r = right;
         final int[] upper = {0};
+        // Ignore maxDepth
+        // Limit recursion using the sum of partition lengths.
+        // The sum must not exceed 2 * length so count down to zero using half of (r - l).
+        // Since (r - l)/2 is subtracted at the start of the loop add it here.
+        //int limit = r - l + ((r - l) >> 1);
+        int maxDepth = singlePivotMaxDepth(r - l);
         while (true) {
             // select when ka and kb are close to the same end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
@@ -5966,9 +5971,9 @@ final class Partition {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
-            // Q. Is recursion check required when using Floyd-Rivest sampling?
-            // This condition is never hit using the B&M test data.
-            if (maxDepth == 0) {
+            if (--maxDepth < 0) {
+            //limit -= (r - l) >> 1;
+            //if (limit < 0) {
                 // quickselect convergence is poor, switch to heap select
                 heapSelectRange2(a, l, r, ka, kb);
                 return;
@@ -6013,7 +6018,7 @@ final class Partition {
                     }
                 }
                 // Convert ln(n) to 2 * log2(n) for recursion depth
-                select(a, ll, rr, ka, ka, (int) (z * LOG2_E * 2));
+                select(a, ll, rr, ka, ka);
                 pivot = ka;
             } else {
                 // default pivot strategy
@@ -6029,7 +6034,6 @@ final class Partition {
             // |l|--|ka|kkkk|kb|--|P|-------------------|r|
             // |l|----------------|P|--|ka|kkk|kb|------|r|
             // |l|-----------|ka|k|P|k|kb|--------------|r|
-            maxDepth--;
             if (kb < p0) {
                 // Entirely on left side
                 r = p0 - 1;
@@ -6083,7 +6087,6 @@ final class Partition {
      */
     // package-private for benchmarking
     static void select(double[] a, int left, int right, UpdatingInterval k, int flags) {
-        //int maxDepth, int ss) {
         // Inline code using the defaults.
         // Branching uses left/middle/right.
         // This allows branch prediction to track that after a split then the next section
@@ -6101,7 +6104,7 @@ final class Partition {
             final int n = r - l;
             if (kb - ka < SORTSELECT_SIZE) {
                 // Switch to single-pivot mode with Floyd-Rivest sub-sampling
-                select(a, l, r, ka, kb, singlePivotMaxDepth(n));
+                select(a, l, r, ka, kb);
                 return;
             }
             // Select when ka and kb are close to the same end,

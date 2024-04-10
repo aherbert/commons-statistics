@@ -1533,7 +1533,7 @@ class PartitionTest {
     void testSelectRange(double[] a, int k1, int kn) {
         final double[] copy = a.clone();
         Arrays.sort(copy);
-        Partition.select(a, 0, a.length - 1, k1, kn, 1000000);
+        Partition.select(a, 0, a.length - 1, k1, kn);
         for (int i = k1; i <= kn; i++) {
             Assertions.assertEquals(copy[i], a[i]);
         }
