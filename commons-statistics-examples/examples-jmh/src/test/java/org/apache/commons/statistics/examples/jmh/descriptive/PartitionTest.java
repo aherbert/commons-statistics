@@ -1967,4 +1967,42 @@ class PartitionTest {
 
         return builder.build();
     }
+
+    @Test
+    @Disabled("Used for testing")
+    void testConfiguredPartition() {
+        final AbstractDataSource source = new AbstractDataSource() {
+            @Override
+            protected int getLength() {
+                return 65536;
+            }
+        };
+        source.setRange(0);
+
+        // Uncomment for Valois
+        //source.setDistribution(
+        //    Distribution.RANDOM,
+        //    Distribution.SORTED,
+        //    Distribution.ONEZERO,
+        //    Distribution.M3KILLER,
+        //    Distribution.ROTATED,
+        //    Distribution.TWOFACED,
+        //    Distribution.ORGANPIPE
+        //);
+        //source.setModification(Modification.COPY);
+        //source.setSeed(1);
+
+        source.setup();
+        // Target the "median"
+        final int[] k = {source.getLength() >> 1};
+        final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_3, QS, HS, HC, SC, Integer.MAX_VALUE)
+            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setRecursionMultiple(2);
+        for (int i = 0; i < source.size(); i++) {
+            final int index = i;
+            p.setRecursionConsumer(v -> TestUtils.printf("%d: %s%n", index, source.getDataSampleInfo(index)));
+            //p.partitionISP(source.getDataSample(i), k, 1);
+            p.partitionIKBM(source.getDataSample(i), k, 1);
+        }
+    }
 }
