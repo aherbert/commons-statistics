@@ -879,6 +879,17 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionLKBMMoveSample(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Only uses sortselect so ensure this is set
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, 2, SU)
+            .setControlFlags(Partition.FLAG_MOVE_SAMPLE)
+            ::partitionLKBM);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
