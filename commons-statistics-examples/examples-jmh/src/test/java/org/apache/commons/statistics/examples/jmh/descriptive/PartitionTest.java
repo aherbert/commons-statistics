@@ -869,6 +869,16 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionLKBM(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Only uses sortselect so ensure this is set
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, 2, SU)
+            ::partitionLKBM);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
@@ -946,7 +956,7 @@ class PartitionTest {
         UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
         // Sizes above and below the threshold for partitioning.
         // The largest size should trigger single-pivot sub-sampling for pivot selection.
-        for (final int size : new int[] {5, 50, SU + 10}) {
+        for (final int size : new int[] {5, 47, SU + 10}) {
             final double[] values = IntStream.range(0, size).asDoubleStream().toArray();
             final double[] zeros = values.clone();
             Arrays.fill(zeros, 0, size >>> 2, -0.0);

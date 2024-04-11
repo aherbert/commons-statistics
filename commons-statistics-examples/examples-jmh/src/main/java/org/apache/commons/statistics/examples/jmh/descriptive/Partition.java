@@ -5814,6 +5814,191 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses a quickselect with Bentley-McIlroy quicksort partition method by Kiwiel;
+     * and median of medians algorithm for pivot selection.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionLKBM(double[] data, int[] k, int n) {
+        linearSelect(Partition::partitionKBM, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>Uses the median of medians algorithm for pivot selection.
+     *
+     * <p>WARNING: Currently this only supports a single or range of {@code k}.
+     * For parity with other select methods this accepts an array {@code k} and pre/post
+     * processes the data for NaN and signed zeros.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    private void linearSelect(SPEPartition part, double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            if (n != 0) {
+                final int ka = Math.min(k[0], k[n - 1]);
+                final int kb = Math.max(k[0], k[n - 1]);
+                linearSelect(part, a, 0, end - 1, ka, kb);
+            }
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code [ka, kb]} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < ka] <= data[ka] <= data[kb] <= data[kb < i]
+     * }</pre>
+     *
+     * <p>This function accepts indices {@code [ka, kb]} that define the
+     * range of indices to partition. It is expected that the range is small.
+     *
+     * <p>Uses quickselect with median-of-medians pivot selection to provide Order(n)
+     * performance.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka First key of interest.
+     * @param kb Last key of interest.
+     * @see <a href="https://en.wikipedia.org/wiki/Median_of_medians">Median of medians (Wikipedia)</a>
+     */
+    private void linearSelect(SPEPartition part, double[] a, int left, int right, int ka, int kb) {
+        int l = left;
+        int r = right;
+        final int[] upper = {0};
+        while (true) {
+            // select when ka and kb are close to the same end
+            // |l|-----|ka|kkkkkkkk|kb|------|r|
+            if (Math.min(kb - l, r - ka) < sortSelectConstant) {
+                sortSelectRange(a, l, r, ka, kb);
+                return;
+            }
+            final int pivot = pivotMedianOfMedians(part, a, l, r);
+            final int p0 = part.partition(a, l, r, pivot, upper);
+            final int p1 = upper[0];
+
+            // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
+            //                   p0 p1
+            // |l|--|ka|kkkk|kb|--|P|-------------------|r|
+            // |l|----------------|P|--|ka|kkk|kb|------|r|
+            // |l|-----------|ka|k|P|k|kb|--------------|r|
+            if (kb < p0) {
+                // Entirely on left side
+                r = p0 - 1;
+            } else if (ka > p1) {
+                // Entirely on right side
+                l = p1 + 1;
+            } else {
+                // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
+                if (ka < p0) {
+                    sortSelectRight(a, l, p0, ka);
+                }
+                if (kb > p1) {
+                    sortSelectLeft(a, p1, r, kb);
+                }
+                return;
+            }
+        }
+    }
+
+    /**
+     * Compute the median of medians pivot. Divides the length {@code n} into groups
+     * of at most 5 elements, computes the median of each group, and the median of the
+     * {@code n/5} medians. Assumes {@code l <= r}.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param l Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param r Upper bound of data (inclusive, assumed to be strictly positive).
+     * @return the pivot index
+     */
+    private int pivotMedianOfMedians(SPEPartition part, double[] a, int l, int r) {
+        // Process blocks of 5.
+        // Moves the median of each block to the left of the array.
+        int rr = l - 1;
+        for (int e = l + 5;; e += 5) {
+            if (e > r) {
+                // Final block may be smaller than 5
+                Sorting.sort(a, e - 5, r);
+                final int m = (e - 5 + r) >>> 1;
+                final double v = a[m];
+                a[m] = a[++rr];
+                a[rr] = v;
+                break;
+            }
+            Sorting.sort4(a, e - 5, e - 4, e - 2, e - 1);
+            // median of [e-4, e-3, e-2]
+            int m = e - 3;
+            if (a[m] < a[m - 1]) {
+                --m;
+            } else if (a[m] > a[m + 1]) {
+                ++m;
+            }
+            final double v = a[m];
+            a[m] = a[++rr];
+            a[rr] = v;
+        }
+        final int m = (l + rr) >>> 1;
+        // mutual recursion
+        linearSelect(part, a, l, rr, m, m);
+        return m;
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
      * <p>All indices are assumed to be within {@code [0, right]}.
      *
      * <p>Note: This method does not use any configuration. It is built using the
