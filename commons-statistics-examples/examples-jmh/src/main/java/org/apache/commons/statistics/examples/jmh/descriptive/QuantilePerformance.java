@@ -123,6 +123,8 @@ public class QuantilePerformance {
     private static final String IDNF = "IDNF";
     /** Introselect implementation with dual-pivot partitioning. */
     private static final String IDP = "IDP";
+    /** Linearselect implementation with Bentley-McIlroy partitioning (Kiwiel). */
+    private static final String LKBM = "LKBM";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
      * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
@@ -2264,7 +2266,7 @@ public class QuantilePerformance {
             SP, BM, SBM,
             DP, DP5, DNF,
             SBM2,
-            ISP, IBM, ISBM, IKBM, IDNF, IDP, SELECT})
+            ISP, IBM, ISBM, IKBM, IDNF, IDP, LKBM, SELECT})
         private String name;
 
         /** Override of minimum quickselect size. */
@@ -2393,6 +2395,7 @@ public class QuantilePerformance {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
+            // Floyd-Rivest partition functions
             } else if (name.startsWith(FR)) {
                 final Partition part = createPartition(name, FR, qs, hc, sc);
                 function = (data, indices) -> {
@@ -2440,6 +2443,13 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, IDP, qs, hc, sc);
                 function = (data, indices) -> {
                     part.partitionIDP(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            // Linearselect (median-of-medians) implementations
+            } else if (name.startsWith(LKBM)) {
+                final Partition part = createPartition(name, LKBM, qs, hc, sc);
+                function = (data, indices) -> {
+                    part.partitionLKBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(SELECT)) {
