@@ -5919,8 +5919,17 @@ final class Partition {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
             }
-            final int pivot = pivotMedianOfMedians(part, a, l, r);
-            final int p0 = part.partition(a, l, r, pivot, upper);
+            int p0 = pivotMedianOfMedians(part, a, l, r, upper);
+            if ((controlFlags & FLAG_MOVE_SAMPLE) != 0) {
+                // Move (rr - p) values to the right end and partition the rest:
+                // |l|--|p|--|rr|---------------------------|r|
+                // Note: medians with 5 elements creates a sample size of 20%.
+                final int rr = upper[0];
+                vectorSwap(a, p0 + 1, rr, r);
+                p0 = part.partition(a, p0, r - rr + p0, p0, upper);
+            } else {
+                p0 = part.partition(a, l, r, p0, upper);
+            }
             final int p1 = upper[0];
 
             // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
@@ -5952,13 +5961,17 @@ final class Partition {
      * of at most 5 elements, computes the median of each group, and the median of the
      * {@code n/5} medians. Assumes {@code l <= r}.
      *
+     * <p>The median of medians in computed in-place at the left end. The range containing
+     * the medians is {@code [l, rr]} with the right bound {@code rr} returned.
+     *
      * @param part Partition function.
      * @param a Values.
      * @param l Lower bound of data (inclusive, assumed to be strictly positive).
      * @param r Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param upper Upper bound of the range {@code rr} containing the median (inclusive).
      * @return the pivot index
      */
-    private int pivotMedianOfMedians(SPEPartition part, double[] a, int l, int r) {
+    private int pivotMedianOfMedians(SPEPartition part, double[] a, int l, int r, int[] upper) {
         // Process blocks of 5.
         // Moves the median of each block to the left of the array.
         int rr = l - 1;
@@ -5987,6 +6000,7 @@ final class Partition {
         final int m = (l + rr) >>> 1;
         // mutual recursion
         linearSelect(part, a, l, rr, m, m);
+        upper[0] = rr;
         return m;
     }
 
