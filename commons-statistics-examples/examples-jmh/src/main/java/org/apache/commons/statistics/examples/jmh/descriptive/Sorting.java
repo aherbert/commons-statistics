@@ -341,7 +341,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -445,7 +445,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -529,7 +529,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -627,7 +627,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -680,7 +680,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -803,7 +803,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -943,7 +943,7 @@ final class Sorting {
 
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -1214,7 +1214,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
@@ -1256,7 +1256,7 @@ final class Sorting {
     }
 
     /**
-     * Sorts the given indices in an array using an insertion sort.
+     * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
      * order of signed zeros.
