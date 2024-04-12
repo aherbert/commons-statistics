@@ -6008,6 +6008,8 @@ final class Partition {
                 a[rr] = v;
                 break;
             }
+            // Not as fast
+//            final int m = median5(a, e - 5);
             Sorting.sort4(a, e - 5, e - 4, e - 2, e - 1);
             // median of [e-4, e-3, e-2]
             int m = e - 3;
@@ -6025,6 +6027,59 @@ final class Partition {
         linearSelect(part, a, l, rr, m, m);
         upper[0] = rr;
         return m;
+    }
+
+    /**
+     * Return the median of a continuous block of 5 elements: {@code a[i:i+4]}.
+     *
+     * @param a Values
+     * @param i Start index.
+     * @return the median index
+     */
+    static int median5(double[] a, int i) {
+        // Uses an optimal sorting network from Knuth's Art of Computer Programming.
+        // 5 comparisons.
+        // Order pairs:
+        //[(0,2),(1,3)]
+        //[(0,1),(2,3)]
+        //[(1,2)]
+        // Swap the pointers and not the data values.
+        int i0 = i;
+        int i1 = i + 1;
+        int i2 = i + 2;
+        int i3 = i + 3;
+        if (a[i3] < a[i1]) {
+            i3 -= 2;
+            i1 += 2;
+        }
+        if (a[i2] < a[i0]) {
+            i2 -= 2;
+            i0 += 2;
+        }
+
+        if (a[i3] < a[i2]) {
+            final int u = i3;
+            i3 = i2;
+            i2 = u;
+        }
+        if (a[i1] < a[i0]) {
+            final int v = i1;
+            i1 = i0;
+            i0 = v;
+        }
+
+        if (a[i2] < a[i1]) {
+            final int u = i2;
+            i2 = i1;
+            i1 = u;
+        }
+
+        // [i0, i1, i2, i3] are sorted: median of [i1, i4, i2]
+        final int i4 = i + 4;
+        if (a[i4] < a[i1]) {
+            return i1;
+        }
+        return a[i4] > a[i2] ? i2 : i4;
     }
 
     /**

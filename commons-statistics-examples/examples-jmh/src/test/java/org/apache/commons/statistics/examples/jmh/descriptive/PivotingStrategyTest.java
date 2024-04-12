@@ -196,4 +196,15 @@ class PivotingStrategyTest {
         }
         return builder.build();
     }
+
+    /**
+     * Test the inline median-of-5 method used in the median-of-medians algorithm.
+     */
+    @ParameterizedTest
+    @MethodSource(value = {"testMedianOf5"})
+    void testMedian5(double[] a) {
+        final int m = Partition.median5(a, 0);
+        final double v = a[m];
+        Assertions.assertEquals(a[PivotingStrategy.MEDIAN_OF_5.pivotIndex(a, 0, 4)], v);
+    }
 }
