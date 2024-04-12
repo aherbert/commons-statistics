@@ -30,6 +30,7 @@
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Partition.java" />
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Quantile.java" />
   <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]QuantilePerformance.java" />
+  <suppress checks="FileLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Sorting.java" />
   <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Sorting.java" />
   <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]Partition.java" />
   <suppress checks="MethodLength" files=".*[/\\]jmh[/\\]descriptive[/\\]QuantilePerformance.java" />

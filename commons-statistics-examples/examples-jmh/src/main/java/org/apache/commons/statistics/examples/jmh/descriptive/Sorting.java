@@ -689,6 +689,103 @@ final class Sorting {
      *
      * <p>Data are arranged such that:
      * <pre>{@code
+     * a != b != c != d != e
+     * data[a] < data[b] < data[c] < data[d] < data[e]
+     * }</pre>
+     *
+     * <p>If indices are duplicated elements will <em>not</em> be correctly ordered.
+     * However in this case data will contain the same values and may be partially ordered.
+     *
+     * @param data Data array.
+     * @param i0 Index.
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     */
+    static void sort5c(double[] data, int i0, int i1, int i2, int i3, int i4) {
+        // Sorting of 5 elements in optimum 7 comparisons.
+        // Code adapted from Raphael, Computer Science Stack Exchange.
+        // https://cs.stackexchange.com/a/44982
+        // https://gist.github.com/akerbos/5acb345ff3d41bc888c4
+
+        // 1. Sort the first two pairs.
+        if (data[i1] < data[i0]) {
+            final double u = data[i1];
+            data[i1] = data[i0];
+            data[i0] = u;
+        }
+        if (data[i3] < data[i2]) {
+            final double v = data[i3];
+            data[i3] = data[i2];
+            data[i2] = v;
+        }
+
+        // 2. Order the pairs w.r.t. their respective larger element.
+        // Call the result [a,b,c,d,e]; we know a<b<d and c<d.
+        if (data[i3] < data[i1]) {
+            final double u = data[i0];
+            final double v = data[i1];
+            data[i0] = data[i2];
+            data[i1] = data[i3];
+            data[i2] = u;
+            data[i3] = v;
+        }
+
+        // 3. Insert e into [a,b,d]
+        final double e = data[i4];
+        if (e < data[i1]) {
+            if (e < data[i0]) {
+                // e,a,b,d
+                data[i4] = data[i3];
+                data[i3] = data[i1];
+                data[i1] = data[i0];
+                data[i0] = e;
+            } else {
+                // a,e,b,d
+                data[i4] = data[i3];
+                data[i3] = data[i1];
+                data[i1] = e;
+            }
+        } else {
+            if (data[i4] < data[i3]) {
+                // a,b,e,d
+                data[i4] = data[i3];
+                data[i3] = e;
+            }
+            // else a,b,d,e (already sorted)
+        }
+
+        // 4. Insert c into the first 3 elements of result of step 3.
+        final double c = data[i2];
+        if (c < data[i1]) {
+            if (c < data[i0]) {
+                data[i2] = data[i1];
+                data[i1] = data[i0];
+                data[i0] = c;
+            } else {
+                data[i2] = data[i1];
+                data[i1] = c;
+            }
+        } else {
+            if (data[i3] < c) {
+                data[i2] = data[i3];
+                data[i3] = c;
+            }
+            // else already sorted
+        }
+    }
+
+    /**
+     * Sorts the given indices in an array.
+     *
+     * <p>Note: Requires that the range contains no NaN values. It does not respect the
+     * order of signed zeros.
+     *
+     * <p>Assumes all indices are valid and distinct.
+     *
+     * <p>Data are arranged such that:
+     * <pre>{@code
      * a != b != c != d != e != f != g
      * data[a] < data[b] < data[c] < data[d] < data[e] < data[f] < data[g]
      * }</pre>
