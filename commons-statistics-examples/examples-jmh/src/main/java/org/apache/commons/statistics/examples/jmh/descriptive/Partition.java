@@ -72,6 +72,10 @@ import org.apache.commons.rng.simple.RandomSource;
  * <p>Confidence bounds for the number of iterations to reduce a partition length by 2<sup>-x</sup>
  * are provided in Valois [6].
  *
+ * <p>A worst-case linear time algorithm PICK is described in Blum et al [7]. This uses the median
+ * of medians as a partition element for selection which ensures a minimum fraction of the
+ * elements are eliminated per iteration.
+ *
  * <ol>
  * <li>
  * Hoare (1961)
@@ -91,14 +95,20 @@ import org.apache.commons.rng.simple.RandomSource;
  * Comm. ACM. 18 (3): 173.
  * <li>Kiwiel (2005)
  * On Floyd and Rivest's SELECT algorithm.
- * Theoretical Computer Science 347, 214-238.
+ * <a href="https://doi.org/10.1016/j.tcs.2005.06.032">
+ * Theoretical Computer Science 347, 214-238</a>.
  * <li>Valois (2000)
  * Introspective sorting and selection revisited
  * <a href="https://doi.org/10.1002/(SICI)1097-024X(200005)30:6%3C617::AID-SPE311%3E3.0.CO;2-A">
  * Software: Practice and Experience 30, 617-638.</a>
+ * <li>Blum, Floyd, Pratt, Rivest, and Tarjan (1973)
+ * Time bounds for selection.
+ * <a href="https://doi.org/10.1016%2FS0022-0000%2873%2980033-9">
+ * Journal of Computer and System Sciences. 7 (4): 448–461</a>.
  * <li><a href="https://en.wikipedia.org/wiki/Quickselect">Quickselect (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introselect">Introselect (Wikipedia)</a>
+ * <li><a href="https://en.wikipedia.org/wiki/Median_of_medians">Median of medians (Wikipedia)</a>
  * </ol>
  *
  * @since 1.1
@@ -5945,8 +5955,12 @@ final class Partition {
             int p0 = pivotMedianOfMedians(part, a, l, r, upper);
             if ((controlFlags & FLAG_MOVE_SAMPLE) != 0) {
                 // Move (rr - p) values to the right end and partition the rest:
-                // |l|--|p|--|rr|---------------------------|r|
+                // |l|---|p|---|rr|---------------------------|r|
+                // |l| < |p|            ???               | > |r|
                 // Note: medians with 5 elements creates a sample size of 20%.
+                // This strategy is not faster when all elements are unique.
+                // When there are many repeat values then this is slower when handling
+                // equal keys as some (~20%) of the equal keys are left at the ends.
                 final int rr = upper[0];
                 vectorSwap(a, p0 + 1, rr, r);
                 p0 = part.partition(a, p0, r - rr + p0, p0, upper);
@@ -6008,20 +6022,62 @@ final class Partition {
                 a[rr] = v;
                 break;
             }
-            // Not as fast
-//            final int m = median5(a, e - 5);
+
+            int m;
+            // Not as fast to use pointer swaps
+            //m = median5(a, e - 5);
+
+            // Sort 4
             Sorting.sort4(a, e - 5, e - 4, e - 2, e - 1);
             // median of [e-4, e-3, e-2]
-            int m = e - 3;
+            m = e - 3;
             if (a[m] < a[m - 1]) {
                 --m;
             } else if (a[m] > a[m + 1]) {
                 ++m;
             }
+
+            // Not as fast to use insertion sort on 5 elements
+            //Sorting.sort(a, e - 5, e - 1);
+            //m = e - 3;
+
             final double v = a[m];
             a[m] = a[++rr];
             a[rr] = v;
         }
+
+        //// Separate loop + end
+        //int e = l;
+        //while ((e += 5) <= r) {
+        //    int m;
+        //    // Not as fast to use pointer swaps
+        //    //m = median5(a, e - 5);
+        //
+        //    // Sort 4
+        //    Sorting.sort4(a, e - 5, e - 4, e - 2, e - 1);
+        //    // median of [e-4, e-3, e-2]
+        //    m = e - 3;
+        //    if (a[m] < a[m - 1]) {
+        //        --m;
+        //    } else if (a[m] > a[m + 1]) {
+        //        ++m;
+        //    }
+        //
+        //    // Not as fast to use insertion sort on 5 elements
+        //    //Sorting.sort(a, e - 5, e - 1);
+        //    //m = e - 3;
+        //
+        //    final double v = a[m];
+        //    a[m] = a[++rr];
+        //    a[rr] = v;
+        //}
+        //// Final block may be smaller than 5
+        //Sorting.sort(a, e - 5, r);
+        //int m = (e - 5 + r) >>> 1;
+        //final double v = a[m];
+        //a[m] = a[++rr];
+        //a[rr] = v;
+
         final int m = (l + rr) >>> 1;
         // mutual recursion
         linearSelect(part, a, l, rr, m, m);
