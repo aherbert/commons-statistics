@@ -6024,20 +6024,16 @@ final class Partition {
             }
 
             int m;
-            // Not as fast to use pointer swaps
+            // Sorting network of 4 + insertion
             //m = median5(a, e - 5);
+            // Decision tree (3-4% faster)
+            m = median5b(a, e - 5);
+            // Sorting network of 4 + insertion with pointer swaps (8-10% slower)
+            //m = median5c(a, e - 5);
+            // Bigger decision tree (same as median5b)
+            //m = median5d(a, e - 5);
 
-            // Sort 4
-            Sorting.sort4(a, e - 5, e - 4, e - 2, e - 1);
-            // median of [e-4, e-3, e-2]
-            m = e - 3;
-            if (a[m] < a[m - 1]) {
-                --m;
-            } else if (a[m] > a[m + 1]) {
-                ++m;
-            }
-
-            // Not as fast to use insertion sort on 5 elements
+            // Not as fast to use insertion sort on 5 elements (8-10% slower)
             //Sorting.sort(a, e - 5, e - 1);
             //m = e - 3;
 
@@ -6086,13 +6082,90 @@ final class Partition {
     }
 
     /**
-     * Return the median of a continuous block of 5 elements: {@code a[i:i+4]}.
+     * Return the median of a continuous block of 5 elements.
      *
      * @param a Values
-     * @param i Start index.
+     * @param i1 First index.
      * @return the median index
      */
-    static int median5(double[] a, int i) {
+    static int median5(double[] a, int i1) {
+        // Sort 4
+        Sorting.sort4(a, i1, i1 + 1, i1 + 3, i1 + 4);
+        // median of [e-4, e-3, e-2]
+        int m = i1 + 2;
+        if (a[m] < a[m - 1]) {
+            --m;
+        } else if (a[m] > a[m + 1]) {
+            ++m;
+        }
+        return m;
+    }
+
+    /**
+     * Return the median of a continuous block of 5 elements.
+     *
+     * @param a Values
+     * @param i1 First index.
+     * @return the median index
+     */
+    static int median5b(double[] a, int i1) {
+        final int i2 = i1 + 1;
+        final int i3 = i1 + 2;
+        final int i4 = i1 + 3;
+        final int i5 = i1 + 4;
+        // 6 comparison decision tree
+        // Possible median in parentheses
+        // (12345)
+        if (a[i2] < a[i1]) {
+            final double v = a[i2];
+            a[i2] = a[i1];
+            a[i1] = v;
+        }
+        if (a[i4] < a[i3]) {
+            final double v = a[i4];
+            a[i4] = a[i3];
+            a[i3] = v;
+        }
+        // (1<2 3<4 5)
+        if (a[i1] < a[i3]) {
+            // 1(2 3<4 5)
+            if (a[i5] < a[i2]) {
+                final double v = a[i5];
+                a[i5] = a[i2];
+                a[i2] = v;
+            }
+            // 1(2<5 3<4)
+            if (a[i2] < a[i3]) {
+                // 1,2(5 3<4)
+                return a[i5] < a[i3] ? i5 : i3;
+            }
+            // 1,3(2<5 4)
+            return a[i2] < a[i4] ? i2 : i4;
+        } else {
+            // 3(1<2 4 5)
+            if (a[i5] < a[i4]) {
+                final double v = a[i5];
+                a[i5] = a[i4];
+                a[i4] = v;
+            }
+            // 3(1<2 4<5)
+            if (a[i1] < a[i4]) {
+                // 3,1(2 4<5)
+                return a[i2] < a[i4] ? i2 : i4;
+            }
+            // 3,4(1<2 5)
+            return a[i1] < a[i5] ? i1 : i5;
+        }
+    }
+
+    /**
+     * Return the median of a continuous block of 5 elements.
+     *
+     * @param a Values
+     * @param i0 First index.
+     * @return the median index
+     */
+    static int median5c(double[] a, int i0) {
         // Uses an optimal sorting network from Knuth's Art of Computer Programming.
         // 5 comparisons.
         // Order pairs:
@@ -6100,10 +6173,10 @@ final class Partition {
         //[(0,1),(2,3)]
         //[(1,2)]
         // Swap the pointers and not the data values.
-        int i0 = i;
-        int i1 = i + 1;
-        int i2 = i + 2;
-        int i3 = i + 3;
+        int i1 = i0 + 1;
+        int i2 = i0 + 2;
+        int i3 = i0 + 3;
+        final int i4 = i0 + 4;
         if (a[i3] < a[i1]) {
             i3 -= 2;
             i1 += 2;
@@ -6131,11 +6204,75 @@ final class Partition {
         }
 
         // [i0, i1, i2, i3] are sorted: median of [i1, i4, i2]
-        final int i4 = i + 4;
         if (a[i4] < a[i1]) {
             return i1;
         }
         return a[i4] > a[i2] ? i2 : i4;
+    }
+
+    /**
+     * Return the median of a continuous block of 5 elements.
+     *
+     * @param a Values
+     * @param i1 First index.
+     * @return the median index
+     */
+    static int median5d(double[] a, int i1) {
+        final int i2 = i1 + 1;
+        final int i3 = i1 + 2;
+        final int i4 = i1 + 3;
+        final int i5 = i1 + 4;
+        // 6 comparison decision tree
+        // Possible median in parentheses
+        // (12345)
+        if (a[i2] < a[i1]) {
+            final double v = a[i2];
+            a[i2] = a[i1];
+            a[i1] = v;
+        }
+        if (a[i4] < a[i3]) {
+            final double v = a[i4];
+            a[i4] = a[i3];
+            a[i3] = v;
+        }
+        // (1<2 3<4 5)
+        if (a[i1] < a[i3]) {
+            // 1(2 3<4 5)
+            if (a[i5] < a[i2]) {
+                // 1(5<2 3<4)
+                if (a[i5] < a[i3]) {
+                    // 1,5(2 3<4)
+                    return a[i2] < a[i3] ? i2 : i3;
+                }
+                // 1,3(2<5 4)
+                return a[i5] < a[i4] ? i5 : i4;
+            }
+            // 1(2<5 3<4)
+            if (a[i2] < a[i3]) {
+                // 1,2(5 3<4)
+                return a[i5] < a[i3] ? i5 : i3;
+            }
+            // 1,3(2<5 4)
+            return a[i2] < a[i4] ? i2 : i4;
+        } else {
+            // 3(1<2 4 5)
+            if (a[i5] < a[i4]) {
+                // 3(1<2 5<4)
+                if (a[i1] < a[i5]) {
+                    // 3,1(2 5<4)
+                    return a[i2] < a[i5] ? i2 : i5;
+                }
+                // 3,5(1<2 4)
+                return a[i1] < a[i4] ? i1 : i4;
+            }
+            // 3(1<2 4<5)
+            if (a[i1] < a[i4]) {
+                // 3,1(2 4<5)
+                return a[i2] < a[i4] ? i2 : i4;
+            }
+            // 3,4(1<2 5)
+            return a[i1] < a[i5] ? i1 : i5;
+        }
     }
 
     /**
