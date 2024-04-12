@@ -2208,7 +2208,7 @@ public class QuantilePerformance {
     @State(Scope.Benchmark)
     public static class Sort5FunctionSource {
         /** Name of the source. */
-        @Param({"sort5", "sort5a", "sort5b",
+        @Param({"sort5", "sort5a", "sort5b", "sort5c",
             //"sort", "sort5head"
             })
         private String name;
@@ -2248,10 +2248,24 @@ public class QuantilePerformance {
                     final int s = x.length >> 2;
                     Sorting.sort5b(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
                 };
+            } else if ("sort5c".equals(name)) {
+                function = x -> {
+                    final int s = x.length >> 2;
+                    Sorting.sort5c(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
+                };
             } else if ("sort".equals(name)) {
                 function = x -> Sorting.sort(x, 0, 4);
             } else if ("sort5head".equals(name)) {
                 function = x -> Sorting.sort5(x, 0, 1, 2, 3, 4);
+            // Median of 5. Ensure the median index is computed by storing it in x
+            } else if ("med5".equals(name)) {
+                function = x -> x[0] = Partition.median5(x, 0);
+            } else if ("med5b".equals(name)) {
+                function = x -> x[0] = Partition.median5b(x, 0);
+            } else if ("med5c".equals(name)) {
+                function = x -> x[0] = Partition.median5c(x, 0);
+            } else if ("med5d".equals(name)) {
+                function = x -> x[0] = Partition.median5d(x, 0);
             } else {
                 throw new IllegalStateException("Unknown sort5 function: " + name);
             }

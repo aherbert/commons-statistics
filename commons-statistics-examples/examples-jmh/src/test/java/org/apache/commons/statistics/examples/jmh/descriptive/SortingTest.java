@@ -107,24 +107,31 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleSort"})
+    @MethodSource(value = {"testDoubleSort", "testDoubleSort5"})
     void testDoubleSort5(double[] values) {
         final double[] data = Arrays.copyOf(values, 5);
         assertDoubleSort(data, x -> Sorting.sort5(x, 0, 1, 2, 3, 4));
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleSort"})
+    @MethodSource(value = {"testDoubleSort", "testDoubleSort5"})
     void testDoubleSort5a(double[] values) {
         final double[] data = Arrays.copyOf(values, 5);
         assertDoubleSort(data, x -> Sorting.sort5a(x, 0, 1, 2, 3, 4));
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleSort"})
+    @MethodSource(value = {"testDoubleSort", "testDoubleSort5"})
     void testDoubleSort5b(double[] values) {
         final double[] data = Arrays.copyOf(values, 5);
         assertDoubleSort(data, x -> Sorting.sort5b(x, 0, 1, 2, 3, 4));
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort", "testDoubleSort5"})
+    void testDoubleSort5c(double[] values) {
+        final double[] data = Arrays.copyOf(values, 5);
+        assertDoubleSort(data, x -> Sorting.sort5c(x, 0, 1, 2, 3, 4));
     }
 
     @ParameterizedTest
@@ -198,6 +205,17 @@ class SortingTest {
         final int d = indices[3];
         final int e = indices[4];
         assertDoubleSortInternal(values, x -> Sorting.sort5b(x, a, b, c, d, e), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5Internal"})
+    void testDoubleSort5cInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        assertDoubleSortInternal(values, x -> Sorting.sort5c(x, a, b, c, d, e), indices);
     }
 
     @ParameterizedTest
@@ -387,6 +405,43 @@ class SortingTest {
         }
         return builder.build();
     }
+
+    static Stream<Arguments> testDoubleSort5() {
+        final Stream.Builder<Arguments> builder = Stream.builder();
+        final double[] a = new double[5];
+        // Permutations is 5! = 120
+        final int shift = 42;
+        for (int i = 0; i < 5; i++) {
+            a[0] = i + shift;
+            for (int j = 0; j < 5; j++) {
+                if (j == i) {
+                    continue;
+                }
+                a[1] = j + shift;
+                for (int k = 0; k < 5; k++) {
+                    if (k == j || k == i) {
+                        continue;
+                    }
+                    a[2] = k + shift;
+                    for (int l = 0; l < 5; l++) {
+                        if (l == k || l == j || l == i) {
+                            continue;
+                        }
+                        a[3] = l + shift;
+                        for (int m = 0; m < 5; m++) {
+                            if (m == l || m == k || m == j || m == i) {
+                                continue;
+                            }
+                            a[3] = m + shift;
+                            builder.add(Arguments.of(a.clone(), 2));
+                        }
+                    }
+                }
+            }
+        }
+        return builder.build();
+    }
+
     static Stream<Arguments> testDoubleSort3Internal() {
         return testDoubleSortInternal(3);
     }
