@@ -145,12 +145,7 @@ enum PivotingStrategy {
             final int p1 = p2 - sixth;
             final int p4 = p3 + sixth;
             final int p5 = p4 + sixth;
-            Sorting.sort4(data, p1, p2, p4, p5);
-            // p2 and p4 are sorted: check if p3 is between them
-            if (data[p3] < data[p2]) {
-                return p2;
-            }
-            return data[p3] > data[p4] ? p4 : p3;
+            return Sorting.median5(data, p1, p2, p3, p4, p5);
         }
 
         @Override
