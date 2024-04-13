@@ -778,6 +778,7 @@ final class Sorting {
 
     /**
      * Return the median of a continuous block of 5 elements.
+     * Data may be partially reordered.
      *
      * @param a Values
      * @param i1 First index.
@@ -834,7 +835,7 @@ final class Sorting {
     }
 
     /**
-     * Return the median of 5 elements.
+     * Return the median of 5 elements. Data may be partially reordered.
      *
      * @param a Values
      * @param i1 Index.
@@ -892,6 +893,7 @@ final class Sorting {
 
     /**
      * Return the median of a continuous block of 5 elements.
+     * Data may be partially reordered.
      *
      * @param a Values
      * @param i1 First index.
@@ -957,6 +959,7 @@ final class Sorting {
 
     /**
      * Return the median of a continuous block of 5 elements.
+     * Data may be partially reordered.
      *
      * @param a Values
      * @param i1 First index.
