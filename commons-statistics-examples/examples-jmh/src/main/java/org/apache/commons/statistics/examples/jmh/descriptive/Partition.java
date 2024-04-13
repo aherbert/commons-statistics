@@ -6017,7 +6017,7 @@ final class Partition {
         int rr = l - 1;
         for (int e = l + 5;; e += 5) {
             if (e > r) {
-                // Final block may be smaller than 5
+                // Final block of size 1-5
                 Sorting.sort(a, e - 5, r);
                 final int m = (e - 5 + r) >>> 1;
                 final double v = a[m];
