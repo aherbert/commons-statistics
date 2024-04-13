@@ -2258,14 +2258,18 @@ public class QuantilePerformance {
             } else if ("sort5head".equals(name)) {
                 function = x -> Sorting.sort5(x, 0, 1, 2, 3, 4);
             // Median of 5. Ensure the median index is computed by storing it in x
+            } else if ("median5".equals(name)) {
+                function = x -> {
+                    final int s = x.length >> 2;
+                    x[0] = Sorting.median5(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
+                };
+            // median of 5 continuous elements
             } else if ("med5".equals(name)) {
-                function = x -> x[0] = Partition.median5(x, 0);
+                function = x -> x[0] = Sorting.median5(x, 0);
             } else if ("med5b".equals(name)) {
-                function = x -> x[0] = Partition.median5b(x, 0);
+                function = x -> x[0] = Sorting.median5b(x, 0);
             } else if ("med5c".equals(name)) {
-                function = x -> x[0] = Partition.median5c(x, 0);
-            } else if ("med5d".equals(name)) {
-                function = x -> x[0] = Partition.median5d(x, 0);
+                function = x -> x[0] = Sorting.median5c(x, 0);
             } else {
                 throw new IllegalStateException("Unknown sort5 function: " + name);
             }

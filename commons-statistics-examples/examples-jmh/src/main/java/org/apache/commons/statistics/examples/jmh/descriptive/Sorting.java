@@ -777,6 +777,205 @@ final class Sorting {
     }
 
     /**
+     * Return the median of a continuous block of 5 elements.
+     *
+     * @param a Values
+     * @param i1 First index.
+     * @return the median index
+     */
+    static int median5(double[] a, int i1) {
+        final int i2 = i1 + 1;
+        final int i3 = i1 + 2;
+        final int i4 = i1 + 3;
+        final int i5 = i1 + 4;
+        // 6 comparison decision tree
+        // Possible median in parentheses
+        // (12345)
+        if (a[i2] < a[i1]) {
+            final double v = a[i2];
+            a[i2] = a[i1];
+            a[i1] = v;
+        }
+        if (a[i4] < a[i3]) {
+            final double v = a[i4];
+            a[i4] = a[i3];
+            a[i3] = v;
+        }
+        // (1<2 3<4 5)
+        if (a[i1] < a[i3]) {
+            // 1(2 3<4 5)
+            if (a[i5] < a[i2]) {
+                final double v = a[i5];
+                a[i5] = a[i2];
+                a[i2] = v;
+            }
+            // 1(2<5 3<4)
+            if (a[i2] < a[i3]) {
+                // 1,2(5 3<4)
+                return a[i5] < a[i3] ? i5 : i3;
+            }
+            // 1,3(2<5 4)
+            return a[i2] < a[i4] ? i2 : i4;
+        } else {
+            // 3(1<2 4 5)
+            if (a[i5] < a[i4]) {
+                final double v = a[i5];
+                a[i5] = a[i4];
+                a[i4] = v;
+            }
+            // 3(1<2 4<5)
+            if (a[i1] < a[i4]) {
+                // 3,1(2 4<5)
+                return a[i2] < a[i4] ? i2 : i4;
+            }
+            // 3,4(1<2 5)
+            return a[i1] < a[i5] ? i1 : i5;
+        }
+    }
+
+    /**
+     * Return the median of 5 elements.
+     *
+     * @param a Values
+     * @param i1 Index.
+     * @param i2 Index.
+     * @param i3 Index.
+     * @param i4 Index.
+     * @param i5 Index.
+     * @return the median index
+     */
+    static int median5(double[] a, int i1, int i2, int i3, int i4, int i5) {
+        // 6 comparison decision tree
+        // Possible median in parentheses
+        // (12345)
+        if (a[i2] < a[i1]) {
+            final double v = a[i2];
+            a[i2] = a[i1];
+            a[i1] = v;
+        }
+        if (a[i4] < a[i3]) {
+            final double v = a[i4];
+            a[i4] = a[i3];
+            a[i3] = v;
+        }
+        // (1<2 3<4 5)
+        if (a[i1] < a[i3]) {
+            // 1(2 3<4 5)
+            if (a[i5] < a[i2]) {
+                final double v = a[i5];
+                a[i5] = a[i2];
+                a[i2] = v;
+            }
+            // 1(2<5 3<4)
+            if (a[i2] < a[i3]) {
+                // 1,2(5 3<4)
+                return a[i5] < a[i3] ? i5 : i3;
+            }
+            // 1,3(2<5 4)
+            return a[i2] < a[i4] ? i2 : i4;
+        } else {
+            // 3(1<2 4 5)
+            if (a[i5] < a[i4]) {
+                final double v = a[i5];
+                a[i5] = a[i4];
+                a[i4] = v;
+            }
+            // 3(1<2 4<5)
+            if (a[i1] < a[i4]) {
+                // 3,1(2 4<5)
+                return a[i2] < a[i4] ? i2 : i4;
+            }
+            // 3,4(1<2 5)
+            return a[i1] < a[i5] ? i1 : i5;
+        }
+    }
+
+    /**
+     * Return the median of a continuous block of 5 elements.
+     *
+     * @param a Values
+     * @param i1 First index.
+     * @return the median index
+     */
+    static int median5b(double[] a, int i1) {
+        final int i2 = i1 + 1;
+        final int i3 = i1 + 2;
+        final int i4 = i1 + 3;
+        final int i5 = i1 + 4;
+        // 6 comparison decision tree
+        // Possible median in parentheses
+        // (12345)
+        if (a[i2] < a[i1]) {
+            final double v = a[i2];
+            a[i2] = a[i1];
+            a[i1] = v;
+        }
+        if (a[i4] < a[i3]) {
+            final double v = a[i4];
+            a[i4] = a[i3];
+            a[i3] = v;
+        }
+        // (1<2 3<4 5)
+        if (a[i1] < a[i3]) {
+            // 1(2 3<4 5)
+            if (a[i5] < a[i2]) {
+                // 1(5<2 3<4)
+                if (a[i5] < a[i3]) {
+                    // 1,5(2 3<4)
+                    return a[i2] < a[i3] ? i2 : i3;
+                }
+                // 1,3(2<5 4)
+                return a[i5] < a[i4] ? i5 : i4;
+            }
+            // 1(2<5 3<4)
+            if (a[i2] < a[i3]) {
+                // 1,2(5 3<4)
+                return a[i5] < a[i3] ? i5 : i3;
+            }
+            // 1,3(2<5 4)
+            return a[i2] < a[i4] ? i2 : i4;
+        } else {
+            // 3(1<2 4 5)
+            if (a[i5] < a[i4]) {
+                // 3(1<2 5<4)
+                if (a[i1] < a[i5]) {
+                    // 3,1(2 5<4)
+                    return a[i2] < a[i5] ? i2 : i5;
+                }
+                // 3,5(1<2 4)
+                return a[i1] < a[i4] ? i1 : i4;
+            }
+            // 3(1<2 4<5)
+            if (a[i1] < a[i4]) {
+                // 3,1(2 4<5)
+                return a[i2] < a[i4] ? i2 : i4;
+            }
+            // 3,4(1<2 5)
+            return a[i1] < a[i5] ? i1 : i5;
+        }
+    }
+
+    /**
+     * Return the median of a continuous block of 5 elements.
+     *
+     * @param a Values
+     * @param i1 First index.
+     * @return the median index
+     */
+    static int median5c(double[] a, int i1) {
+        // Sort 4
+        Sorting.sort4(a, i1, i1 + 1, i1 + 3, i1 + 4);
+        // median of [e-4, e-3, e-2]
+        int m = i1 + 2;
+        if (a[m] < a[m - 1]) {
+            --m;
+        } else if (a[m] > a[m + 1]) {
+            ++m;
+        }
+        return m;
+    }
+
+    /**
      * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
