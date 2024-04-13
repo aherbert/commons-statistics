@@ -2263,6 +2263,8 @@ public class QuantilePerformance {
                     final int s = x.length >> 2;
                     x[0] = Sorting.median5(x, 0, s, s << 1, x.length - 1 - s, x.length - 1);
                 };
+            } else if ("median5head".equals(name)) {
+                function = x -> x[0] = Sorting.median5(x, 0, 1, 2, 3, 4);
             // median of 5 continuous elements
             } else if ("med5".equals(name)) {
                 function = x -> x[0] = Sorting.median5(x, 0);
