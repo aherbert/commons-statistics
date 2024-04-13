@@ -33,11 +33,6 @@ enum PivotingStrategy {
         }
 
         @Override
-        int pivotIndex(int[] data, int left, int right) {
-            return med(left, right);
-        }
-
-        @Override
         int[] getSampledIndices(int left, int right) {
             return new int[] {med(left, right)};
         }
@@ -57,11 +52,6 @@ enum PivotingStrategy {
         }
 
         @Override
-        int pivotIndex(int[] data, int left, int right) {
-            return med3(data, left, med(left, right), right);
-        }
-
-        @Override
         int[] getSampledIndices(int left, int right) {
             return new int[] {left, med(left, right), right};
         }
@@ -77,18 +67,6 @@ enum PivotingStrategy {
     MEDIAN_OF_9 {
         @Override
         int pivotIndex(double[] data, int left, int right) {
-            final int s = (right - left) >>> 3;
-            final int m = med(left, right);
-            final int x = med3(data, left, left + s, left + (s << 1));
-            final double a = data[x];
-            final int y = med3(data, m - s, m, m + s);
-            final double b = data[y];
-            final int z = med3(data, right - (s << 1), right - s, right);
-            return med3(a, b, data[z], x, y, z);
-        }
-
-        @Override
-        int pivotIndex(int[] data, int left, int right) {
             final int s = (right - left) >>> 3;
             final int m = med(left, right);
             final int x = med3(data, left, left + s, left + (s << 1));
@@ -125,14 +103,6 @@ enum PivotingStrategy {
     DYNAMIC {
         @Override
         int pivotIndex(double[] data, int left, int right) {
-            if (right - left >= MED_9) {
-                return MEDIAN_OF_9.pivotIndex(data, left, right);
-            }
-            return MEDIAN_OF_3.pivotIndex(data, left, right);
-        }
-
-        @Override
-        int pivotIndex(int[] data, int left, int right) {
             if (right - left >= MED_9) {
                 return MEDIAN_OF_9.pivotIndex(data, left, right);
             }
@@ -184,11 +154,6 @@ enum PivotingStrategy {
         }
 
         @Override
-        int pivotIndex(int[] data, int left, int right) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         int[] getSampledIndices(int left, int right) {
             final int len = right - left;
             final int sixth = 1 + (len >>> 3) + (len >>> 5) + (len >>> 6);
@@ -232,11 +197,6 @@ enum PivotingStrategy {
                 return p2;
             }
             return data[p3] > data[p4] ? p4 : p3;
-        }
-
-        @Override
-        int pivotIndex(int[] data, int left, int right) {
-            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -322,43 +282,6 @@ enum PivotingStrategy {
     }
 
     /**
-     * Find the median index of 3.
-     *
-     * @param data Values.
-     * @param i Index.
-     * @param j Index.
-     * @param k Index.
-     * @return the median index
-     */
-    private static int med3(int[] data, int i, int j, int k) {
-        return med3(data[i], data[j], data[k], i, j, k);
-    }
-
-    /**
-     * Find the median index of 3 values.
-     *
-     * @param a Value.
-     * @param b Value.
-     * @param c Value.
-     * @param ia Index of a.
-     * @param ib Index of b.
-     * @param ic Index of c.
-     * @return the median index
-     */
-    private static int med3(int a, int b, int c, int ia, int ib, int ic) {
-        if (a < b) {
-            if (b < c) {
-                return ib;
-            }
-            return a < c ? ic : ia;
-        }
-        if (b > c) {
-            return ib;
-        }
-        return a > c ? ic : ia;
-    }
-
-    /**
      * Find a pivot index of the array so that partitioning into 2-regions can be made.
      *
      * <pre>{@code
@@ -371,20 +294,6 @@ enum PivotingStrategy {
      * @return pivot
      */
     abstract int pivotIndex(double[] data, int left, int right);
-
-    /**
-     * Find a pivot index of the array so that partitioning into 2-regions can be made.
-     *
-     * <pre>{@code
-     * left <= p <= right
-     * }</pre>
-     *
-     * @param data Array.
-     * @param left Lower bound (inclusive).
-     * @param right Upper bound (inclusive).
-     * @return pivot
-     */
-    abstract int pivotIndex(int[] data, int left, int right);
 
     // The following methods allow the strategy and side effects to be tested
 
