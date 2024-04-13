@@ -5655,6 +5655,30 @@ final class Partition {
      * elements of the array x[a:c] are exchanged with its last m elements.
      *
      * <p>This is a specialisation of {@link #vectorSwap(double[], int, int, int)}
+     * where the current left-most value is a constant {@code v}. It differs
+     * from {@link #vectorSwapL(double[], int, int, int, double)} by swapping
+     * the ends in the same order rather than reversing the order.
+     *
+     * @param x Array.
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param v Constant value in [a, b]
+     */
+    @SuppressWarnings("used for testing if the swap order changes performance")
+    private static void vectorSwapL2(double[] x, int a, int b, int c, double v) {
+        int m = Math.min(b + 1 - a, c - b);
+        for (int i = a - 1, j = c - m; --m >= 0;) {
+            x[++i] = x[++j];
+            x[j] = v;
+        }
+    }
+
+    /**
+     * Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
+     * elements of the array x[a:c] are exchanged with its last m elements.
+     *
+     * <p>This is a specialisation of {@link #vectorSwap(double[], int, int, int)}
      * where the current right-most value is a constant {@code v}.
      *
      * @param x Array.
