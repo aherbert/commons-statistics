@@ -448,6 +448,42 @@ final class Partition {
     }
 
     /**
+     * Define the strategy for selecting {@code k} close to the edge.
+     */
+    enum EdgeSelectStrategy {
+        /** Use heapselect version 1. Selects {@code k} and an additional
+         * {@code c} elements closer to the edge than {@code k} using a heap
+         * structure. */
+        HEAP_SELECT,
+        /** Use heapselect version 2. Differs from {@link #HEAP_SELECT} in the
+         * final unwinding of the heap to sort the range {@code [ka, kb]};
+         * the heap construction is identical. */
+        HEAP_SELECT2,
+        /** Use sortselect which uses an insertion sort to maintain {@code k}
+         * and all elements closer to the edge as sorted. */
+        SORT_SELECT;
+    }
+
+    /**
+     * Define the strategy for selecting {@code k} when quickselect progress is poor
+     * (worst case is quadratic). This should be a method providing good worst-case
+     * performance.
+     */
+    enum StopperStrategy {
+        /** Use heapselect version 1. Selects {@code k} and an additional
+         * {@code c} elements closer to the edge than {@code k}. Heapselect
+         * provides increasingly slower performance with distance from the edge.
+         * It has better worst-case performance than quickselect. */
+        HEAP_SELECT,
+        /** Use heapselect version 2. Differs from {@link #HEAP_SELECT} in the
+         * final unwinding of the heap to sort the range {@code [ka, kb]};
+         * the heap construction is identical. */
+        HEAP_SELECT2,
+        /** Use a linear selection algorithm with Order(n) worst-case performance. */
+        LINEAR_SELECT;
+    }
+
+    /**
      * Partition function. Used to benchmark different implementations.
      *
      * <p>Note: The function is applied within a {@code [left, right]} bound. This bound
@@ -779,6 +815,28 @@ final class Partition {
          * @return Lower bound (inclusive) of the pivot range [k0].
          */
         int partition(double[] a, int left, int right, int pivot1, int pivot2, int[] bounds);
+    }
+
+    /**
+     * Select function.
+     *
+     * <p>Used to define the function to call when {@code k} is close
+     * to the edge; or when quickselect progress is poor. This allows
+     * the edge-select or stopper-function to be configured using parameters.
+     */
+    @FunctionalInterface
+    interface SelectFunction {
+        /**
+         * Partition the elements between {@code ka} and {@code kb}.
+         * It is assumed {@code left <= ka <= kb <= right}.
+         *
+         * @param a Data array to use to find out the K<sup>th</sup> value.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param ka Lower index to select.
+         * @param kb Upper index to select.
+         */
+        void partition(double[] a, int left, int right, int ka, int kb);
     }
 
     /**
@@ -1302,8 +1360,6 @@ final class Partition {
             heapSelectRight(a, left, right, ka, kb - ka);
         }
     }
-
-    // TODO - update to heapselect a range [ka, kb]
 
     /**
      * Partition the minimum {@code n} elements below {@code k} where
