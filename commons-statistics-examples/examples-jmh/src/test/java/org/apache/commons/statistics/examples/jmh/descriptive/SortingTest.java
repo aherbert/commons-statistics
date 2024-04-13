@@ -20,6 +20,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.function.Consumer;
+import java.util.function.ToIntFunction;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
@@ -494,6 +495,64 @@ class SortingTest {
             data[i] = values[indices[i]];
         }
         return data;
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5Internal"})
+    void testMedian5Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        final int e = indices[4];
+        assertDoubleMedian5(values, x -> Sorting.median5(x, a, b, c, d, e), indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5"})
+    void testMedian5(double[] a) {
+        assertDoubleMedian5(a, x -> Sorting.median5(x, 0), 0, 1, 2, 3, 4);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5"})
+    void testMedian5b(double[] a) {
+        assertDoubleMedian5(a, x -> Sorting.median5b(x, 0), 0, 1, 2, 3, 4);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5"})
+    void testMedian5c(double[] a) {
+        assertDoubleMedian5(a, x -> Sorting.median5c(x, 0), 0, 1, 2, 3, 4);
+    }
+
+    /**
+     * Assert that the median {@code function} computes the same result as
+     * {@link Arrays#sort(double[])} run on the provided {@code indices}. Ignores signed
+     * zeros.
+     *
+     * @param values Data.
+     * @param function Sort function.
+     * @param indices Indices.
+     */
+    private static void assertDoubleMedian5(double[] values, ToIntFunction<double[]> function, int... indices) {
+        Assertions.assertFalse(containsDuplicates(indices), () -> "Duplicate indices: " + Arrays.toString(indices));
+        // Pick out the data to sort
+        final double[] expected = extractIndices(values, indices);
+        Arrays.sort(expected);
+        final double[] data = values.clone();
+        final int m = function.applyAsInt(data);
+        // Only the magnitude matters so use a delta of 0 to allow -0.0 == 0.0
+        Assertions.assertEquals(expected[expected.length >>> 1], data[m], 0.0);
+        // Check outside the sorted indices
+        OUTSIDE: for (int i = 0; i < values.length; i++) {
+            for (final int ignore : indices) {
+                if (i == ignore) {
+                    continue OUTSIDE;
+                }
+            }
+            Assertions.assertEquals(values[i], data[i]);
+        }
     }
 
     // int[]
