@@ -5906,7 +5906,7 @@ final class Partition {
             if (n != 0) {
                 final int ka = Math.min(k[0], k[n - 1]);
                 final int kb = Math.max(k[0], k[n - 1]);
-                linearSelect(part, a, 0, end - 1, ka, kb);
+                linearSelect(part, a, 0, end - 1, ka, kb, new int[2]);
             }
         }
         // Restore signed zeros
@@ -5933,18 +5933,24 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
+     * <p>Returns the bounds containing {@code [ka, kb]}. These will be lower/higher
+     * than the keys if equal values are present in the data. This is to be used by
+     * {@link #pivotMedianOfMedians(SPEPartition, double[], int, int, int[])} to identify
+     * the equal value range of the pivot.
+     *
      * @param part Partition function.
      * @param a Values.
      * @param left Lower bound of data (inclusive, assumed to be strictly positive).
      * @param right Upper bound of data (inclusive, assumed to be strictly positive).
      * @param ka First key of interest.
      * @param kb Last key of interest.
+     * @param bounds Bounds of the range containing {@code [ka, kb]} (inclusive).
      * @see <a href="https://en.wikipedia.org/wiki/Median_of_medians">Median of medians (Wikipedia)</a>
      */
-    private void linearSelect(SPEPartition part, double[] a, int left, int right, int ka, int kb) {
+    private void linearSelect(SPEPartition part, double[] a, int left, int right, int ka, int kb,
+            int[] bounds) {
         int l = left;
         int r = right;
-        final int[] upper = {0};
         while (true) {
             // Select when ka and kb are close to the same end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
@@ -5953,24 +5959,45 @@ final class Partition {
             // mutual recursion.
             if (Math.min(kb - l, r - ka) < sortSelectConstant) {
                 sortSelectRange(a, l, r, ka, kb);
+                // We could scan left/right to extend the bounds here after the sort.
+                // Since the move_sample strategy is not generally useful we do not bother.
+                bounds[0] = ka;
+                bounds[1] = kb;
                 return;
             }
-            int p0 = pivotMedianOfMedians(part, a, l, r, upper);
+            int p0 = pivotMedianOfMedians(part, a, l, r, bounds);
             if ((controlFlags & FLAG_MOVE_SAMPLE) != 0) {
-                // Move (rr - p) values to the right end and partition the rest:
-                // |l|---|p|---|rr|---------------------------|r|
-                // |l| < |p|            ???               | > |r|
                 // Note: medians with 5 elements creates a sample size of 20%.
-                // This strategy is not faster when all elements are unique.
-                // When there are many repeat values then this is slower when handling
-                // equal keys as some (~20%) of the equal keys are left at the ends.
-                final int rr = upper[0];
+                // Avoid partitioning the sample known to be above the pivot.
+                // The pivot identified the lower pivot (lp) and upper pivot (p).
+                // This strategy is not faster unless there are a large number of duplicates
+                // (e.g. less than 10 unique values).
+                // On random data with no duplicates this is slower.
+                //
+                // |l  |lp p0| rr|                              r|
+                // | < |  == | > |        ???                    |
+                //
+                // Move region above P to r
+                //
+                // |l  |pp p0|                                  r|
+                // | < |  == |           ???                 | > |
+                final int lp = bounds[0];
+                final int rr = bounds[1];
                 vectorSwap(a, p0 + 1, rr, r);
-                p0 = part.partition(a, p0, r - rr + p0, p0, upper);
+                // 20% less to partition
+                final int p = part.partition(a, p0, r - rr + p0, p0, bounds);
+                // |l    |pp  |p0         |p  u|                r|
+                // |  <  | == |    <      | == |        >        |
+                //
+                // Move additional equal pivot region to the centre:
+                // |l                |p0      u|                r|
+                // |        <        |   ==    |        >        |
+                vectorSwapL(a, lp, p0 - 1, p - 1, a[p]);
+                p0 = p - p0 + lp;
             } else {
-                p0 = part.partition(a, l, r, p0, upper);
+                p0 = part.partition(a, l, r, p0, bounds);
             }
-            final int p1 = upper[0];
+            final int p1 = bounds[0];
 
             // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
             //                   p0 p1
@@ -5985,11 +6012,18 @@ final class Partition {
                 l = p1 + 1;
             } else {
                 // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
+                // Here we set the bounds for use after median-of-medians pivot selection.
+                // In the event there are many equal values this allows collecting those
+                // known to be equal together when moving around the medians sample.
+                bounds[0] = p0;
+                bounds[1] = p1;
                 if (ka < p0) {
                     sortSelectRight(a, l, p0, ka);
+                    bounds[0] = ka;
                 }
                 if (kb > p1) {
                     sortSelectLeft(a, p1, r, kb);
+                    bounds[1] = kb;
                 }
                 return;
             }
@@ -6003,15 +6037,17 @@ final class Partition {
      *
      * <p>The median of medians in computed in-place at the left end. The range containing
      * the medians is {@code [l, rr]} with the right bound {@code rr} returned.
+     * In the event the pivot is a region of equal values, the range of the pivot values
+     * is {@code [lp, p]}, with the {@code p} returned and {@code lp} set in the output bounds.
      *
      * @param part Partition function.
      * @param a Values.
      * @param l Lower bound of data (inclusive, assumed to be strictly positive).
      * @param r Upper bound of data (inclusive, assumed to be strictly positive).
-     * @param upper Upper bound of the range {@code rr} containing the median (inclusive).
-     * @return the pivot index
+     * @param bounds Bounds {@code [lp, rr]}.
+     * @return the pivot index {@code p}
      */
-    private int pivotMedianOfMedians(SPEPartition part, double[] a, int l, int r, int[] upper) {
+    private int pivotMedianOfMedians(SPEPartition part, double[] a, int l, int r, int[] bounds) {
         // Process blocks of 5.
         // Moves the median of each block to the left of the array.
         int rr = l - 1;
@@ -6043,42 +6079,13 @@ final class Partition {
             a[rr] = v;
         }
 
-        //// Separate loop + end
-        //int e = l;
-        //while ((e += 5) <= r) {
-        //    int m;
-        //    // Not as fast to use pointer swaps
-        //    //m = median5(a, e - 5);
-        //
-        //    // Sort 4
-        //    Sorting.sort4(a, e - 5, e - 4, e - 2, e - 1);
-        //    // median of [e-4, e-3, e-2]
-        //    m = e - 3;
-        //    if (a[m] < a[m - 1]) {
-        //        --m;
-        //    } else if (a[m] > a[m + 1]) {
-        //        ++m;
-        //    }
-        //
-        //    // Not as fast to use insertion sort on 5 elements
-        //    //Sorting.sort(a, e - 5, e - 1);
-        //    //m = e - 3;
-        //
-        //    final double v = a[m];
-        //    a[m] = a[++rr];
-        //    a[rr] = v;
-        //}
-        //// Final block may be smaller than 5
-        //Sorting.sort(a, e - 5, r);
-        //int m = (e - 5 + r) >>> 1;
-        //final double v = a[m];
-        //a[m] = a[++rr];
-        //a[rr] = v;
-
-        final int m = (l + rr) >>> 1;
+        int m = (l + rr) >>> 1;
         // mutual recursion
-        linearSelect(part, a, l, rr, m, m);
-        upper[0] = rr;
+        linearSelect(part, a, l, rr, m, m, bounds);
+        // bounds contains the range of the pivot.
+        // return the upper pivot and record the end of the range.
+        m = bounds[1];
+        bounds[1] = rr;
         return m;
     }
 
