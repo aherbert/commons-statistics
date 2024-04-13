@@ -5946,8 +5946,11 @@ final class Partition {
         int r = right;
         final int[] upper = {0};
         while (true) {
-            // select when ka and kb are close to the same end
+            // Select when ka and kb are close to the same end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
+            // Optimal value for this is much higher than standard quickselect due
+            // to the high cost of median-of-medians pivot computation and reuse via
+            // mutual recursion.
             if (Math.min(kb - l, r - ka) < sortSelectConstant) {
                 sortSelectRange(a, l, r, ka, kb);
                 return;
@@ -6023,16 +6026,17 @@ final class Partition {
                 break;
             }
 
-            // Decision tree is (3-4% faster)
+            // Decision tree is fastest
             final int m = Sorting.median5(a, e - 5);
+            //final int m = Sorting.median5(a, e - 5, e - 4, e - 3, e - 2, e - 1);
             // Bigger decision tree (same as median5)
-            //m = Sorting.median5b(a, e - 5);
-            // Sorting network of 4 + insertion
-            //m = Sorting.median5c(a, e - 5);
+            //final int m = Sorting.median5b(a, e - 5);
+            // Sorting network of 4 + insertion (3-4% slower)
+            //final int m = Sorting.median5c(a, e - 5);
 
-            // Not as fast to use insertion sort on 5 elements (8-10% slower)
+            // Not as fast to use insertion sort on 5 elements (10-12% slower)
             //Sorting.sort(a, e - 5, e - 1);
-            //m = e - 3;
+            //final int m = e - 3;
 
             final double v = a[m];
             a[m] = a[++rr];
