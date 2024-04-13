@@ -6142,13 +6142,18 @@ final class Partition {
                 break;
             }
 
-            // Decision tree is fastest
+            // Various methods for time-critical step.
+            // Each must be compiled and run on the same benchmark data.
+            // Decision tree is fastest.
             final int m = Sorting.median5(a, e - 5);
             //final int m = Sorting.median5(a, e - 5, e - 4, e - 3, e - 2, e - 1);
             // Bigger decision tree (same as median5)
             //final int m = Sorting.median5b(a, e - 5);
             // Sorting network of 4 + insertion (3-4% slower)
             //final int m = Sorting.median5c(a, e - 5);
+            // Sorting of 5
+            //final int m = e - 3;
+            //Sorting.sort5(a, e - 5, e - 4, e - 3, e - 2, e - 1);
 
             // Not as fast to use insertion sort on 5 elements (10-12% slower)
             //Sorting.sort(a, e - 5, e - 1);
