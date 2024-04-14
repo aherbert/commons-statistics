@@ -142,15 +142,17 @@ final class Selection {
     //
     // Quickselect can switch to an alternative when: the range is very small
     // (e.g. insertion sort); or the target index is close to the end (e.g. heapselect).
-    // This implementation only uses heapselect to avoid worst case quickselect performance.
     // Small ranges and a target index close to the end are handled using a hybrid of insertion
     // sort and selection (sortselect). This is faster than heapselect for small distance from
     // the edge (m) for a single index and has the advantage of sorting all upstream values from
     // the target index (heap select requires push-down of each successive value to sort). This
     // allows the dual-pivot quickselect on multiple indices that saturate the range to degrade
-    // to a (non-optimised) dual-pivot quicksort. However sortselect is Order(m^2) so cannot be
-    // used when quickselect fails to converge as m may be very large. If heapselect is used
-    // exclusively for small range handling the performance on saturated indices is significantly
+    // to a (non-optimised) dual-pivot quicksort. However sortselect is worst case Order(m * (r-l))
+    // so cannot be used when quickselect fails to converge as m may be very large. For larger
+    // distance from the edge a median-of-medians pivot selection provides Order(n) performance
+    // when quickselect progress is slow. When quickselect progress is slow on multiple indices
+    // then heapselect is used as the stopper algorithm when the range is large. If heapselect
+    // is used for small range handling the performance on saturated indices is significantly
     // slower. Hence the presence of two final selection methods for different purposes.
 
     /** No instances. */

@@ -2461,8 +2461,8 @@ public class QuantilePerformance {
         /** Name of the source.
          * For introselect methods this should effectively turn-off edgeselect. */
         @Param({HEAP_SELECT, ISP + "_EC0", IDP + "_EC0",
-            // Only use for small length as sort insertion is Order(k)
-            // vs Order(log(k)) for the heap.
+            // Only use for small length as sort insertion is worst case Order(k * (right - left))
+            // vs heap select() is O(k - left) + O((right - k) * log(k - left))
             //SORT_SELECT
             })
         private String name;

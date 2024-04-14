@@ -239,9 +239,9 @@ final class Partition {
      * <p>On random data heap select can be used for small lengths when k ~ n / 2^6; this
      * ratio grows with length due to the log2(k) insertion cost. However on structured
      * data (ascending runs; repeat elements) quickselect can be dramatically faster
-     * invalidating this relationship. Thus it is more robust on a variety of data input
-     * to use quickselect until the distance from the edge is small. Heap select is
-     * reserved for when quickselect fails to converge as expected.
+     * invalidating this relationship as it has best case Order(n) performance.
+     * Thus it is more robust on a variety of data input to use quickselect until the
+     * distance from the edge is small and avoid heuristics to choose heap select.
      *
      * <p>A second advantage of sort select over heap select is that all indices closer to
      * the edge than the target index are also sorted. This allows selection of multiple
