@@ -64,19 +64,14 @@ public class MedianPerformance {
 
     // Second generation partition functions
 
-    /** Bentley-McIlroy partitioning (Sedgewick). */
+    /** Bentley-McIlroy partitioning (Sedgewick). This second generation function
+     * dynamically corrects signed zeros when they are encountered. */
     private static final String SBM2 = "2SBM";
 
     // Introselect functions - switch to heapselect when progress is poor
 
     /** Introselect implementation with single pivot partitioning. */
     private static final String ISP = "ISP";
-    /** Introselect implementation with Bentley-McIlroy partitioning (original). */
-    private static final String IBM = "IBM";
-    /** Introselect implementation with Bentley-McIlroy partitioning (Sedgewick). */
-    private static final String ISBM = "ISBM";
-    /** Introselect implementation with Bentley-McIlroy partitioning (Kiwiel). */
-    private static final String IKBM = "IKBM";
     /** Introselect implementation with dual-pivot partitioning. */
     private static final String IDP = "IDP";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
@@ -113,7 +108,7 @@ public class MedianPerformance {
         /** Name of the source. */
         @Param({JDK, CM, SP, SP_NAN, SBM, BM, DP, DP5,
             SBM2,
-            ISP, IBM, ISBM, IKBM, IDP, SELECT
+            ISP, IDP, SELECT
         })
         private String name;
 
@@ -142,7 +137,7 @@ public class MedianPerformance {
                 final org.apache.commons.math3.stat.descriptive.rank.Median m =
                     new org.apache.commons.math3.stat.descriptive.rank.Median();
                 function = m::evaluate;
-            // First generation kth-selector functions
+            // First generation kth-selector functions (not configurable)
             } else if (name.startsWith(SP)) {
                 function = withKthSelector(name, SP)::evaluateSP;
             } else if (name.startsWith(SP_NAN)) {
@@ -155,18 +150,12 @@ public class MedianPerformance {
                 function = withKthSelector(name, DP)::evaluateDP;
             } else if (name.startsWith(DP5)) {
                 function = withKthSelector(name, DP5)::evaluateDP5;
-            // Second generation partition functions
+            // Second generation partition function
             } else if (name.startsWith(SBM2)) {
                 function = withPartition(name, SBM2)::evaluateSBM2;
-            // Introselect implementations
+            // Introselect implementations (configurable)
             } else if (name.startsWith(ISP)) {
                 function = withPartition(name, ISP)::evaluateISP;
-            } else if (name.startsWith(IBM)) {
-                function = withPartition(name, IBM)::evaluateIBM;
-            } else if (name.startsWith(ISBM)) {
-                function = withPartition(name, ISBM)::evaluateISBM;
-            } else if (name.startsWith(IKBM)) {
-                function = withPartition(name, IKBM)::evaluateIKBM;
             } else if (name.startsWith(IDP)) {
                 function = withPartition(name, IDP)::evaluateIDP;
             } else if (name.startsWith(SELECT)) {
@@ -201,7 +190,7 @@ public class MedianPerformance {
         private static Median withPartition(String name, String prefix) {
             return Median.withDefaults()
                 .withOverwrite(true)
-                .withPartition(QuantilePerformance.createPartition(name, prefix, 0, 0, 0));
+                .withPartition(QuantilePerformance.createPartition(name, prefix, 0, 0));
         }
     }
 

@@ -1382,12 +1382,12 @@ public final class Quantile {
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a single-pivot partition method; switching to
-     * heapselect if quickselect convergence is slow.
+     * configured stopper method if quickselect convergence is slow.
      *
      * <p><strong>Performance</strong>
      *
      * <p>It is not recommended to use this method for repeat calls for different quantiles
-     * within the same values. The {@link #evaluateISBM(double[], double...)} method should be used
+     * within the same values. The {@link #evaluateISP(double[], double...)} method should be used
      * which provides better performance.
      *
      * @param values Values.
@@ -1407,7 +1407,7 @@ public final class Quantile {
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a single-pivot partition method; switching to
-     * heapselect if quickselect convergence is slow.
+     * a configured stopper method if quickselect convergence is slow.
      *
      * @param values Values.
      * @param p Probabilities for the quantiles to compute.
@@ -1425,144 +1425,8 @@ public final class Quantile {
      * <p>Note: This method may partially sort the input values if configured to
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
-     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
-     * handling equal keys; switching to heapselect if quickselect convergence is slow.
-     *
-     * <p><strong>Performance</strong>
-     *
-     * <p>It is not recommended to use this method for repeat calls for different quantiles
-     * within the same values. The {@link #evaluateIBM(double[], double...)} method should be used
-     * which provides better performance.
-     *
-     * @param values Values.
-     * @param p Probability for the quantile to compute.
-     * @return the quantile
-     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
-     * @see #evaluateSP(double[], double...)
-     */
-    public double evaluateIBM(double[] values, double p) {
-        return evaluate3(partition::partitionIBM, values, p);
-    }
-
-    /**
-     * Evaluate the {@code p}-th quantiles of the values.
-     *
-     * <p>Note: This method may partially sort the input values if configured to
-     * {@link #withOverwrite(boolean) overwrite} the input data.
-     *
-     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
-     * handling equal keys; switching to heapselect if quickselect convergence is slow.
-     *
-     * @param values Values.
-     * @param p Probabilities for the quantiles to compute.
-     * @return the quantiles
-     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
-     * or no probabilities are specified.
-     */
-    public double[] evaluateIBM(double[] values, double... p) {
-        return evaluate3(partition::partitionIBM, values, p);
-    }
-
-    /**
-     * Evaluate the {@code p}-th quantile of the values.
-     *
-     * <p>Note: This method may partially sort the input values if configured to
-     * {@link #withOverwrite(boolean) overwrite} the input data.
-     *
-     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
-     * handling equal keys by Sedgewick; switching to heapselect if quickselect convergence
-     * is slow.
-     *
-     * <p><strong>Performance</strong>
-     *
-     * <p>It is not recommended to use this method for repeat calls for different quantiles
-     * within the same values. The {@link #evaluateISBM(double[], double...)} method should be used
-     * which provides better performance.
-     *
-     * @param values Values.
-     * @param p Probability for the quantile to compute.
-     * @return the quantile
-     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
-     * @see #evaluateSP(double[], double...)
-     */
-    public double evaluateISBM(double[] values, double p) {
-        return evaluate3(partition::partitionISBM, values, p);
-    }
-
-    /**
-     * Evaluate the {@code p}-th quantiles of the values.
-     *
-     * <p>Note: This method may partially sort the input values if configured to
-     * {@link #withOverwrite(boolean) overwrite} the input data.
-     *
-     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
-     * handling equal keys by Sedgewick; switching to heapselect if quickselect convergence
-     * is slow.
-     *
-     * @param values Values.
-     * @param p Probabilities for the quantiles to compute.
-     * @return the quantiles
-     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
-     * or no probabilities are specified.
-     */
-    public double[] evaluateISBM(double[] values, double... p) {
-        return evaluate3(partition::partitionISBM, values, p);
-    }
-
-    /**
-     * Evaluate the {@code p}-th quantile of the values.
-     *
-     * <p>Note: This method may partially sort the input values if configured to
-     * {@link #withOverwrite(boolean) overwrite} the input data.
-     *
-     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
-     * handling equal keys by Kiwiel; switching to heapselect if quickselect convergence
-     * is slow.
-     *
-     * <p><strong>Performance</strong>
-     *
-     * <p>It is not recommended to use this method for repeat calls for different quantiles
-     * within the same values. The {@link #evaluateIKBM(double[], double...)} method should be used
-     * which provides better performance.
-     *
-     * @param values Values.
-     * @param p Probability for the quantile to compute.
-     * @return the quantile
-     * @throws IllegalArgumentException if the probability {@code p} is not in the range {@code [0, 1]}
-     * @see #evaluateSP(double[], double...)
-     */
-    public double evaluateIKBM(double[] values, double p) {
-        return evaluate3(partition::partitionIKBM, values, p);
-    }
-
-    /**
-     * Evaluate the {@code p}-th quantiles of the values.
-     *
-     * <p>Note: This method may partially sort the input values if configured to
-     * {@link #withOverwrite(boolean) overwrite} the input data.
-     *
-     * <p>Uses an introselect variant with a Bentley-McIlroy quickselect partition method
-     * handling equal keys by Kiwiel; switching to heapselect if quickselect convergence
-     * is slow.
-     *
-     * @param values Values.
-     * @param p Probabilities for the quantiles to compute.
-     * @return the quantiles
-     * @throws IllegalArgumentException if any probability {@code p} is not in the range {@code [0, 1]};
-     * or no probabilities are specified.
-     */
-    public double[] evaluateIKBM(double[] values, double... p) {
-        return evaluate3(partition::partitionIKBM, values, p);
-    }
-
-    /**
-     * Evaluate the {@code p}-th quantile of the values.
-     *
-     * <p>Note: This method may partially sort the input values if configured to
-     * {@link #withOverwrite(boolean) overwrite} the input data.
-     *
      * <p>Uses an introselect variant with a dual-pivot quickselect partition method;
-     * switching to heapselect if quickselect convergence is slow.
+     * switching to configured stopper method if quickselect convergence is slow.
      *
      * <p><strong>Performance</strong>
      *
@@ -1587,7 +1451,7 @@ public final class Quantile {
      * {@link #withOverwrite(boolean) overwrite} the input data.
      *
      * <p>Uses an introselect variant with a dual-pivot quickselect partition method;
-     * switching to heapselect if quickselect convergence is slow.
+     * switching to configured stopper method if quickselect convergence is slow.
      *
      * @param values Values.
      * @param p Probabilities for the quantiles to compute.

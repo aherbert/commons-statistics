@@ -35,6 +35,7 @@ import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.SPStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Distribution;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Modification;
@@ -66,8 +67,6 @@ class PartitionTest {
     private static final int HC = 2;
     /** Default heap select mask shift constant. Using 31 disables length dependence. */
     private static final int MS = 31;
-    /** Default sort select constant. */
-    private static final int SC = 0;
     /** Default sub-sampling size. */
     private static final int SU = 600;
 
@@ -617,138 +616,159 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISP(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
+            .setSPStrategy(SPStrategy.SP)
             ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIBM(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_2)
             .setRecursionMultiple(5)
             .setRecursionConstant(1)
-            ::partitionIBM);
+            .setSPStrategy(SPStrategy.BM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBM(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_LEN)
             .setRecursionMultiple(2)
-            ::partitionISBM);
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMScanningKey(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
-            ::partitionISBM);
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMSearchKey(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
-            ::partitionISBM);
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
-            ::partitionISBM);
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMKeyUpdating(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.KEY_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.UPDATING_INTERVAL)
-            ::partitionISBM);
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexSetUpdating(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.UPDATING_INTERVAL)
-            ::partitionISBM);
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
-            .setCompression(1)::partitionISBM);
+            .setCompression(1)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexSet2(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
-            .setCompression(2)::partitionISBM);
+            .setCompression(2)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMIndexIterator(double[] values, int[] indices) {
-        assertPartition(values, indices,
-            new Partition(SP, QS, HS, HC, SC, SU).setKeyStrategy(KeyStrategy.INDEX_ITERATOR)::partitionISBM);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
+            .setKeyStrategy(KeyStrategy.INDEX_ITERATOR)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexIterator(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_ITERATOR)
-            .setCompression(1)::partitionISBM);
+            .setCompression(1)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexIterator4(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_ITERATOR)
-            .setCompression(4)::partitionISBM);
+            .setCompression(4)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIKBM(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
-            ::partitionIKBM);
+            .setSPStrategy(SPStrategy.KBM)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
-    void testPartitionIDNF(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionIDNF);
+    void testPartitionIDNF1(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
+            .setSPStrategy(SPStrategy.DNF1)
+            ::partitionISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPScanningKey(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
             ::partitionIDP);
@@ -757,7 +777,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPSearchKey(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
             ::partitionIDP);
@@ -766,7 +786,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
             ::partitionIDP);
@@ -775,7 +795,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPKeyUpdating(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.KEY_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
             ::partitionIDP);
@@ -784,7 +804,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPIndexSetUpdating(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.INDEX_SET_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
             ::partitionIDP);
@@ -793,7 +813,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPCompressedIndexSet(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(1)::partitionIDP);
     }
@@ -801,7 +821,7 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPCompressedIndexSet2(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(2)::partitionIDP);
     }
@@ -810,13 +830,13 @@ class PartitionTest {
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPIndexIterator(double[] values, int[] indices) {
         assertPartition(values, indices,
-            new Partition(DP, QS2, HS, HC, MS, SC).setKeyStrategy(KeyStrategy.INDEX_ITERATOR)::partitionIDP);
+            new Partition(DP, QS2, HS, HC, MS).setKeyStrategy(KeyStrategy.INDEX_ITERATOR)::partitionIDP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
     void testPartitionIDPCompressedIndexIterator(double[] values, int[] indices) {
-        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS, SC)
+        assertPartition(values, indices, new Partition(DP, QS2, HS, HC, MS)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_ITERATOR)
             .setCompression(1)::partitionIDP);
     }
@@ -825,7 +845,7 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setControlFlags(0)::partitionFR);
     }
 
@@ -833,7 +853,7 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFRPivotingStrategy(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setControlFlags(Partition.FLAG_PIVOTING_STRATGEY)::partitionFR);
     }
 
@@ -841,7 +861,7 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFRRandomSampling(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)::partitionFR);
     }
 
@@ -849,7 +869,7 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFRMoveSample(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setControlFlags(Partition.FLAG_MOVE_SAMPLE)::partitionFR);
     }
 
@@ -857,7 +877,7 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFRSubsetSampling(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
             .setControlFlags(Partition.FLAG_SUBSET_SAMPLING)::partitionFR);
     }
 
@@ -865,7 +885,7 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionKFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SC, SU)::partitionKFR);
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)::partitionKFR);
     }
 
     @ParameterizedTest
@@ -873,30 +893,22 @@ class PartitionTest {
     void testPartitionLSP(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Only uses sortselect so ensure this is set
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, 2, SU)
+        // Uses a special sortselect size so ensure this is set
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
+            .setLinearSortSelectSize(3)
             ::partitionLSP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
-    void testPartitionLKBM(double[] values, int[] indices) {
+    void testPartitionLSPMoveSample(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Only uses sortselect so ensure this is set
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, 2, SU)
-            ::partitionLKBM);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
-    void testPartitionLKBMMoveSample(double[] values, int[] indices) {
-        Assumptions.assumeTrue(indices.length == 1 ||
-            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Only uses sortselect so ensure this is set
-        assertPartition(values, indices, new Partition(SP, QS, HS, HC, 2, SU)
+        // Uses a special sortselect size so ensure this is set
+        assertPartition(values, indices, new Partition(SP, QS, HS, HC, SU)
+            .setLinearSortSelectSize(3)
             .setControlFlags(Partition.FLAG_MOVE_SAMPLE)
-            ::partitionLKBM);
+            ::partitionLSP);
     }
 
     @ParameterizedTest
@@ -1125,50 +1137,57 @@ class PartitionTest {
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortISP(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortISP);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.SP)
+            ::sortISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIBM(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortIBM);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.BM)
+            ::sortISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortISBM(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortISBM);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.SBM)
+            ::sortISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIKBM(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortIKBM);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.KBM)
+            ::sortISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIDNF1(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortIDNF1);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.DNF1)
+            ::sortISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIDNF2(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortIDNF2);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.DNF2)
+            ::sortISP);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testSort"})
     void testSortIDNF3(double[] values) {
-        assertSort(values,
-            new Partition(SP, QS)::sortIDNF3);
+        assertSort(values, new Partition(SP, QS)
+            .setSPStrategy(SPStrategy.DNF3)
+            ::sortISP);
     }
 
     @ParameterizedTest
@@ -1664,7 +1683,6 @@ class PartitionTest {
             Partition.HEAPSELECT_SHIFT,
             Partition.HEAPSELECT_CONSTANT,
             Partition.HEAPSELECT_MASK_SHIFT,
-            Partition.SORTSELECT_CONSTANT,
             Partition.SUBSAMPLING_SIZE);
         p.setRecursionConsumer(i -> h[maxDepth - i]++);
         final AbstractDataSource source = new AbstractDataSource() {
@@ -1952,7 +1970,7 @@ class PartitionTest {
         source.setup();
         // Target the "median"
         final int[] k = {source.getLength() >> 1};
-        final Partition p = new Partition(sp, QS, HS, HC, SC, subSamplingSize)
+        final Partition p = new Partition(sp, QS, HS, HC, subSamplingSize)
             .setPairedKeyStrategy(pk)
             .setRecursionMultiple(recursionMultiple)
             .setRecursionConstant(recursionConstant);
@@ -1962,7 +1980,7 @@ class PartitionTest {
             final int index = i;
             p.setRecursionConsumer(v -> excess.add(String.format(
                 "%d: %s%n", index, source.getDataSampleInfo(index))));
-            p.partitionIKBM(source.getDataSample(i), k, 1);
+            p.partitionISP(source.getDataSample(i), k, 1);
         }
         TestUtils.printf("n=%d, su=%d, %s, flags=%d : stopped=%d%n",
             n, subSamplingSize, sp, controlFlags, excess.size());
@@ -2098,14 +2116,14 @@ class PartitionTest {
         source.setup();
         // Target the "median"
         final int[] k = {source.getLength() >> 1};
-        final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_3, QS, HS, HC, SC, Integer.MAX_VALUE)
+        final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_3, QS, HS, HC, Integer.MAX_VALUE)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
             .setRecursionMultiple(2);
         for (int i = 0; i < source.size(); i++) {
             final int index = i;
             p.setRecursionConsumer(v -> TestUtils.printf("%d: %s%n", index, source.getDataSampleInfo(index)));
-            //p.partitionISP(source.getDataSample(i), k, 1);
-            p.partitionIKBM(source.getDataSample(i), k, 1);
+            //p.setSPStrategy(SPStrategy.SP);
+            p.partitionISP(source.getDataSample(i), k, 1);
         }
     }
 }

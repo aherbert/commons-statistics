@@ -21,6 +21,9 @@ import java.util.EnumSet;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.SPStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Distribution;
 import org.apache.commons.statistics.examples.jmh.descriptive.QuantilePerformance.AbstractDataSource.Modification;
@@ -38,22 +41,17 @@ class QuantilePerformanceTest {
 
     @Test
     void testGetHeapSelectShift() {
-        assertIntParameter(Partition.HEAPSELECT_SHIFT, "HS", QuantilePerformance::getHeapSelectShift);
+        assertIntParameter(Partition.HEAPSELECT_SHIFT, "ES", QuantilePerformance::getEdgeSelectShift);
     }
 
     @Test
     void testGetHeapSelectConstant() {
-        assertIntParameter(Partition.HEAPSELECT_CONSTANT, "HC", QuantilePerformance::getHeapSelectConstant);
+        assertIntParameter(Partition.HEAPSELECT_CONSTANT, "EC", QuantilePerformance::getEdgeSelectConstant);
     }
 
     @Test
     void testGetHeapSelectMaskShift() {
-        assertIntParameter(Partition.HEAPSELECT_MASK_SHIFT, "MS", QuantilePerformance::getHeapSelectMaskShift);
-    }
-
-    @Test
-    void testGetSortSelectConstant() {
-        assertIntParameter(Partition.SORTSELECT_CONSTANT, "SC", QuantilePerformance::getSortSelectConstant);
+        assertIntParameter(Partition.HEAPSELECT_MASK_SHIFT, "MS", QuantilePerformance::getEdgeSelectMaskShift);
     }
 
     @Test
@@ -83,22 +81,32 @@ class QuantilePerformanceTest {
 
     @Test
     void testGetPivotingStrategy() {
-        assertEnumParameter(Partition.PIVOTING_STRATEGY, QuantilePerformance::getPivotStrategy);
+        assertEnumParameter(Partition.PIVOTING_STRATEGY,
+            s -> QuantilePerformance.getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY));
     }
 
     @Test
     void testGetDualPivotingStrategy() {
-        assertEnumParameter(Partition.DUAL_PIVOTING_STRATEGY, QuantilePerformance::getDualPivotStrategy);
+        assertEnumParameter(Partition.DUAL_PIVOTING_STRATEGY,
+            s -> QuantilePerformance.getEnumOrElse(s, DualPivotingStrategy.class, Partition.DUAL_PIVOTING_STRATEGY));
     }
 
     @Test
     void testGetKeyStrategy() {
-        assertEnumParameter(Partition.KEY_STRATEGY, QuantilePerformance::getKeyStrategy);
+        assertEnumParameter(Partition.KEY_STRATEGY,
+            s -> QuantilePerformance.getEnumOrElse(s, KeyStrategy.class, Partition.KEY_STRATEGY));
     }
 
     @Test
     void testGetPairedKeyStrategy() {
-        assertEnumParameter(Partition.PAIRED_KEY_STRATEGY, QuantilePerformance::getPairedKeyStrategy);
+        assertEnumParameter(Partition.PAIRED_KEY_STRATEGY,
+            s -> QuantilePerformance.getEnumOrElse(s, PairedKeyStrategy.class, Partition.PAIRED_KEY_STRATEGY));
+    }
+
+    @Test
+    void testGetSPStrategy() {
+        assertEnumParameter(Partition.SP_STRATEGY,
+            s -> QuantilePerformance.getEnumOrElse(s, SPStrategy.class, Partition.SP_STRATEGY));
     }
 
     private static void assertIntParameter(int defaultValue, String pattern, ToIntFunction<String[]> fun) {

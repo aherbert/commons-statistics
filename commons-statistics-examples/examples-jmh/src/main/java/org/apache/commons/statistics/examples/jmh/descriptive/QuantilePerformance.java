@@ -41,8 +41,11 @@ import org.apache.commons.rng.sampling.PermutationSampler;
 import org.apache.commons.rng.sampling.distribution.DiscreteUniformSampler;
 import org.apache.commons.rng.sampling.distribution.SharedStateDiscreteSampler;
 import org.apache.commons.rng.simple.RandomSource;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.EdgeSelectStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKeyStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.SPStrategy;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.StopperStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Quantile.EstimationMethod;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -106,41 +109,33 @@ public class QuantilePerformance {
 
     // Second generation partition functions
 
-    /** Bentley-McIlroy partitioning (Sedgewick). */
+    /** Bentley-McIlroy partitioning (Sedgewick). This second generation function
+     * dynamically corrects signed zeros when they are encountered. */
     private static final String SBM2 = "2SBM";
 
-    // Introselect functions - switch to heapselect when progress is poor
+    // Introselect functions - switch to a stopper function when progress is poor
 
     /** Introselect implementation with single pivot partitioning. */
     private static final String ISP = "ISP";
-    /** Introselect implementation with Bentley-McIlroy partitioning (original). */
-    private static final String IBM = "IBM";
-    /** Introselect implementation with Bentley-McIlroy partitioning (Sedgewick). */
-    private static final String ISBM = "ISBM";
-    /** Introselect implementation with Bentley-McIlroy partitioning (Kiwiel). */
-    private static final String IKBM = "IKBM";
-    /** Introselect implementation with Dutch National Flag partitioning. */
-    private static final String IDNF = "IDNF";
     /** Introselect implementation with dual-pivot partitioning. */
     private static final String IDP = "IDP";
     /** Linearselect implementation with single pivot partitioning. */
     private static final String LSP = "LSP";
-    /** Linearselect implementation with Bentley-McIlroy partitioning (Kiwiel). */
-    private static final String LKBM = "LKBM";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
      * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
 
+    // TODO - how to configure ISP via the name.
+    // ISP_SP,ISP_BM,ISP_KBM ...
+
     /** Pattern for the minimum quickselect size. */
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
-    /** Pattern for the heapselect shift. */
-    private static final Pattern HS_PATTERN = Pattern.compile("HS(\\d+)");
-    /** Pattern for the heapselect constant. */
-    private static final Pattern HC_PATTERN = Pattern.compile("HC(\\d+)");
-    /** Pattern for the heapselect mask shift. */
+    /** Pattern for the edgeselect shift. */
+    private static final Pattern ES_PATTERN = Pattern.compile("ES(\\d+)");
+    /** Pattern for the edgeselect constant. */
+    private static final Pattern EC_PATTERN = Pattern.compile("EC(\\d+)");
+    /** Pattern for the edgeselect mask shift. */
     private static final Pattern MS_PATTERN = Pattern.compile("MS(\\d+)");
-    /** Pattern for the sortselect constant. */
-    private static final Pattern SC_PATTERN = Pattern.compile("SC(\\d+)");
     /** Pattern for the sub-sampling size. */
     private static final Pattern SU_PATTERN = Pattern.compile("SU(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
@@ -1249,7 +1244,7 @@ public class QuantilePerformance {
             //SORT, SPH, SPE
             CM, SP, BM, SBM, DP, DP5,
             SBM2,
-            ISP, IBM, ISBM, IKBM, IDP, SELECT})
+            ISP, IDP, SELECT})
         private String name;
 
         /** The action. */
@@ -1300,18 +1295,12 @@ public class QuantilePerformance {
                 function = withKthSelector(name, DP)::evaluateDP;
             } else if (name.startsWith(DP5)) {
                 function = withKthSelector(name, DP5)::evaluateDP5;
-            // Second generation partition functions
+            // Second generation partition function
             } else if (name.startsWith(SBM2)) {
                 function = withPartition(name, SBM2)::evaluateSBM2;
             // Introselect implementations
             } else if (name.startsWith(ISP)) {
                 function = withPartition(name, ISP)::evaluateISP;
-            } else if (name.startsWith(IBM)) {
-                function = withPartition(name, IBM)::evaluateIBM;
-            } else if (name.startsWith(ISBM)) {
-                function = withPartition(name, ISBM)::evaluateISBM;
-            } else if (name.startsWith(IKBM)) {
-                function = withPartition(name, IKBM)::evaluateIKBM;
             } else if (name.startsWith(IDP)) {
                 function = withPartition(name, IDP)::evaluateIDP;
             } else if (name.startsWith(SELECT)) {
@@ -1940,7 +1929,7 @@ public class QuantilePerformance {
      * using a power of 2 shift.
      *
      * <p>This is a specialised class to allow benchmarking the switch from using
-     * quickselect partitioning to using heapselect.
+     * quickselect partitioning to using edgeselect.
      *
      * <p>This class provides both data to partition and the indices to partition.
      * The indices and data are created per iteration. The order to process them
@@ -2058,7 +2047,7 @@ public class QuantilePerformance {
             // Not run by default as it is slow on large data
             //"InsertionSortIF", "InsertionSortIT", "InsertionSort", "InsertionSortB"
             //"BM25"
-            ISBM, IKBM, IDP,
+            ISP, IDP,
             })
         private String name;
 
@@ -2084,7 +2073,7 @@ public class QuantilePerformance {
             Objects.requireNonNull(name);
             if (JDK.equals(name)) {
                 function = Arrays::sort;
-            // First generation kth-selector functions
+            // First generation kth-selector functions (not configurable)
             } else if (name.startsWith(SP)) {
                 function = createKthSelector(name, SP, qs)::sortSP;
             } else if (name.startsWith(SBM)) {
@@ -2097,29 +2086,14 @@ public class QuantilePerformance {
                 function = createKthSelector(name, DP5, qs)::sortDP5;
             } else if (name.startsWith(DNF)) {
                 function = createKthSelector(name, DNF, qs)::sortDNF;
-            // 2nd generation partition functions
+            // 2nd generation partition function
             } else if (name.startsWith(SBM2)) {
-                function = createPartition(name, SBM2, qs, 0, 0)::sortSBM;
+                function = createPartition(name, SBM2, qs, 0)::sortSBM;
             // Introsort
             } else if (name.startsWith(ISP)) {
-                function = createPartition(name, ISP, qs, 0, 0)::sortISP;
-            } else if (name.startsWith(IBM)) {
-                function = createPartition(name, IBM, qs, 0, 0)::sortIBM;
-            } else if (name.startsWith(ISBM)) {
-                function = createPartition(name, ISBM, qs, 0, 0)::sortISBM;
-            } else if (name.startsWith(IKBM)) {
-                function = createPartition(name, IKBM, qs, 0, 0)::sortIKBM;
-            } else if (name.startsWith(IDNF)) {
-                // 3 variants
-                if (name.startsWith(IDNF + "3")) {
-                    function = createPartition(name, IDNF + "3", qs, 0, 0)::sortIDNF3;
-                } else if (name.startsWith(IDNF + "2")) {
-                    function = createPartition(name, IDNF + "2", qs, 0, 0)::sortIDNF2;
-                } else if (name.startsWith(IDNF + "1")) {
-                    function = createPartition(name, IDNF + "1", qs, 0, 0)::sortIDNF1;
-                }
+                function = createPartition(name, ISP, qs, 0)::sortISP;
             } else if (name.startsWith(IDP)) {
-                function = createPartition(name, IDP, qs, 0, 0)::sortIDP;
+                function = createPartition(name, IDP, qs, 0)::sortIDP;
             } else if (name.startsWith(SELECT)) {
                 // Sort by selection of the entire range.
                 final Supplier<DoubleDataTransformer> transformerFactory =
@@ -2288,20 +2262,16 @@ public class QuantilePerformance {
             SP, BM, SBM,
             DP, DP5, DNF,
             SBM2,
-            ISP, IBM, ISBM, IKBM, IDNF, IDP, LSP, LKBM, SELECT})
+            ISP, IDP, LSP, SELECT})
         private String name;
 
         /** Override of minimum quickselect size. */
         @Param({"0"})
         private int qs;
 
-        /** Override of minimum heapselect constant. */
+        /** Override of minimum edgeselect constant. */
         @Param({"0"})
-        private int hc;
-
-        /** Override of minimum sortselect constant. */
-        @Param({"0"})
-        private int sc;
+        private int ec;
 
         /** The action. */
         private BiFunction<double[], int[], double[]> function;
@@ -2325,29 +2295,16 @@ public class QuantilePerformance {
                 function = (data, indices) -> extractIndices(data, indices.clone());
             } else  if (name.startsWith(SORT)) {
                 // Sort variants (do not clone the keys)
-                if (name.contains(ISBM)) {
-                    final Partition part = createPartition(name.substring(SORT.length()), ISBM, qs, hc, sc);
+                if (name.contains(ISP)) {
+                    final Partition part = createPartition(name.substring(SORT.length()), ISP, qs, ec);
                     function = (data, indices) -> {
-                        part.sortISBM(data);
-                        return extractIndices(data, indices);
-                    };
-                } else if (name.contains(IKBM)) {
-                    final Partition part = createPartition(name.substring(SORT.length()), IKBM, qs, hc, sc);
-                    function = (data, indices) -> {
-                        part.sortIKBM(data);
+                        part.sortISP(data);
                         return extractIndices(data, indices);
                     };
                 } else if (name.contains(IDP)) {
-                    final Partition part = createPartition(name.substring(SORT.length()), IDP, qs, hc, sc);
+                    final Partition part = createPartition(name.substring(SORT.length()), IDP, qs, ec);
                     function = (data, indices) -> {
                         part.sortIDP(data);
-                        return extractIndices(data, indices);
-                    };
-                } else if (name.contains(IDNF + "3")) {
-                    // Only support IDNF3
-                    final Partition part = createPartition(name.substring(SORT.length()), IDNF + "3", qs, hc, sc);
-                    function = (data, indices) -> {
-                        part.sortIDNF3(data);
                         return extractIndices(data, indices);
                     };
                 } else if (name.contains(JDK)) {
@@ -2374,6 +2331,8 @@ public class QuantilePerformance {
                     return x;
                 };
             // The following methods clone the indices to avoid destructive modification
+            // TODO: Remove slow KthSelector functions created during development. Leave
+            // the best version, e.g. one using a BitSet for pivot storage.
             } else if (name.startsWith(SP)) {
                 final KthSelector selector = createKthSelector(name, SP, qs);
                 function = (data, indices) -> {
@@ -2410,74 +2369,37 @@ public class QuantilePerformance {
                     selector.partitionDNF(data, indices.clone());
                     return extractIndices(data, indices);
                 };
-            // Second generation partition functions
+            // Second generation partition function with configurable key strategy
             } else if (name.startsWith(SBM2)) {
-                final Partition part = createPartition(name, SBM2, qs, hc, sc);
+                final Partition part = createPartition(name, SBM2, qs, ec);
                 function = (data, indices) -> {
                     part.partitionSBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Floyd-Rivest partition functions
             } else if (name.startsWith(FR)) {
-                final Partition part = createPartition(name, FR, qs, hc, sc);
+                final Partition part = createPartition(name, FR, qs, ec);
                 function = (data, indices) -> {
                     part.partitionFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(KFR)) {
-                final Partition part = createPartition(name, KFR, qs, hc, sc);
+                final Partition part = createPartition(name, KFR, qs, ec);
                 function = (data, indices) -> {
                     part.partitionKFR(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
-            // Introselect implementations
+            // Introselect implementations which are highly configurable
             } else if (name.startsWith(ISP)) {
-                final Partition part = createPartition(name, ISP, qs, hc, sc);
+                final Partition part = createPartition(name, ISP, qs, ec);
                 function = (data, indices) -> {
                     part.partitionISP(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
-            } else if (name.startsWith(IBM)) {
-                final Partition part = createPartition(name, IBM, qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionIBM(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(ISBM)) {
-                final Partition part = createPartition(name, ISBM, qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionISBM(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(IKBM)) {
-                final Partition part = createPartition(name, IKBM, qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionIKBM(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(IDNF)) {
-                final Partition part = createPartition(name, IDNF, qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionIDNF(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
             } else if (name.startsWith(IDP)) {
-                final Partition part = createPartition(name, IDP, qs, hc, sc);
+                final Partition part = createPartition(name, IDP, qs, ec);
                 function = (data, indices) -> {
                     part.partitionIDP(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            // Linearselect (median-of-medians) implementations
-            } else if (name.startsWith(LSP)) {
-                final Partition part = createPartition(name, LSP, qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionLSP(data, indices.clone(), indices.length);
-                    return extractIndices(data, indices);
-                };
-            } else if (name.startsWith(LKBM)) {
-                final Partition part = createPartition(name, LKBM, qs, hc, sc);
-                function = (data, indices) -> {
-                    part.partitionLKBM(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(SELECT)) {
@@ -2486,8 +2408,15 @@ public class QuantilePerformance {
                     Partition.select(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
+            // Linearselect (median-of-medians) implementation (stopper for quickselect)
+            } else if (name.startsWith(LSP)) {
+                final Partition part = createPartition(name, LSP, qs, ec);
+                function = (data, indices) -> {
+                    part.partitionLSP(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            // Heapselect implementation (stopper for quickselect)
             } else if (name.startsWith(HEAP_SELECT)) {
-                // Used to test heapselect as the stopper for quickselect
                 function = (data, indices) -> {
                     int min = indices[indices.length - 1];
                     int max = min;
@@ -2525,13 +2454,13 @@ public class QuantilePerformance {
      * that are clustered close to the edge of the data.
      *
      * <p>This is a specialised class to allow benchmarking the switch from using
-     * quickselect partitioning to using heapselect.
+     * quickselect partitioning to using edgeselect.
      */
     @State(Scope.Benchmark)
     public static class EdgeFunctionSource {
         /** Name of the source.
-         * For introselect methods this should effectively turn-off heapselect. */
-        @Param({HEAP_SELECT, IKBM + "_HC0", IDP + "_HC0",
+         * For introselect methods this should effectively turn-off edgeselect. */
+        @Param({HEAP_SELECT, ISP + "_EC0", IDP + "_EC0",
             // Only use for small length as sort insertion is Order(k)
             // vs Order(log(k)) for the heap.
             //SORT_SELECT
@@ -2594,16 +2523,17 @@ public class QuantilePerformance {
                     Partition.sortSelectRange(data, 0, data.length - 1, indices[0], indices[1]);
                     return extractIndices(data, indices[0], indices[1]);
                 };
-            // introselect methods - these should be configured to not use heapselect
-            } else if (name.startsWith(IKBM)) {
-                final Partition part = createPartition(name, IKBM, 0, 0, 0);
+            // introselect methods - these should be configured to not use edgeselect.
+            // These directly call the introselect method to skip NaN/signed zero processing.
+            } else if (name.startsWith(ISP)) {
+                final Partition part = createPartition(name, ISP, 0, 0);
                 function = (data, indices) -> {
-                    part.introselect(Partition::partitionSBM, data,
+                    part.introselect(part.getSPFunction(), data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
                     return extractIndices(data, indices[0], indices[1]);
                 };
             } else if (name.startsWith(IDP)) {
-                final Partition part = createPartition(name, IDP, 0, 0, 0);
+                final Partition part = createPartition(name, IDP, 0, 0);
                 function = (data, indices) -> {
                     part.introselect(Partition::partitionDP, data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
@@ -2870,7 +2800,7 @@ public class QuantilePerformance {
         return Quantile.withDefaults()
             .with(EstimationMethod.HF6)
             .withOverwrite(true)
-            .withPartition(createPartition(name, prefix, 0, 0, 0));
+            .withPartition(createPartition(name, prefix, 0, 0));
     }
 
     /**
@@ -2888,7 +2818,7 @@ public class QuantilePerformance {
     static KthSelector createKthSelector(String name, String prefix, int qs) {
         final String[] s = {name};
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
-        final PivotingStrategy sp = getPivotStrategy(s);
+        final PivotingStrategy sp = getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY);
         // Check for unharvested parameters
         for (int i = prefix.length(); i < s[0].length(); i++) {
             if (s[0].charAt(i) != '_') {
@@ -2909,26 +2839,28 @@ public class QuantilePerformance {
      * @param name Name.
      * @param prefix Method prefix.
      * @param qs Minimum quickselect size (if non-zero).
-     * @param hc Minimum heapselect constant (if non-zero).
-     * @param sc Minimum sortselect constant (if non-zero).
+     * @param ec Minimum edgeselect constant (if non-zero).
      * @return the {@link Partition} instance
      */
-    static Partition createPartition(String name, String prefix, int qs, int hc, int sc) {
+    static Partition createPartition(String name, String prefix, int qs, int ec) {
         final String[] s = {name};
-        final PivotingStrategy sp = getPivotStrategy(s);
-        final DualPivotingStrategy dp = getDualPivotStrategy(s);
+        final PivotingStrategy sp = getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY);
+        final DualPivotingStrategy dp = getEnumOrElse(s, DualPivotingStrategy.class, Partition.DUAL_PIVOTING_STRATEGY);
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
-        final int heapSelectShift = getHeapSelectShift(s);
-        final int heapSelectConstant = hc != 0 ? hc : getHeapSelectConstant(s);
-        final int heapSelectMaskShift = getHeapSelectMaskShift(s);
-        final int sortSelectConstant = sc != 0 ? sc : getSortSelectConstant(s);
+        final int edgeSelectShift = getEdgeSelectShift(s);
+        final int edgeSelectConstant = ec != 0 ? ec : getEdgeSelectConstant(s);
+        final int edgeSelectMaskShift = getEdgeSelectMaskShift(s);
         final int subSamplingSize = getSubSamplingSize(s);
-        final KeyStrategy keyStartegy = getKeyStrategy(s);
-        final PairedKeyStrategy pairedKeyStartegy = getPairedKeyStrategy(s);
+        final KeyStrategy keyStartegy = getEnumOrElse(s, KeyStrategy.class, Partition.KEY_STRATEGY);
+        final PairedKeyStrategy pairedKeyStartegy =
+            getEnumOrElse(s, PairedKeyStrategy.class, Partition.PAIRED_KEY_STRATEGY);
         final double recursionMultiple = getRecursionMultiple(s);
         final int recursionConstant = getRecursionConstant(s);
         final int compressionLevel = getCompressionLevel(s);
         final int controlFlags = getControlFlags(s);
+        final SPStrategy spStrategy = getEnumOrElse(s, SPStrategy.class, Partition.SP_STRATEGY);
+        final EdgeSelectStrategy esStrategy = getEnumOrElse(s, EdgeSelectStrategy.class, Partition.EDGE_STRATEGY);
+        final StopperStrategy stopStrategy = getEnumOrElse(s, StopperStrategy.class, Partition.STOPPER_STRATEGY);
         // Check for unharvested parameters
         for (int i = prefix.length(); i < s[0].length(); i++) {
             if (s[0].charAt(i) != '_') {
@@ -2937,8 +2869,8 @@ public class QuantilePerformance {
             }
         }
         final Partition p = new Partition(sp, dp, minQuickSelectSize,
-            heapSelectShift, heapSelectConstant, heapSelectMaskShift,
-            sortSelectConstant, subSamplingSize);
+            edgeSelectShift, edgeSelectConstant, edgeSelectMaskShift,
+            subSamplingSize);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(keyStartegy);
@@ -2947,6 +2879,10 @@ public class QuantilePerformance {
         p.setRecursionConstant(recursionConstant);
         p.setCompression(compressionLevel);
         p.setControlFlags(controlFlags);
+        p.setSPStrategy(spStrategy);
+        p.setEdgeSelectStrategy(esStrategy);
+        p.setStopperStrategy(stopStrategy);
+
         return p;
     }
 
@@ -2969,13 +2905,13 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the length shift for the heapselect distance-from-end computation.
+     * Gets the length shift for the edgeselect distance-from-end computation.
      *
      * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the heapselect shift
+     * @return the edgeselect shift
      */
-    static int getHeapSelectShift(String[] name) {
-        final Matcher m = HS_PATTERN.matcher(name[0]);
+    static int getEdgeSelectShift(String[] name) {
+        final Matcher m = ES_PATTERN.matcher(name[0]);
         if (m.find()) {
             final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
             name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
@@ -2985,13 +2921,13 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the constant for the heapselect distance-from-end computation.
+     * Gets the constant for the edgeselect distance-from-end computation.
      *
      * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the heapselect constant
+     * @return the edgeselect constant
      */
-    static int getHeapSelectConstant(String[] name) {
-        final Matcher m = HC_PATTERN.matcher(name[0]);
+    static int getEdgeSelectConstant(String[] name) {
+        final Matcher m = EC_PATTERN.matcher(name[0]);
         if (m.find()) {
             final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
             name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
@@ -3001,13 +2937,13 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the length shift for the mask applied to the dynamic heapselect
+     * Gets the length shift for the mask applied to the dynamic edgeselect
      * distance-from-end computation.
      *
      * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the heapselect mask shift
+     * @return the edgeselect mask shift
      */
-    static int getHeapSelectMaskShift(String[] name) {
+    static int getEdgeSelectMaskShift(String[] name) {
         final Matcher m = MS_PATTERN.matcher(name[0]);
         if (m.find()) {
             final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
@@ -3015,22 +2951,6 @@ public class QuantilePerformance {
             return i;
         }
         return Partition.HEAPSELECT_MASK_SHIFT;
-    }
-
-    /**
-     * Gets the constant for the sortselect distance-from-end computation.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the sortselect constant
-     */
-    static int getSortSelectConstant(String[] name) {
-        final Matcher m = SC_PATTERN.matcher(name[0]);
-        if (m.find()) {
-            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
-            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
-            return i;
-        }
-        return Partition.SORTSELECT_CONSTANT;
     }
 
     /**
@@ -3117,116 +3037,17 @@ public class QuantilePerformance {
     /**
      * Gets the pivot strategy for the recursive partition algorithm.
      *
+     * @param <E> Enum type.
      * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the pivot strategy
-     */
-    static PivotingStrategy getPivotStrategy(String[] name) {
-        return getPivotStrategyOrElse(name, Partition.PIVOTING_STRATEGY);
-    }
-
-    /**
-     * Gets the pivot strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @param cls Class of the enum.
      * @param defaultValue Default value.
      * @return the pivot strategy
      */
-    static PivotingStrategy getPivotStrategyOrElse(String[] name, PivotingStrategy defaultValue) {
+    static <E extends Enum<E>> E getEnumOrElse(String[] name, Class<E> cls, E defaultValue) {
         // Names can have partial matches. Match the longest name
         int len = 0;
-        PivotingStrategy result = defaultValue;
-        for (final PivotingStrategy s : PivotingStrategy.values()) {
-            if (name[0].contains(s.name()) && s.name().length() > len) {
-                result = s;
-                len = s.name().length();
-            }
-        }
-        name[0] = name[0].replace(result.toString(), "");
-        return result;
-    }
-
-    /**
-     * Gets the dual pivot strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the dual pivot strategy
-     */
-    static DualPivotingStrategy getDualPivotStrategy(String[] name) {
-        return getDualPivotStrategyOrElse(name, Partition.DUAL_PIVOTING_STRATEGY);
-    }
-
-    /**
-     * Gets the dual pivot strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @param defaultValue Default value.
-     * @return the dual pivot strategy
-     */
-    static DualPivotingStrategy getDualPivotStrategyOrElse(String[] name, DualPivotingStrategy defaultValue) {
-        // Names can have partial matches. Match the longest name
-        int len = 0;
-        DualPivotingStrategy result = defaultValue;
-        for (final DualPivotingStrategy s : DualPivotingStrategy.values()) {
-            if (name[0].contains(s.name()) && s.name().length() > len) {
-                result = s;
-                len = s.name().length();
-            }
-        }
-        name[0] = name[0].replace(result.toString(), "");
-        return result;
-    }
-
-    /**
-     * Gets the multiple key strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the key strategy
-     */
-    static KeyStrategy getKeyStrategy(String[] name) {
-        return getKeyStrategyOrElse(name, Partition.KEY_STRATEGY);
-    }
-
-    /**
-     * Gets the multiple key strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @param defaultValue Default value.
-     * @return the key strategy
-     */
-    static KeyStrategy getKeyStrategyOrElse(String[] name, KeyStrategy defaultValue) {
-        int len = 0;
-        KeyStrategy result = defaultValue;
-        for (final KeyStrategy s : KeyStrategy.values()) {
-            if (name[0].contains(s.name()) && s.name().length() > len) {
-                result = s;
-                len = s.name().length();
-            }
-        }
-        name[0] = name[0].replace(result.toString(), "");
-        return result;
-    }
-
-    /**
-     * Gets the 1 or 2 key strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the paired key strategy
-     */
-    static PairedKeyStrategy getPairedKeyStrategy(String[] name) {
-        return getPairedKeyStrategyOrElse(name, Partition.PAIRED_KEY_STRATEGY);
-    }
-
-    /**
-     * Gets the 1 or 2 key strategy for the recursive partition algorithm.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @param defaultValue Default value.
-     * @return the paired key strategy
-     */
-    static PairedKeyStrategy getPairedKeyStrategyOrElse(String[] name, PairedKeyStrategy defaultValue) {
-        int len = 0;
-        PairedKeyStrategy result = defaultValue;
-        for (final PairedKeyStrategy s : PairedKeyStrategy.values()) {
+        E result = defaultValue;
+        for (final E s : cls.getEnumConstants()) {
             if (name[0].contains(s.name()) && s.name().length() > len) {
                 result = s;
                 len = s.name().length();
@@ -3384,7 +3205,7 @@ public class QuantilePerformance {
 
     /**
      * Benchmark partitioning of an interval of indices a set distance from the edge.
-     * This is used to benchmark the switch from quickselect partitioning to heapselect.
+     * This is used to benchmark the switch from quickselect partitioning to edgeselect.
      *
      * @param function Source of the function.
      * @param source Source of the data.

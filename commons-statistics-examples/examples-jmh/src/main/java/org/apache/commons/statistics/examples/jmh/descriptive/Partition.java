@@ -184,6 +184,8 @@ final class Partition {
     /** Default selection constant for sortselect. Off by default as heapselect is used
      * in the default configuration for indices close to the edge. */
     static final int SORTSELECT_CONSTANT = 0;
+    /** Default selection constant for linearselect. */
+    static final int LINEAR_SORTSELECT_SIZE = 80;
     /** Default sub-sampling size to identify a single pivot. Off by default.
      * The SELECT algorithm of Floyd-Rivest uses 600. */
     static final int SUBSAMPLING_SIZE = Integer.MAX_VALUE;
@@ -199,6 +201,12 @@ final class Partition {
     static final int COMPRESSION_LEVEL = 1;
     /** Default control flags. */
     static final int CONTROL_FLAGS = 0;
+    /** Default single-pivot strategy. */
+    static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
+    /** Default single-pivot strategy. */
+    static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
+    /** Default single-pivot strategy. */
+    static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SSS;
 
     /** Control flag for the pivoting strategy. */
     static final int FLAG_PIVOTING_STRATGEY = 0x1;
@@ -300,24 +308,22 @@ final class Partition {
     /** Minimum size for quickselect. Below this threshold partitioning using quickselect
      * is stopped and a sort selection is performed. */
     private final int minQuickSelectSize;
-    /** Length shift for heapselect. Heapselect runs when k is within d of the end of
-     * length n using {@code d = (n >>> shift) + c}.
+    /** Length shift for edgeselect. The edge selection function runs when k is within d
+     * of the end of length n using {@code d = (n >>> shift) + c}.
      * Not supported by all partition methods. */
-    private final int heapSelectShift;
-    /** Constant for heapselect. Heapselect runs when k is within d of the end of
-     * length n using {@code d = (n >>> shift) + c}.
+    private final int edgeSelectShift;
+    /** Constant for edgeselect. The edge selections function runs when k is within d
+     * of the end of length n using {@code d = (n >>> shift) + c}.
      * Not supported by all partition methods. */
-    private final int heapSelectConstant;
-    /** Mask used on the dynamic threshold for heapselect. The number of lower bits set in
-     * this mask controls the maximum value for the dynamic heapselect threshold. If zero
+    private final int edgeSelectConstant;
+    /** Size for sortselect in the linearselect function. Optimal value for this is much higher
+     * than for regular quickselect as the median-of-medians pivot strategy is expensive. */
+    private int linearSortSelectSize = LINEAR_SORTSELECT_SIZE;
+    /** Mask used on the dynamic threshold for edgeselect. The number of lower bits set in
+     * this mask controls the maximum value for the dynamic edgeselect threshold. If zero
      * then the dynamic threshold is ignored. If {@link Integer#MAX_VALUE} then the dynamic
      * threshold is always used. */
-    private final int heapSelectDynamicMask;
-    /** Constant for sortselect. Sortselect runs when k is within c of the end of
-     * length n. Unlike heapselect, sortselect has no length dependent configuration
-     * as insertion sort scales poorly with larger size (insertion is Order(n) vs
-     * Order(log(n)) for a heap. */
-    private final int sortSelectConstant;
+    private final int edgeSelectDynamicMask;
     /** Threshold to use sub-sampling of the range to identify the single pivot.
      * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data. This
      * identifies a pivot so that the target element is in the smaller set after partitioning.
@@ -393,6 +399,13 @@ final class Partition {
      * the distribution of the recursion for different input data. */
     private IntConsumer recursionConsumer = i -> { /* no-op */ };
 
+    /** The single-pivot partition function. */
+    private SPEPartition spFunction;
+    /** Selection function used when {@code k} is close to the edge of the range. */
+    private SelectFunction edgeSelection;
+    /** Selection function used when quickselect progress is poor. */
+    private SelectFunction stopperSelection;
+
     /**
      * Define the strategy for processing multiple keys.
      */
@@ -448,39 +461,130 @@ final class Partition {
     }
 
     /**
+     * Define the strategy for single-pivot partitioning. Partitioning may be binary
+     * ({@code <, >}), or ternary ({@code <, ==, >}) by collecting values equal to the
+     * pivot value. Typically partitioning will use two pointers i and j to traverse the
+     * sequence from either end; or a single pointer i for a single pass.
+     *
+     * <p>Binary partitioning will be faster for quickselect when no equal elements are
+     * present. As duplicates become increasingly likely a ternary partition will be
+     * faster for quickselect to avoid repeat processing of values (that matched the
+     * previous pivot) on the next iteration. The type of ternary partition with the best
+     * performance depends on the number of duplicates. In the extreme case of 1 or 2
+     * unique elements it is more likely to match the {@code ==, !=} comparison to the
+     * pivot than {@code <, >} (see {@link #DNF3}). An ideal ternary scheme should have
+     * little impact on data with no repeats, and significantly improve performance as the
+     * number of repeat elements increases.
+     *
+     * <p>Binary partitioning will skip over values already {@code <, >}, or
+     * {@code <=, =>} to the pivot value; otherwise values at the pointers i and j are
+     * swapped. If using {@code <, >} then values can be placed at either end of the
+     * sequence that are {@code >=, <=} respectively to act as sentinels during the scan.
+     * This is always possible in binary partitioning as the pivot can be one sentinel;
+     * any other value will be either {@code <=, =>} to the pivot and so can be used at
+     * one or the other end as appropriate. Note: Many schemes omit using sentinels. Modern
+     * processor branch prediction nullifies the cost of checking indices remain within
+     * the {@code [left, right]} bounds. However placing sentinels is a negligible cost
+     * and at least simplifies the code for the region traversal.
+     *
+     * <p>Bentley-McIlroy ternary partitioning schemes move equal values to the ends
+     * during the traversal, these are moved to the centre after the pass. This may use
+     * minimal swaps based on region sizes. Note that values already {@code <, >} are not
+     * moved during traversal allowing moves to be minimised.
+     *
+     * <p>Dutch National Flag schemes move non-equal values to either end and finish with
+     * the equal value region in the middle. This requires that every element is moved
+     * during traversal, even if already {@code <, >}. This can be mitigated by fast-forward
+     * of pointers at the current {@code <, >} end points until the condition is not true.
+     */
+    enum SPStrategy {
+        /**
+         * Single-pivot partitioning. Uses a method adapted from Floyd and Rivest (1975)
+         * which uses sentinels to avoid bounds checks on the i and j pointers.
+         * This is a baseline for the maximum speed when no equal elements are present.
+         */
+        SP,
+        /**
+         * Bentley-McIlroy ternary partitioning. Requires bounds checks on the i and j
+         * pointers during traversal. Comparisons to the pivot use {@code <=, =>} and a
+         * second check for {@code ==} if the first is true.
+         */
+        BM,
+        /**
+         * Sedgewick's Bentley-McIlroy ternary partitioning. Requires bounds checks on the
+         * j pointer during traversal. Comparisons to the pivot use {@code <, >} and a
+         * second check for {@code ==} when both i and j have stopped.
+         */
+        SBM,
+        /**
+         * Kiwiel's Bentley-McIlroy ternary partitioning. Similar to Sedgewick's BM but
+         * avoids bounds checks on both pointers during traversal using sentinels.
+         * Comparisons to the pivot use {@code <, >} and a second check for {@code ==}
+         * when both i and j have stopped. Handles i and j meeting at the pivot without a
+         * swap.
+         */
+        KBM,
+        /**
+         * Dutch National Flag partitioning. Single pointer iteration using {@code <, >}
+         * comparisons to move elements to the edges. Fast-forwards any initial {@code <}
+         * region. The {@code ==} region is filled with the pivot after region traversal.
+         */
+        DNF1,
+        /**
+         * Dutch National Flag partitioning. Single pointer iteration using {@code <, >}
+         * comparisons to move elements to the edges. Fast-forwards any initial {@code <}
+         * region. The {@code >} region uses fast-forward to reduce swaps. The {@code ==}
+         * region is filled with the pivot after region traversal.
+         */
+        DNF2,
+        /**
+         * Dutch National Flag partitioning. Single pointer iteration using {@code !=}
+         * comparison to identify elements to move to the edges, then {@code <, >}
+         * comparisons. Fast-forwards any initial {@code <} region. The {@code >} region
+         * uses fast-forward to reduce swaps. The {@code ==} region is filled during
+         * traversal.
+         */
+        DNF3;
+    }
+
+    /**
      * Define the strategy for selecting {@code k} close to the edge.
+     * <p>These are named to allow regex identification for dynamic configuration
+     * in benchmarking using the name.
      */
     enum EdgeSelectStrategy {
         /** Use heapselect version 1. Selects {@code k} and an additional
          * {@code c} elements closer to the edge than {@code k} using a heap
          * structure. */
-        HEAP_SELECT,
-        /** Use heapselect version 2. Differs from {@link #HEAP_SELECT} in the
+        ESH,
+        /** Use heapselect version 2. Differs from {@link #ESH} in the
          * final unwinding of the heap to sort the range {@code [ka, kb]};
          * the heap construction is identical. */
-        HEAP_SELECT2,
+        ESH2,
         /** Use sortselect which uses an insertion sort to maintain {@code k}
          * and all elements closer to the edge as sorted. */
-        SORT_SELECT;
+        ESS;
     }
 
     /**
      * Define the strategy for selecting {@code k} when quickselect progress is poor
      * (worst case is quadratic). This should be a method providing good worst-case
      * performance.
+     * <p>These are named to allow regex identification for dynamic configuration
+     * in benchmarking using the name.
      */
     enum StopperStrategy {
         /** Use heapselect version 1. Selects {@code k} and an additional
          * {@code c} elements closer to the edge than {@code k}. Heapselect
          * provides increasingly slower performance with distance from the edge.
          * It has better worst-case performance than quickselect. */
-        HEAP_SELECT,
-        /** Use heapselect version 2. Differs from {@link #HEAP_SELECT} in the
+        SSH,
+        /** Use heapselect version 2. Differs from {@link #SSH} in the
          * final unwinding of the heap to sort the range {@code [ka, kb]};
          * the heap construction is identical. */
-        HEAP_SELECT2,
+        SSH2,
         /** Use a linear selection algorithm with Order(n) worst-case performance. */
-        LINEAR_SELECT;
+        SSS;
     }
 
     /**
@@ -845,7 +949,7 @@ final class Partition {
     Partition() {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, MIN_QUICKSELECT_SIZE,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
+            SUBSAMPLING_SIZE);
     }
 
     /**
@@ -858,7 +962,7 @@ final class Partition {
     Partition(int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
+            SUBSAMPLING_SIZE);
     }
 
     /**
@@ -872,7 +976,7 @@ final class Partition {
     Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize) {
         this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
+            SUBSAMPLING_SIZE);
     }
 
     /**
@@ -886,7 +990,7 @@ final class Partition {
     Partition(DualPivotingStrategy dualPivotingStrategy, int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize,
             HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SORTSELECT_CONSTANT, SUBSAMPLING_SIZE);
+            SUBSAMPLING_SIZE);
     }
 
     /**
@@ -896,18 +1000,16 @@ final class Partition {
      *
      * @param pivotingStrategy Pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
-     * @param heapSelectShift Length shift used for heap select distance from end threshold.
-     * @param heapSelectConstant Length constant used for heap select distance from end threshold.
-     * @param sortSelectConstant Length constant used for sort select distance from end threshold.
+     * @param edgeSelectShift Length shift used for heap select distance from end threshold.
+     * @param edgeSelectConstant Length constant used for heap select distance from end threshold.
      * @param subSamplingSize Size threshold to use sub-sampling for single-pivot selection.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy,
-        int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant, int sortSelectConstant,
-        int subSamplingSize) {
-        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, heapSelectShift, heapSelectConstant,
-            HEAPSELECT_MASK_SHIFT, sortSelectConstant, subSamplingSize);
+        int minQuickSelectSize, int edgeSelectShift,
+        int edgeSelectConstant, int subSamplingSize) {
+        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, edgeSelectShift, edgeSelectConstant,
+            HEAPSELECT_MASK_SHIFT, subSamplingSize);
     }
 
     /**
@@ -917,18 +1019,16 @@ final class Partition {
      *
      * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
-     * @param heapSelectShift Length shift used for heap select distance from end threshold.
-     * @param heapSelectConstant Length constant used for heap select distance from end threshold.
-     * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
-     * @param sortSelectConstant Length constant used for sort select distance from end threshold.
+     * @param edgeSelectShift Length shift used for heap select distance from end threshold.
+     * @param edgeSelectConstant Length constant used for heap select distance from end threshold.
+     * @param edgeSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(DualPivotingStrategy dualPivotingStrategy,
-        int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant, int heapSelectMaskShift,
-        int sortSelectConstant) {
-        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, heapSelectShift,
-            heapSelectConstant, heapSelectMaskShift, sortSelectConstant, SUBSAMPLING_SIZE);
+        int minQuickSelectSize, int edgeSelectShift,
+        int edgeSelectConstant, int edgeSelectMaskShift) {
+        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, edgeSelectShift,
+            edgeSelectConstant, edgeSelectMaskShift, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -943,30 +1043,117 @@ final class Partition {
      * @param pivotingStrategy Pivoting strategy to use.
      * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
-     * @param heapSelectShift Length shift used for heap select distance from end threshold.
-     * @param heapSelectConstant Length constant used for heap select distance from end threshold.
-     * @param heapSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
-     * @param sortSelectConstant Length constant used for sort select distance from end threshold.
+     * @param edgeSelectShift Length shift used for distance from end threshold.
+     * @param edgeSelectConstant Length constant used for distance from end threshold.
+     * @param edgeSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the edge select dynamic distance from end threshold.
      * @param subSamplingSize Size threshold to use sub-sampling for single-pivot selection.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
-        int minQuickSelectSize, int heapSelectShift,
-        int heapSelectConstant, int heapSelectMaskShift,
-        int sortSelectConstant, int subSamplingSize) {
+        int minQuickSelectSize, int edgeSelectShift,
+        int edgeSelectConstant, int edgeSelectMaskShift,
+        int subSamplingSize) {
         // Shift only uses lowest 5 bits. It should use [0, 31].
         // If bits outside this are set the shift is invalid.
-        if ((heapSelectShift & ~31) != 0) {
-            throw new IllegalArgumentException("Invalid shift: " + heapSelectShift);
+        if ((edgeSelectShift & ~31) != 0) {
+            throw new IllegalArgumentException("Invalid shift: " + edgeSelectShift);
         }
         this.pivotingStrategy = pivotingStrategy;
         this.dualPivotingStrategy = dualPivotingStrategy;
         this.minQuickSelectSize = minQuickSelectSize;
-        this.heapSelectShift = heapSelectShift;
-        this.heapSelectConstant = heapSelectConstant;
-        this.heapSelectDynamicMask = Integer.MAX_VALUE >>> heapSelectMaskShift;
-        this.sortSelectConstant = sortSelectConstant;
+        this.edgeSelectShift = edgeSelectShift;
+        this.edgeSelectConstant = edgeSelectConstant;
+        this.edgeSelectDynamicMask = Integer.MAX_VALUE >>> edgeSelectMaskShift;
         this.subSamplingSize = subSamplingSize;
+        // Default strategies
+        setSPStrategy(SP_STRATEGY);
+        setEdgeSelectStrategy(EDGE_STRATEGY);
+        setStopperStrategy(STOPPER_STRATEGY);
+    }
+
+    /**
+     * Sets the single-pivot partition strategy.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setSPStrategy(SPStrategy v) {
+        switch (v) {
+        case BM:
+            spFunction = Partition::partitionBM;
+            break;
+        case DNF1:
+            spFunction = Partition::partitionDNF1;
+            break;
+        case DNF2:
+            spFunction = Partition::partitionDNF2;
+            break;
+        case DNF3:
+            spFunction = Partition::partitionDNF3;
+            break;
+        case KBM:
+            spFunction = Partition::partitionKBM;
+            break;
+        case SBM:
+            spFunction = Partition::partitionSBM;
+            break;
+        case SP:
+            spFunction = Partition::partitionSP;
+            break;
+        default:
+            throw new IllegalArgumentException("Unknown single-pivot strategy: " + v);
+        }
+        return this;
+    }
+
+    /**
+     * Sets the edge-select strategy.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setEdgeSelectStrategy(EdgeSelectStrategy v) {
+        switch (v) {
+        case ESH:
+            edgeSelection = Partition::heapSelectRange;
+            break;
+        case ESH2:
+            edgeSelection = Partition::heapSelectRange2;
+            break;
+        case ESS:
+            edgeSelection = Partition::sortSelectRange;
+            break;
+        default:
+            throw new IllegalArgumentException("Unknown edge select: " + v);
+        }
+        return this;
+    }
+
+    /**
+     * Sets the stopper strategy (when quickselect progress is poor).
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setStopperStrategy(StopperStrategy v) {
+        switch (v) {
+        case SSH:
+            stopperSelection = Partition::heapSelectRange;
+            break;
+        case SSH2:
+            stopperSelection = Partition::heapSelectRange2;
+            break;
+        case SSS:
+            // Linear select does not match the interface as it:
+            // - requires the single-pivot partition function
+            // - uses a bounds array to allow minimising the partition region size after pivot selection
+            stopperSelection = (a, l, r, ka, kb) -> linearSelect(getSPFunction(),
+                a, l, r, ka, kb, new int[2]);
+            break;
+        default:
+            throw new IllegalArgumentException("Unknown stopper: " + v);
+        }
+        return this;
     }
 
     /**
@@ -1044,8 +1231,32 @@ final class Partition {
      *
      * @param v Value.
      */
-    public void setRecursionConsumer(IntConsumer v) {
+    void setRecursionConsumer(IntConsumer v) {
         this.recursionConsumer = Objects.requireNonNull(v);
+    }
+
+    /**
+     * Sets the size for sortselect for the linearselect algorithm.
+     * Must be above 0 for the algorithm to return (else an infinite loop occurs).
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setLinearSortSelectSize(int v) {
+        if (v < 1) {
+            throw new IllegalArgumentException("Bad linear sortselect size: " + v);
+        }
+        this.linearSortSelectSize = v;
+        return this;
+    }
+
+    /**
+     * Gets the single-pivot partition function.
+     *
+     * @return the single-pivot partition function
+     */
+    SPEPartition getSPFunction() {
+        return spFunction;
     }
 
     /**
@@ -2460,6 +2671,20 @@ final class Partition {
     }
 
     /**
+     * Sort the data.
+     *
+     * <p>Uses a Bentley-McIlroy quicksort partition method. Signed zeros
+     * are corrected when encountered during processing.
+     *
+     * @param data Values.
+     */
+    void sortSBM(double[] data) {
+        // Handle NaN
+        final int right = sortNaN(data);
+        sort((SPEPartitionFunction) this::partitionSBMWithZeros, data, right);
+    }
+
+    /**
      * Sort the data by recursive partitioning (quicksort).
      *
      * @param part Partition function.
@@ -2472,6 +2697,19 @@ final class Partition {
         }
         // Signal entire range
         part.sort(data, 0, right, false, false);
+    }
+
+    /**
+     * Sort the data using an introsort.
+     *
+     * <p>Uses the configured single-pivot quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortISP(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort(getSPFunction(), data);
     }
 
     /**
@@ -2523,7 +2761,6 @@ final class Partition {
         while (true) {
             // Full sort of small data
             if (r - l < minQuickSelectSize) {
-                //Sorting.sort(a, l, r, l > 0);
                 Sorting.sort(a, l, r);
                 return;
             }
@@ -2544,6 +2781,19 @@ final class Partition {
             // Continue on the left side
             r = p0 - 1;
         }
+    }
+
+    /**
+     * Sort the data using an introsort.
+     *
+     * <p>Uses a dual-pivot quicksort method; falling back
+     * to heapsort when quicksort recursion is slow.
+     *
+     * @param data Values.
+     */
+    void sortIDP(double[] data) {
+        // NaN processing is done in the introsort method
+        introsort((DPPartition) Partition::partitionDP, data);
     }
 
     /**
@@ -2621,6 +2871,7 @@ final class Partition {
         }
     }
 
+
     /**
      * Partition the array such that indices {@code k} correspond to their correctly
      * sorted value in the equivalent fully sorted array. For all indices {@code k}
@@ -2633,7 +2884,54 @@ final class Partition {
      * <p>All indices are assumed to be within {@code [0, right]}.
      *
      * <p>Uses an introselect variant. The dual-pivot quickselect is provided as an argument;
-     * the fall-back on poor convergence of the quickselect is a heapselect.
+     * the fall-back on poor convergence of the quickselect is controlled by
+     * current configuration.
+     *
+     * <p>The partition method is not required to handle signed zeros.
+     *
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices (assumed to be strictly positive).
+     */
+    void introselect(double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            introselect(getSPFunction(), a, end - 1, k, n);
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>All indices are assumed to be within {@code [0, right]}.
+     *
+     * <p>Uses an introselect variant. The single-pivot quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is controlled by
+     * current configuration.
      *
      * <p>The partition method is not required to handle signed zeros.
      *
@@ -2642,7 +2940,7 @@ final class Partition {
      * @param k Indices (may be destructively modified).
      * @param count Count of indices (assumed to be strictly positive).
      */
-    void introselect(SPEPartition part, double[] a, int[] k, int count) {
+    private void introselect(SPEPartition part, double[] a, int[] k, int count) {
         // Handle NaN / signed zeros
         final DoubleDataTransformer t = SORT_TRANSFORMER.get();
         // Assume this is in-place
@@ -2679,7 +2977,8 @@ final class Partition {
      * <p>All indices are assumed to be within {@code [0, right]}.
      *
      * <p>Uses an introselect variant. The quickselect is provided as an argument;
-     * the fall-back on poor convergence of the quickselect is a heapselect.
+     * the fall-back on poor convergence of the quickselect is controlled by
+     * current configuration.
      *
      * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros
      * may be destroyed (the mixture updated during partitioning). The caller is
@@ -2851,27 +3150,31 @@ final class Partition {
             // length - 1
             int n = r - l;
 
-            // It is possible to use heapselect when k is close to the end
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
             //                      -----d2----
             final int d1 = k - l;
             final int d2 = r - k;
-            if (maxDepth == 0 || Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                // Too much recursion, or k is close to the end
-                // Note: For testing the Floyd-Rivest algorithm we trigger the recursion
-                // consumer as a signal that FR failed due to a non-representative sample.
-                if (maxDepth == 0) {
-                    recursionConsumer.accept(maxDepth);
-                }
-                heapSelectPair(a, l, r, k, k);
+            if (Math.min(d1, d2) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
 
-            if (n < minQuickSelectSize || Math.min(d1, d2) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
+            if (maxDepth == 0) {
+                // Too much recursion
+                // Note: For testing the Floyd-Rivest algorithm we trigger the recursion
+                // consumer as a signal that FR failed due to a non-representative sample.
+                recursionConsumer.accept(maxDepth);
+                stopperSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
@@ -2994,8 +3297,27 @@ final class Partition {
         while (true) {
             // length - 1
             int n = r - l;
-            depth--;
 
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            // It is possible to use edgeselect when k is close to the end
+            // |l|-----|k|---------|k|--------|r|
+            //  ---d1----
+            //                      -----d2----
+            final int d1 = k - l;
+            final int d2 = r - k;
+            if (Math.min(d1, d2) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            depth--;
             if (--counter < 0) {
                 if (n > threshold) {
                     // Did not reduce the length after set number of iterations.
@@ -3005,7 +3327,7 @@ final class Partition {
 
                     // Note: For testing we trigger the recursion consumer
                     recursionConsumer.accept(depth);
-                    heapSelectPair(a, l, r, k, k);
+                    stopperSelection.partition(a, l, r, k, k);
                     // Last known unsorted value >= k
                     return r;
                 }
@@ -3015,25 +3337,6 @@ final class Partition {
                     counter = 1;
                 }
                 threshold >>>= 1;
-            }
-
-            // It is possible to use heapselect when k is close to the end
-            // |l|-----|k|---------|k|--------|r|
-            //  ---d1----
-            //                      -----d2----
-            final int d1 = k - l;
-            final int d2 = r - k;
-            if (Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                heapSelectPair(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
-            }
-
-            if (n < minQuickSelectSize || Math.min(d1, d2) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
             }
 
             // Pick a pivot and partition
@@ -3141,6 +3444,26 @@ final class Partition {
         while (true) {
             // length - 1
             int n = r - l;
+
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
+            // It is possible to use edgeselect when k is close to the end
+            // |l|-----|k|---------|k|--------|r|
+            //  ---d1----
+            //                      -----d2----
+            final int d1 = k - l;
+            final int d2 = r - k;
+            if (Math.min(d1, d2) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
+            }
+
             limit -= n;
             depth--;
 
@@ -3148,26 +3471,7 @@ final class Partition {
                 // Excess total partition length
                 // Note: For testing we trigger the recursion consumer
                 recursionConsumer.accept(depth);
-                heapSelectPair(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
-            }
-
-            // It is possible to use heapselect when k is close to the end
-            // |l|-----|k|---------|k|--------|r|
-            //  ---d1----
-            //                      -----d2----
-            final int d1 = k - l;
-            final int d2 = r - k;
-            if (Math.min(d1, d2) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                heapSelectPair(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
-            }
-
-            if (n < minQuickSelectSize || Math.min(d1, d2) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
+                stopperSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
@@ -3277,6 +3581,12 @@ final class Partition {
             // length - 1
             final int n = r - l;
 
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                return;
+            }
+
             // It is possible to use heapselect when ka1 and kb1 are close to the ends
             // |l|-----|ka1|--------|kb1|------|r|
             //  ---d1----
@@ -3288,16 +3598,10 @@ final class Partition {
             final int d3 = r - kb1;
             final int d4 = r - ka1;
             if (maxDepth == 0 ||
-                Math.min(d1 + d3, Math.min(d2, d4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                Math.min(d1 + d3, Math.min(d2, d4)) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
+                // Note: Does not use the edgeSelection function as the indices are not a range
                 heapSelectPair(a, l, r, ka1, kb1);
-                return;
-            }
-
-            if (n < minQuickSelectSize || Math.min(d2, d4) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka1, kb1);
-                //Sorting.sort(a, l, r, l > 0);
                 return;
             }
 
@@ -3392,24 +3696,27 @@ final class Partition {
 
             // length - 1
             final int n = r - l;
+            int ka = k[ia1];
+            final int kb = k[ib1];
+
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                return;
+            }
 
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            int ka = k[ia1];
-            final int kb = k[ib1];
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                // Too much recursion, or ka and kb are both close to the same end
-                heapSelectRange(a, l, r, ka, kb);
+            if (Math.min(kb - l, r - ka) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(a, l, r, ka, kb);
                 return;
             }
 
-            if (n < minQuickSelectSize || Math.min(kb - l, r - ka) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka, kb);
-                //Sorting.sort(a, l, r, l > 0);
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka, kb);
                 return;
             }
 
@@ -3505,23 +3812,27 @@ final class Partition {
             // length - 1
             int n = r - l;
 
-            // It is possible to use heapselect when ka and kb1 are close to the same end
-            // |l|-----|ka1|--------|kb1|------|r|
-            //  ---------s2----------
-            //          ----------s4-----------
-            if (maxDepth == 0 ||
-                Math.min(kb1 - l, r - ka1) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
-                    heapSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
-                // Too much recursion, or ka1 and kb1 are both close to the same end
-                heapSelectRange(a, l, r, ka1, kb1);
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
 
-            if (n < minQuickSelectSize || Math.min(kb1 - l, r - ka1) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka1, kb1);
-                //Sorting.sort(a, l, r, l > 0);
+            // It is possible to use heapselect when kaa and kb1 are close to the same end
+            // |l|-----|ka1|--------|kb1|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(kb1 - l, r - ka1) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
+                    edgeSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
+                edgeSelection.partition(a, l, r, ka1, kb1);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -3651,23 +3962,27 @@ final class Partition {
             // length - 1
             final int n = r - l;
 
-            // It is possible to use heapselect when ka and kb are close to the same end
-            // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2----------
-            //          ----------s4-----------
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
-                    heapSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
-                // Too much recursion, or ka and kb are both close to the same end
-                heapSelectRange(a, l, r, ka, kb);
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
 
-            if (n < minQuickSelectSize || Math.min(kb - l, r - ka) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka, kb);
-                //Sorting.sort(a, l, r, l > 0);
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(kb - l, r - ka) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
+                    edgeSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
+                edgeSelection.partition(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -3774,15 +4089,15 @@ final class Partition {
             // length - 1
             final int n = right - l;
 
-            // If interval is close to one end then heapselect.
-            // Only heapselect left if there are no further indices in the range.
+            // If interval is close to one end then edgeselect.
+            // Only elect left if there are no further indices in the range.
             // |l|-----|lo|--------|hi|------|right|
             //  ---------d1----------
             //          --------------d2-----------
-            if (Math.min(hi - l, right - lo) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+            if (Math.min(hi - l, right - lo) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
                 if (hi - l > right - lo) {
-                    // Right end
-                    heapSelectRight(a, l, right, lo, right - lo);
+                    // Right end. Do not check above hi, just select to the end
+                    edgeSelection.partition(a, l, right, lo, right);
                     recursionConsumer.accept(maxDepth);
                     return;
                 } else if (k.nextAfter(right)) {
@@ -3790,7 +4105,7 @@ final class Partition {
                     // Only if no further indices in the range.
                     // If false this branch will continue to be triggered until
                     // a partition is made to separate the next indices.
-                    heapSelectLeft(a, l, right, hi, hi - l);
+                    edgeSelection.partition(a, l, right, lo, hi);
                     recursionConsumer.accept(maxDepth);
                     // Advance iterator
                     l = hi + 1;
@@ -3819,7 +4134,6 @@ final class Partition {
                     // Must not use sortSelectRange in [lo, hi] as the iterator
                     // has not been advanced to check after hi
                     sortSelectRight(a, l, right, lo);
-                    //Sorting.sort(a, l, right, l > 0);
                 } else {
                     // Note: This disregards the current level of recursion
                     // but can exploit the JDK's more advanced sort algorithm.
@@ -4078,25 +4392,30 @@ final class Partition {
             // length - 1
             final int n = r - l;
 
-            // It is possible to use heapselect when k is close to the end
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
+                // Since r+1 is a pivot, then k+1 is sorted
+                return l;
+            }
+
+            // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
             //                      -----d3----
             final int d1 = k - l;
             final int d3 = r - k;
-            if (maxDepth == 0 || Math.min(d1, d3) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                // Too much recursion, or k is close to the end
-                heapSelectPair(a, l, r, k, k);
+            if (Math.min(d1, d3) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
             }
 
-            if (n < minQuickSelectSize || Math.min(d1, d3) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                //Sorting.sort(a, l, r, l > 0);
-                // Since r+1 is a pivot, then k+1 is sorted
-                return l;
+            if (maxDepth == 0) {
+                // Too much recursion
+                stopperSelection.partition(a, l, r, k, k);
+                // Last known unsorted value >= k
+                return r;
             }
 
             // Pick 2 pivots and partition
@@ -4176,6 +4495,12 @@ final class Partition {
             // length - 1
             final int n = r - l;
 
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                return;
+            }
+
             // It is possible to use heapselect when ka1 and kb1 are close to the ends
             // |l|-----|ka1|--------|kb1|------|r|
             //  ---s1----
@@ -4187,16 +4512,10 @@ final class Partition {
             final int s3 = r - kb1;
             final int s4 = r - ka1;
             if (maxDepth == 0 ||
-                Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+                Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
+                // Note: Does not use the edgeSelection function as the indices are not a range
                 heapSelectPair(a, l, r, ka1, kb1);
-                return;
-            }
-
-            if (n < minQuickSelectSize || Math.min(s2, s4) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka1, kb1);
-                //Sorting.sort(a, l, r, l > 0);
                 return;
             }
 
@@ -4302,36 +4621,29 @@ final class Partition {
             // length - 1
             final int n = r - l;
 
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka1, kb1);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
             // It is possible to use heapselect when ka1 and kb1 are close to the same end
             // |l|-----|ka1|--------|kb1|------|r|
             //  ---------s2-----------
             //          ----------s4-----------
             // Note: The overhead of dynamic heap select distance computation is negligible.
             // This allows various strategies for heapselect to be tested.
-            if (maxDepth == 0 ||
-                Math.min(kb1 - l, r - ka1) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
-                    heapSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
-                // Too much recursion, or ka1 and kb1 are both close to the same end
-                heapSelectRange(a, l, r, ka1, kb1);
+            if (Math.min(kb1 - l, r - ka1) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
+                    edgeSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
+                edgeSelection.partition(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
-//            // Note limit heap select to 2 when a full sort is possible
-//            // (since heapselect is slow on tiny size).
-//            if (maxDepth == 0 ||
-//                Math.min(kb1 - l, r - ka1) < Math.min(n < minQuickSelectSize ? 2 : Integer.MAX_VALUE,
-//                    Math.max((n >>> heapSelectShift) + heapSelectConstant,
-//                        heapSelectDynamicMask & heapSelectEdgeDistance(n)))) {
-//                // Too much recursion, or ka1 and kb1 are both close to the same end
-//                heapSelectRange(a, l, r, ka1, kb1);
-//                recursionConsumer.accept(maxDepth);
-//                return;
-//            }
 
-            if (n < minQuickSelectSize || Math.min(kb1 - l, r - ka1) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka1, kb1);
-                //Sorting.sort(a, l, r, l > 0);
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -4451,25 +4763,29 @@ final class Partition {
             // length - 1
             final int n = r - l;
 
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
             // It is possible to use heapselect when ka and kb are close to the same end
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2-----------
             //          ----------s4-----------
             // Note: The overhead of dynamic heap select distance computation is negligible.
             // This allows various strategies for heapselect to be tested.
-            if (maxDepth == 0 ||
-                Math.min(kb - l, r - ka) < Math.max((n >>> heapSelectShift) + heapSelectConstant,
-                    heapSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
-                // Too much recursion, or ka and kb are both close to the same end
-                heapSelectRange(a, l, r, ka, kb);
+            if (Math.min(kb - l, r - ka) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
+                    edgeSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
+                edgeSelection.partition(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
 
-            if (n < minQuickSelectSize || Math.min(kb - l, r - ka) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, ka, kb);
-                //Sorting.sort(a, l, r, l > 0);
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
                 return;
             }
@@ -4611,10 +4927,10 @@ final class Partition {
             // |l|-----|lo|--------|hi|------|right|
             //  ---------d1----------
             //          --------------d2-----------
-            if (Math.min(hi - l, right - lo) < ((n >>> heapSelectShift) + heapSelectConstant)) {
+            if (Math.min(hi - l, right - lo) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
                 if (hi - l > right - lo) {
-                    // Right end
-                    heapSelectRight(a, l, right, lo, right - lo);
+                    // Right end. Do not check above hi, just select to the end
+                    edgeSelection.partition(a, l, right, lo, right);
                     recursionConsumer.accept(maxDepth);
                     return;
                 } else if (k.nextAfter(right)) {
@@ -4622,7 +4938,7 @@ final class Partition {
                     // Only if no further indices in the range.
                     // If false this branch will continue to be triggered until
                     // a partition is made to separate the next indices.
-                    heapSelectLeft(a, l, right, hi, hi - l);
+                    edgeSelection.partition(a, l, right, lo, hi);
                     recursionConsumer.accept(maxDepth);
                     // Advance iterator
                     l = hi + 1;
@@ -4648,7 +4964,9 @@ final class Partition {
                 // will also pre-process the data for NaN and signed
                 // zeros which is an overhead to avoid.
                 if (n < minQuickSelectSize) {
-                    Sorting.sort(a, l, right, l > 0);
+                    // Must not use sortSelectRange in [lo, hi] as the iterator
+                    // has not been advanced to check after hi
+                    sortSelectRight(a, l, right, lo);
                 } else {
                     // Note: This disregards the current level of recursion
                     // but can exploit the JDK's more advanced sort algorithm.
@@ -4750,87 +5068,16 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data.
      * It handles NaN and signed zeros in the data.
      *
-     * <p>Uses an introselect variant. The quickselect is a single-pivot partition method;
-     * the fall-back on poor convergence of the quickselect is a heapselect.
+     * <p>Uses an introselect variant. Uses the configured single-pivot quicksort method;
+     * the fall-back on poor convergence of the quickselect is controlled by
+     * current configuration.
      *
      * @param data Values.
      * @param k Indices (may be destructively modified).
      * @param n Count of indices.
      */
     void partitionISP(double[] data, int[] k, int n) {
-        introselect(Partition::partitionSP, data, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data.
-     * It handles NaN and signed zeros in the data.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionIBM(double[] data, int[] k, int n) {
-        introselect(Partition::partitionBM, data, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data.
-     * It handles NaN and signed zeros in the data.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionISBM(double[] data, int[] k, int n) {
-        introselect(Partition::partitionSBM, data, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data.
-     * It handles NaN and signed zeros in the data.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method by Kiwiel; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionIKBM(double[] data, int[] k, int n) {
-        introselect(Partition::partitionKBM, data, k, n);
+        introselect(getSPFunction(), data, k, n);
     }
 
     /**
@@ -4845,57 +5092,9 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
-     * <p>Uses an introselect variant. The quickselect is a Dutch-National-Flag
-     * partition method; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param length Length of data.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionIDNF(double[] data, int length, int[] k, int n) {
-        introselect(Partition::partitionDNF3, data, length - 1, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data.
-     * It handles NaN and signed zeros in the data.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Dutch-National-Flag
-     * partition method; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionIDNF(double[] data, int[] k, int n) {
-        introselect(Partition::partitionDNF3, data, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
-     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
-     *
-     * <p>Uses an introselect variant. The quickselect is a single-pivot partition method;
-     * the fall-back on poor convergence of the quickselect is a heapselect.
+     * <p>Uses an introselect variant. Uses the configured single-pivot quicksort method;
+     * the fall-back on poor convergence of the quickselect is controlled by
+     * current configuration.
      *
      * @param data Values.
      * @param length Length of data.
@@ -4903,81 +5102,7 @@ final class Partition {
      * @param n Count of indices.
      */
     void partitionISP(double[] data, int length, int[] k, int n) {
-        introselect(Partition::partitionSP, data, length - 1, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
-     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort;
-     * the fall-back on poor convergence of the quickselect is a heapselect.
-     *
-     * @param data Values.
-     * @param length Length of data.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionIBM(double[] data, int length, int[] k, int n) {
-        introselect(Partition::partitionBM, data, length - 1, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
-     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method by Sedgewick; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param length Length of data.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionISBM(double[] data, int length, int[] k, int n) {
-        introselect(Partition::partitionSBM, data, length - 1, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
-     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
-     *
-     * <p>Uses an introselect variant. The quickselect is a Bentley-McIlroy quicksort
-     * partition method by Kiwiel; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
-     *
-     * @param data Values.
-     * @param length Length of data.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionIKBM(double[] data, int length, int[] k, int n) {
-        introselect(Partition::partitionKBM, data, length - 1, k, n);
+        introselect(getSPFunction(), data, length - 1, k, n);
     }
 
     /**
@@ -4993,8 +5118,8 @@ final class Partition {
      * It handles NaN and signed zeros in the data.
      *
      * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
-     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
+     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of
+     * the quickselect is controlled by current configuration.
      *
      * @param data Values.
      * @param k Indices (may be destructively modified).
@@ -5017,8 +5142,8 @@ final class Partition {
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
      * <p>Uses an introselect variant. The quickselect is a dual-pivot quicksort
-     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of the quickselect
-     * is a heapselect.
+     * partition method by Vladimir Yaroslavskiy; the fall-back on poor convergence of
+     * the quickselect is controlled by current configuration.
      *
      * @param data Values.
      * @param length Length of data.
@@ -5103,24 +5228,25 @@ final class Partition {
         int l = left;
         int r = right;
         while (true) {
-            // The following heapselect/sortselect modifications are additions to the
+            // The following sortselect/edgeselect modifications are additions to the
             // FR algorithm. These have been added for testing and only affect the finishing
             // selection of small lengths.
 
             // length - 1
             int n = r - l;
-            // It is possible to use heapselect when k is close to the end
-            // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2----------
-            //          ----------s4-----------
-            if (Math.min(k - l, r - k) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                heapSelectRange(a, l, r, k, k);
+
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, k, k);
                 return;
             }
 
-            if (n < minQuickSelectSize || Math.min(k - l, r - k) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
+            // It is possible to use edgeselect when k is close to the end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(k - l, r - k) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(a, l, r, k, k);
                 return;
             }
 
@@ -5348,25 +5474,26 @@ final class Partition {
         int l = left;
         int r = right;
         while (true) {
-            // The following heapselect/sortselect modifications are additions to the
+            // The following sortselect/edgeselect modifications are additions to the
             // KFR algorithm. These have been added for testing and only affect the finishing
             // selection of small lengths.
 
             // length - 1
             int n = r - l;
-            // It is possible to use heapselect when k is close to the end
-            // |l|-----|ka|--------|kb|------|r|
-            //  ---------s2----------
-            //          ----------s4-----------
-            if (Math.min(k - l, r - k) < ((n >>> heapSelectShift) + heapSelectConstant)) {
-                heapSelectRange(x, l, r, k, k);
+
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(x, l, r, k, k);
                 bounds[0] = bounds[1] = k;
                 return;
             }
 
-            if (n < minQuickSelectSize || Math.min(k - l, r - k) < sortSelectConstant) {
-                // Sort selection on small data
-                sortSelectRange(x, l, r, k, k);
+            // It is possible to use edgeselect when k is close to the end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(k - l, r - k) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                edgeSelection.partition(x, l, r, k, k);
                 bounds[0] = bounds[1] = k;
                 return;
             }
@@ -5907,7 +6034,7 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
-     * <p>Uses a single-pivot partition method;
+     * <p>Uses the configured single-pivot quicksort method;
      * and median of medians algorithm for pivot selection.
      *
      * @param data Values.
@@ -5915,30 +6042,7 @@ final class Partition {
      * @param n Count of indices.
      */
     void partitionLSP(double[] data, int[] k, int n) {
-        linearSelect(Partition::partitionSP, data, k, n);
-    }
-
-    /**
-     * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
-     *
-     * <pre>{@code
-     * data[i < k] <= data[k] <= data[k < i]
-     * }</pre>
-     *
-     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
-     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
-     *
-     * <p>Uses a quickselect with Bentley-McIlroy quicksort partition method by Kiwiel;
-     * and median of medians algorithm for pivot selection.
-     *
-     * @param data Values.
-     * @param k Indices (may be destructively modified).
-     * @param n Count of indices.
-     */
-    void partitionLKBM(double[] data, int[] k, int n) {
-        linearSelect(Partition::partitionKBM, data, k, n);
+        linearSelect(getSPFunction(), data, k, n);
     }
 
     /**
@@ -6036,8 +6140,8 @@ final class Partition {
             // |l|-----|ka|kkkkkkkk|kb|------|r|
             // Optimal value for this is much higher than standard quickselect due
             // to the high cost of median-of-medians pivot computation and reuse via
-            // mutual recursion.
-            if (Math.min(kb - l, r - ka) < sortSelectConstant) {
+            // mutual recursion so we have a different value.
+            if (Math.min(kb - l, r - ka) < linearSortSelectSize) {
                 sortSelectRange(a, l, r, ka, kb);
                 // We could scan left/right to extend the bounds here after the sort.
                 // Since the move_sample strategy is not generally useful we do not bother.
@@ -6327,11 +6431,16 @@ final class Partition {
         int l = left;
         int r = right;
         final int[] upper = {0};
+
+        // TODO: Get the best introspection approach.
+        // Try using the k-steps to half the sequence length.
+        // k should be 4/5 according to Valois.
         // Ignore maxDepth
         // Limit recursion using the sum of partition lengths.
         // The sum must not exceed 2 * length so count down to zero using half of (r - l).
         // Since (r - l)/2 is subtracted at the start of the loop add it here.
         //int limit = r - l + ((r - l) >> 1);
+
         int maxDepth = singlePivotMaxDepth(r - l);
         while (true) {
             // select when ka and kb are close to the same end
@@ -6600,120 +6709,70 @@ final class Partition {
     }
 
     /**
-     * Sort the data.
+     * Find a pivot index of the array so that partitioning into 2-regions can be made.
      *
-     * <p>Uses a Bentley-McIlroy quicksort partition method.
+     * <pre>{@code
+     * left <= p <= right
+     * }</pre>
      *
-     * @param data Values.
+     * @param data Array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @return pivot
      */
-    void sortSBM(double[] data) {
-        // Handle NaN
-        final int right = sortNaN(data);
-        sort((SPEPartitionFunction) this::partitionSBMWithZeros, data, right);
+    private static int pivotIndex(double[] data, int l, int r) {
+        // Median of 9 pivot selection using the median of 3 medians:
+        // 1 4 7
+        // x y z --> med(x,y,z) identifies pivot as 4th - 6th of 9 sorted values
+        // 3 6 9
+        // Bentley and McIlroy (1993) switch to median of 3 below size 40.
+        // Heapselect edge distance is 15 so partitioning is limited to size 30
+        // and we choose to always use this pivot selection.
+        final int s = (r - l) >>> 3;
+        final int m = (l + r) >>> 1;
+        final int x = med3(data, l, l + s, l + (s << 1));
+        final double a = data[x];
+        final int y = med3(data, m - s, m, m + s);
+        final double b = data[y];
+        final int z = med3(data, r - (s << 1), r - s, r);
+        return med3(a, b, data[z], x, y, z);
     }
 
     /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a single-pivot quicksort method; falling back
-     * to heapsort when quicksort recursion is slow.
+     * Find the median index of 3.
      *
      * @param data Values.
+     * @param i Index.
+     * @param j Index.
+     * @param k Index.
+     * @return the median index
      */
-    void sortISP(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionSP, data);
+    private static int med3(double[] data, int i, int j, int k) {
+        return med3(data[i], data[j], data[k], i, j, k);
     }
 
     /**
-     * Sort the data using an intrasort.
+     * Find the median index of 3 values.
      *
-     * <p>Uses a Bentley-McIlroy quicksort method; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
+     * @param a Value.
+     * @param b Value.
+     * @param c Value.
+     * @param ia Index of a.
+     * @param ib Index of b.
+     * @param ic Index of c.
+     * @return the median index
      */
-    void sortIBM(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionBM, data);
-    }
-
-    /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a Bentley-McIlroy quicksort method by Sedgewick; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
-     */
-    void sortISBM(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionSBM, data);
-    }
-
-    /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a Bentley-McIlroy quicksort method by Kiwiel; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
-     */
-    void sortIKBM(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionKBM, data);
-    }
-
-    /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a Dutch-National-Flag quicksort method; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
-     */
-    void sortIDNF1(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionDNF1, data);
-    }
-
-    /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a Dutch-National-Flag quicksort method; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
-     */
-    void sortIDNF2(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionDNF2, data);
-    }
-
-    /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a Dutch-National-Flag quicksort method; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
-     */
-    void sortIDNF3(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort(Partition::partitionDNF3, data);
-    }
-
-    /**
-     * Sort the data using an intrasort.
-     *
-     * <p>Uses a dual-pivot quicksort method; falling back
-     * to heapsort when quicksort recursion is slow.
-     *
-     * @param data Values.
-     */
-    void sortIDP(double[] data) {
-        // NaN processing is done in the introsort method
-        introsort((DPPartition) Partition::partitionDP, data);
+    private static int med3(double a, double b, double c, int ia, int ib, int ic) {
+        if (a < b) {
+            if (b < c) {
+                return ib;
+            }
+            return a < c ? ic : ia;
+        }
+        if (b > c) {
+            return ib;
+        }
+        return a > c ? ic : ia;
     }
 
     /**
@@ -7358,73 +7417,6 @@ final class Partition {
 //        }
         vectorSwapR(x, i, q - 1, rr, v);
         return a;
-    }
-
-    /**
-     * Find a pivot index of the array so that partitioning into 2-regions can be made.
-     *
-     * <pre>{@code
-     * left <= p <= right
-     * }</pre>
-     *
-     * @param data Array.
-     * @param l Lower bound (inclusive).
-     * @param r Upper bound (inclusive).
-     * @return pivot
-     */
-    private static int pivotIndex(double[] data, int l, int r) {
-        // Median of 9 pivot selection using the median of 3 medians:
-        // 1 4 7
-        // x y z --> med(x,y,z) identifies pivot as 4th - 6th of 9 sorted values
-        // 3 6 9
-        // Bentley and McIlroy (1993) switch to median of 3 below size 40.
-        // Heapselect edge distance is 15 so partitioning is limited to size 30
-        // and we choose to always use this pivot selection.
-        final int s = (r - l) >>> 3;
-        final int m = (l + r) >>> 1;
-        final int x = med3(data, l, l + s, l + (s << 1));
-        final double a = data[x];
-        final int y = med3(data, m - s, m, m + s);
-        final double b = data[y];
-        final int z = med3(data, r - (s << 1), r - s, r);
-        return med3(a, b, data[z], x, y, z);
-    }
-
-    /**
-     * Find the median index of 3.
-     *
-     * @param data Values.
-     * @param i Index.
-     * @param j Index.
-     * @param k Index.
-     * @return the median index
-     */
-    private static int med3(double[] data, int i, int j, int k) {
-        return med3(data[i], data[j], data[k], i, j, k);
-    }
-
-    /**
-     * Find the median index of 3 values.
-     *
-     * @param a Value.
-     * @param b Value.
-     * @param c Value.
-     * @param ia Index of a.
-     * @param ib Index of b.
-     * @param ic Index of c.
-     * @return the median index
-     */
-    private static int med3(double a, double b, double c, int ia, int ib, int ic) {
-        if (a < b) {
-            if (b < c) {
-                return ib;
-            }
-            return a < c ? ic : ia;
-        }
-        if (b > c) {
-            return ib;
-        }
-        return a > c ? ic : ia;
     }
 
     /**
