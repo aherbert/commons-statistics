@@ -281,9 +281,13 @@ final class Partition {
     /** A {@link DualPivotingStrategy} used for pivoting. */
     private final DualPivotingStrategy dualPivotingStrategy;
 
-    /** Minimum size for quickselect. Below this threshold partitioning using quickselect
-     * is stopped and a sort selection is performed. This threshold is also used in the
-     * sort methods to switch to insertion sort. */
+    /** Minimum size for quickselect when partitioning multiple keys.
+     * Below this threshold partitioning using quickselect is stopped and a sort selection
+     * is performed.
+     *
+     * <p>This threshold is also used in the sort methods to switch to insertion sort;
+     * and in legacy partition methods which do not use edge selection. These may perform
+     * key analysis using this value to determine saturation. */
     private final int minQuickSelectSize;
     /** Constant for edgeselect. */
     private final int edgeSelectConstant;
@@ -2874,13 +2878,6 @@ final class Partition {
             // length - 1
             int n = r - l;
 
-            if (n < minQuickSelectSize) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
-            }
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
@@ -3022,13 +3019,6 @@ final class Partition {
             // length - 1
             int n = r - l;
 
-            if (n < minQuickSelectSize) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
-            }
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
@@ -3168,13 +3158,6 @@ final class Partition {
         while (true) {
             // length - 1
             int n = r - l;
-
-            if (n < minQuickSelectSize) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                // Last known unsorted value >= k
-                return r;
-            }
 
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
@@ -4111,16 +4094,6 @@ final class Partition {
         int r = right;
         final int[] upper = {0, 0, 0};
         while (true) {
-            // length - 1
-            final int n = r - l;
-
-            if (n < minQuickSelectSize) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                // Since r+1 is a pivot, then k+1 is sorted
-                return l;
-            }
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
@@ -4944,18 +4917,9 @@ final class Partition {
         int l = left;
         int r = right;
         while (true) {
-            // The following sortselect/edgeselect modifications are additions to the
+            // The following edgeselect modifications are additions to the
             // FR algorithm. These have been added for testing and only affect the finishing
             // selection of small lengths.
-
-            // length - 1
-            int n = r - l;
-
-            if (n < minQuickSelectSize) {
-                // Sort selection on small data
-                sortSelectRange(a, l, r, k, k);
-                return;
-            }
 
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|ka|--------|kb|------|r|
@@ -4972,6 +4936,8 @@ final class Partition {
             int pivot = k;
             int p = l;
             int q = r;
+            // length - 1
+            int n = r - l;
             if (n > 600) {
                 ++n;
                 final int ith = k - l + 1;
@@ -5190,19 +5156,9 @@ final class Partition {
         int l = left;
         int r = right;
         while (true) {
-            // The following sortselect/edgeselect modifications are additions to the
+            // The following edgeselect modifications are additions to the
             // KFR algorithm. These have been added for testing and only affect the finishing
             // selection of small lengths.
-
-            // length - 1
-            int n = r - l;
-
-            if (n < minQuickSelectSize) {
-                // Sort selection on small data
-                sortSelectRange(x, l, r, k, k);
-                bounds[0] = bounds[1] = k;
-                return;
-            }
 
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|ka|--------|kb|------|r|
@@ -5214,6 +5170,8 @@ final class Partition {
                 return;
             }
 
+            // length - 1
+            int n = r - l;
             if (n < 600) {
                 // Switch to quickselect
                 final int p0 = partitionKBM(x, l, r, pivotingStrategy.pivotIndex(x, l, r), bounds);
