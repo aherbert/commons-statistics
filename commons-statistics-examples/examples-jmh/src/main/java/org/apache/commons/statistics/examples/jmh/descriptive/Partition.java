@@ -134,13 +134,26 @@ final class Partition {
      * not too small, appears to be most performant.
      */
     static final DualPivotingStrategy DUAL_PIVOTING_STRATEGY = DualPivotingStrategy.SORT_5B;
-    /** Minimum selection size for quickselect.
-     * Below this switch to insertion sort rather than selection.
+    /** Minimum selection size for quickselect/quicksort.
+     * Below this switch to sortselect/insertion sort rather than selection.
      * Dual-pivot quicksort used 27 in Yaroslavskiy's original paper.
+     * Changes to this value are only noticeable when the input array is small.
      *
-     * <p>This is set at a power of 2. This allows analysis of the indices saturation of
-     * the range using compressed indices where compression uses a power of 2. */
-    static final int MIN_QUICKSELECT_SIZE = 32;
+     * <p>This is a legacy setting from when insertion sort was used as the stopper.
+     * This has been replaced by edge selection functions. Using insertion sort
+     * is slower as n must be sorted compared to an edge select that only sorts
+     * up to n/2 from the edge. It is disabled by default but can be used for
+     * benchmarking.
+     *
+     * <p>If using insertion sort as the stopper for quickselect:
+     * <ul>
+     * <li>Single-pivot: Benchmarking random data in range [96, 192] suggests a value of ~16 for n=1.
+     * <li>Dual-pivot: Benchmarking random data in range [162, 486] suggests a value of ~27 for n=1
+     * and increasing with higher n in the same range.
+     * Dual-pivot sorting requires a value of ~120. If keys are saturated between k1 and kn
+     * an increase to this threshold will gain full sort performance.
+     * </ul> */
+    static final int MIN_QUICKSELECT_SIZE = 0;
     /** Minimum size for heapselect.
      * Below this switch to insertion sort rather than selection. This is used to avoid
      * heap select on tiny data. */
@@ -149,42 +162,9 @@ final class Partition {
      * Below this switch to insertion sort rather than selection. This is used to avoid
      * sort select on tiny data. */
     static final int MIN_SORTSELECT_SIZE = 4;
-    /** Minimum selection size for single-pivot select (used for single k).
-     * Below this switch to sort selection.
-     * Changes to this value are only noticeable when the input array is small.
-     * Benchmarking random data in range [96, 192] suggests a value of ~16. */
-    static final int SP_QUICKSELECT_SIZE = 16;
-    /** Minimum selection size for dual-pivot select (used for multiple k).
-     * Below this switch to sort selection.
-     * Changes to this value are only noticeable for select when the input array is small.
-     * Benchmarking random data in range [162, 486] suggests a value of ~27 for n=1 and
-     * increasing with higher n in the same range.
-     * As keys become saturated then the partition method tends towards a full sort.
-     * Dual-pivot sorting requires a value of ~120. If keys are saturated between k1 and kn
-     * an increase to this threshold will gain full sort performance. */
-    static final int DP_QUICKSELECT_SIZE = 27;
-    /** Default length shift for heapselect. On random data this is approximately constant
-     * at 6 or 7. Note that (n >>> 6) / n ~ 1/64. So heapselect will be used approximately 1.6%
-     * of the time. On non-random data then the shift has to be larger. This idea is
-     * captured in the heap select dynamic mask which can enable/disable dynamic determination
-     * of the heap select size threshold. Note that a configurable size threshold for
-     * heap select will not target the majority of cases and it is better to do quickselect
-     * partitioning. This is disabled by default using the maximum shift. */
-    static final int HEAPSELECT_SHIFT = 31;
-    /** Default selection constant for heapselect. This is useful to pick up any indices
-     * very close to the edge. Special methods handle size 1 and 2 without a heap by
-     * finding the min or two smallest values in a range. The default enables the fast methods;
-     * notably this will target (k, k+1) pairs of interpolation indices that may have been split
-     * by a partition pivot. */
-    static final int HEAPSELECT_CONSTANT = 2;
-    /** Default shift for the heapselect dynamic threshold mask. Disabled by default.
-     * It is a very small number of cases where heapselect is useful
-     * (see {@link #heapSelectEdgeDistanceDP(int)}). */
-    static final int HEAPSELECT_MASK_SHIFT = 31;
-    /** Default selection constant for sortselect. Off by default as heapselect is used
-     * in the default configuration for indices close to the edge. */
-    static final int SORTSELECT_CONSTANT = 0;
-    /** Default selection constant for linearselect. */
+    /** Default selection constant for edgeselect. */
+    static final int EDGESELECT_CONSTANT = 20;
+    /** Default sort selection constant for linearselect. */
     static final int LINEAR_SORTSELECT_SIZE = 80;
     /** Default sub-sampling size to identify a single pivot. Off by default.
      * The SELECT algorithm of Floyd-Rivest uses 600. */
@@ -206,7 +186,7 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
     /** Default single-pivot strategy. */
-    static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SSS;
+    static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SLS;
 
     /** Control flag for the pivoting strategy. */
     static final int FLAG_PIVOTING_STRATGEY = 0x1;
@@ -279,12 +259,8 @@ final class Partition {
      * so this can use a mask with all bits below the increment. */
     private static final int SORTSELECT_MASK = RECURSION_INCREMENT - 1;
 
-    /** floor(log2(MIN_QUICKSELECT_SIZE / 2)). */
-    private static final int LOG2_HALF_QUICKSELECT_SIZE = 4;
     /** Message for an unsupported introselect configuration. */
     private static final String UNSUPPORTED_INTROSELECT = "Unsupported introselect: ";
-    /** Number of keys for saturation analysis. */
-    private static final int SATURATION_ANALYSIS_COUNT = 10;
 
     /** Transformer factory for double data with the behaviour of a JDK sort.
      * Moves NaN to the end of the data and handles signed zeros. Works on the data in-place. */
@@ -306,24 +282,14 @@ final class Partition {
     private final DualPivotingStrategy dualPivotingStrategy;
 
     /** Minimum size for quickselect. Below this threshold partitioning using quickselect
-     * is stopped and a sort selection is performed. */
+     * is stopped and a sort selection is performed. This threshold is also used in the
+     * sort methods to switch to insertion sort. */
     private final int minQuickSelectSize;
-    /** Length shift for edgeselect. The edge selection function runs when k is within d
-     * of the end of length n using {@code d = (n >>> shift) + c}.
-     * Not supported by all partition methods. */
-    private final int edgeSelectShift;
-    /** Constant for edgeselect. The edge selections function runs when k is within d
-     * of the end of length n using {@code d = (n >>> shift) + c}.
-     * Not supported by all partition methods. */
+    /** Constant for edgeselect. */
     private final int edgeSelectConstant;
     /** Size for sortselect in the linearselect function. Optimal value for this is much higher
      * than for regular quickselect as the median-of-medians pivot strategy is expensive. */
     private int linearSortSelectSize = LINEAR_SORTSELECT_SIZE;
-    /** Mask used on the dynamic threshold for edgeselect. The number of lower bits set in
-     * this mask controls the maximum value for the dynamic edgeselect threshold. If zero
-     * then the dynamic threshold is ignored. If {@link Integer#MAX_VALUE} then the dynamic
-     * threshold is always used. */
-    private final int edgeSelectDynamicMask;
     /** Threshold to use sub-sampling of the range to identify the single pivot.
      * Sub-sampling uses the Floyd-Rivest algorithm to partition a sample of the data. This
      * identifies a pivot so that the target element is in the smaller set after partitioning.
@@ -584,7 +550,7 @@ final class Partition {
          * the heap construction is identical. */
         SSH2,
         /** Use a linear selection algorithm with Order(n) worst-case performance. */
-        SSS;
+        SLS;
     }
 
     /**
@@ -948,21 +914,7 @@ final class Partition {
      */
     Partition() {
         this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, MIN_QUICKSELECT_SIZE,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SUBSAMPLING_SIZE);
-    }
-
-    /**
-     * Constructor with specified quickselect size.
-     *
-     * <p>Used to test key analysis based on the quickselect size.
-     *
-     * @param minQuickSelectSize Minimum size for quickselect.
-     */
-    Partition(int minQuickSelectSize) {
-        this(PIVOTING_STRATEGY, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SUBSAMPLING_SIZE);
+            EDGESELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -975,8 +927,7 @@ final class Partition {
      */
     Partition(PivotingStrategy pivotingStrategy, int minQuickSelectSize) {
         this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SUBSAMPLING_SIZE);
+            EDGESELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -989,8 +940,7 @@ final class Partition {
      */
     Partition(DualPivotingStrategy dualPivotingStrategy, int minQuickSelectSize) {
         this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize,
-            HEAPSELECT_SHIFT, HEAPSELECT_CONSTANT, HEAPSELECT_MASK_SHIFT,
-            SUBSAMPLING_SIZE);
+            EDGESELECT_CONSTANT, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -1000,16 +950,14 @@ final class Partition {
      *
      * @param pivotingStrategy Pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
-     * @param edgeSelectShift Length shift used for heap select distance from end threshold.
      * @param edgeSelectConstant Length constant used for heap select distance from end threshold.
      * @param subSamplingSize Size threshold to use sub-sampling for single-pivot selection.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy,
-        int minQuickSelectSize, int edgeSelectShift,
-        int edgeSelectConstant, int subSamplingSize) {
-        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, edgeSelectShift, edgeSelectConstant,
-            HEAPSELECT_MASK_SHIFT, subSamplingSize);
+        int minQuickSelectSize, int edgeSelectConstant, int subSamplingSize) {
+        this(pivotingStrategy, DUAL_PIVOTING_STRATEGY, minQuickSelectSize, edgeSelectConstant,
+            subSamplingSize);
     }
 
     /**
@@ -1019,16 +967,13 @@ final class Partition {
      *
      * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
-     * @param edgeSelectShift Length shift used for heap select distance from end threshold.
      * @param edgeSelectConstant Length constant used for heap select distance from end threshold.
-     * @param edgeSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the heap select dynamic distance from end threshold.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(DualPivotingStrategy dualPivotingStrategy,
-        int minQuickSelectSize, int edgeSelectShift,
-        int edgeSelectConstant, int edgeSelectMaskShift) {
-        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize, edgeSelectShift,
-            edgeSelectConstant, edgeSelectMaskShift, SUBSAMPLING_SIZE);
+        int minQuickSelectSize, int edgeSelectConstant) {
+        this(PIVOTING_STRATEGY, dualPivotingStrategy, minQuickSelectSize,
+            edgeSelectConstant, SUBSAMPLING_SIZE);
     }
 
     /**
@@ -1043,27 +988,16 @@ final class Partition {
      * @param pivotingStrategy Pivoting strategy to use.
      * @param dualPivotingStrategy Dual pivoting strategy to use.
      * @param minQuickSelectSize Minimum size for quickselect.
-     * @param edgeSelectShift Length shift used for distance from end threshold.
      * @param edgeSelectConstant Length constant used for distance from end threshold.
-     * @param edgeSelectMaskShift Shift applied to {@link Integer#MAX_VALUE} to mask the edge select dynamic distance from end threshold.
      * @param subSamplingSize Size threshold to use sub-sampling for single-pivot selection.
      * @throws IllegalArgumentException If the shift is not in {@code [0, 31]}.
      */
     Partition(PivotingStrategy pivotingStrategy, DualPivotingStrategy dualPivotingStrategy,
-        int minQuickSelectSize, int edgeSelectShift,
-        int edgeSelectConstant, int edgeSelectMaskShift,
-        int subSamplingSize) {
-        // Shift only uses lowest 5 bits. It should use [0, 31].
-        // If bits outside this are set the shift is invalid.
-        if ((edgeSelectShift & ~31) != 0) {
-            throw new IllegalArgumentException("Invalid shift: " + edgeSelectShift);
-        }
+        int minQuickSelectSize, int edgeSelectConstant, int subSamplingSize) {
         this.pivotingStrategy = pivotingStrategy;
         this.dualPivotingStrategy = dualPivotingStrategy;
         this.minQuickSelectSize = minQuickSelectSize;
-        this.edgeSelectShift = edgeSelectShift;
         this.edgeSelectConstant = edgeSelectConstant;
-        this.edgeSelectDynamicMask = Integer.MAX_VALUE >>> edgeSelectMaskShift;
         this.subSamplingSize = subSamplingSize;
         // Default strategies
         setSPStrategy(SP_STRATEGY);
@@ -1143,7 +1077,7 @@ final class Partition {
         case SSH2:
             stopperSelection = Partition::heapSelectRange2;
             break;
-        case SSS:
+        case SLS:
             // Linear select does not match the interface as it:
             // - requires the single-pivot partition function
             // - uses a bounds array to allow minimising the partition region size after pivot selection
@@ -2329,216 +2263,6 @@ final class Partition {
     }
 
     /**
-     * Performs an analysis of keys to determine if they saturate the range to partition.
-     * Returns {@code true} if a full sort is recommended.
-     *
-     * <p>This method is used to avoid the overhead of partitioning when there are so many
-     * keys that they effectively cover the entire range. In this case it is far simpler
-     * to use {@code Arrays.sort}. This method has to know under what conditions the
-     * partition algorithm is outperformed by sorting all the data by the JDK sort
-     * function.
-     *
-     * <p>The {@code saturation} parameter is the fraction of the range that must be
-     * partitioned to recommend a full sort.
-     *
-     * <p>The approach is to first assume that keys could be uniformly spaced through the
-     * range. If the number of keys could not cover the entire range given a minimum
-     * spacing then this returns {@code false}. A small number of keys is also ignored as
-     * the analysis of the saturation level consumes time and resources likely to be
-     * larger than the difference between a full sort, and a full sort via the partition
-     * algorithm.
-     *
-     * <p>If the keys could cover the range then the range of the keys is obtained
-     * (min/max). If the length of the range is too small to saturate the range of the
-     * data this returns {@code false}.
-     *
-     * <p>Otherwise keys are compressed by a power of 2 and recorded into a BitSet-type
-     * structure. If the cardinality of the BitSet when decompressed is close to the
-     * length of the data then the keys are identified as saturated.
-     *
-     * <p>The minimum spacing and compression use the same {@code compression} argument.
-     *
-     * <p>Example using data of size 20, 4 minimum keys, a compression level of 1 and
-     * 0.9 saturation. Here compression is visualised by deleting every other index after
-     *
-     * <pre>
-     * -------k------------   false: not enough keys: 1 &lt; 4
-     *
-     * ---k---kk----k------   false: keys cannot saturate the range: 4 &lt; (20 / 2)
-     *
-     * --kkkkkkkk----------   false: range of keys cannot saturate the range: (9 - 2 + 1) &lt; 0.9 * 20
-     *
-     * -k-k---k---k---k---k   false: compressed keys do not saturate the range:
-     *  cc-c-c-c-c            6 * 2 &lt; 0.9 * 20
-     *
-     * -k-k-k-k-k-k-k-k-k-k   true: compressed keys saturate the range)
-     *  cccccccccc            10 * 2 &gt; 0.9 * 20
-     *
-     * kkkkk-kkkkkkkkkkk-kk   true: compressed keys saturate the range)
-     * cccccccccc             10 * 2 &gt; 0.9 * 20
-     * </pre>
-     *
-     * @param size Length of the data to partition.
-     * @param k Indices.
-     * @param n Count of indices (must be strictly positive).
-     * @param minKeys Minimum number of keys.
-     * @param compression Compression level (log2 units in [1, 31]).
-     * @param saturation Saturation level for a full sort.
-     * @return true if the keys saturate the range
-     */
-    // package-private for testing
-    static boolean keysAreSaturated(int size, int[] k, int n, int minKeys,
-        int compression, double saturation) {
-        // Check if the number of keys are small, or if they could saturated the range
-        if (k.length < Math.max(minKeys, size >>> compression)) {
-            return false;
-        }
-        // Keys could cover the entire data.
-        // Set the limit on the number of indices that have to be sorted.
-        final double limit = size * saturation;
-        // Check the range.
-        int min = k[0];
-        int max = min;
-        for (int i = 0; ++i < n;) {
-            min = Math.min(min, k[i]);
-            max = Math.max(max, k[i]);
-        }
-        if ((max - min + 1) < limit) {
-            return false;
-        }
-        // Compress
-        min >>>= compression;
-        max >>>= compression;
-        final IndexSet keys = IndexSet.ofRange(min, max);
-        for (final int i : k) {
-            keys.set(i >>> compression);
-        }
-        // Estimate number of indices to be sorted
-        final long target = (long) keys.cardinality() << compression;
-        return target >= limit;
-    }
-
-    /**
-     * Test if the {@code keys} are saturated.
-     *
-     * @param keys Keys.
-     * @param n Count of indices.
-     * @return true if saturated
-     */
-    private static boolean keysAreSaturated(UpdatingInterval keys, int n) {
-        // Only perform saturation analysis if is possible to saturate the range
-        if (!(keys instanceof IntervalAnalysis) ||
-            n < Math.max(SATURATION_ANALYSIS_COUNT, (keys.right() - keys.left()) >>> 3)) {
-            return false;
-        }
-        return ((IntervalAnalysis) keys).saturated(3);
-    }
-
-    /**
-     * Creates the {@link SearchableInterval} for the partition of data of the specified
-     * {@code size}.
-     *
-     * <p>This method assesses the saturation of the indices given the {@code size} and
-     * returns a suitable {@link SearchableInterval} for partitioning.
-     *
-     * <p>Returns {@code null} if the indices {@code k} saturate the {@code size}; this
-     * occurs when partitioning will require visiting all regions of the data. In this
-     * case a full sort of the data is recommended.
-     *
-     * <p>The heuristics used within this method may not always return the optimal
-     * {@link SearchableInterval}. The method aims to avoid poor decisions, and recommend a
-     * full sort when it is obvious that there are too many indices to efficiently
-     * partition.
-     *
-     * <p>Partitioning
-     *
-     * <p>The partition algorithm should correctly sort all target indices between the
-     * minimum ({@code k1}) and maximum ({@code kn}) index. During partitioning a sorted
-     * point (@code pivot}) may cut the current interval. The partition algorithm then
-     * requires updating the range of interest on either side of the cut point:
-     *
-     * <pre>{@code
-     *           pivot
-     *             |
-     *        k1--------k2---------k3---- ... ---------kn    initial interval
-     *         <--| find previous
-     *    find next |-->
-     *        k1        k2---------k3---- ... ---------kn    divided intervals
-     * }</pre>
-     *
-     * <p>If a {@code pivot} is found in the interval then the smallest region of data
-     * that was most recently partitioned was the length between the two flanking k. This
-     * involves a full scan (and partitioning) over the data of length (k2 - k1). If the
-     * {@link SearchableInterval} uses a BitSet-type structure it will require a scan over 1/64
-     * of this length of data to find the next and previous index from a {@code pivot}
-     * point. In practice the interval may be partitioned over a much larger length, e.g.
-     * (kn - k1). Thus the length of time for the partition algorithm is expected to be at
-     * least 64x the length of time for the BitSet-type scan. The disadvantage of the
-     * BitSet-type structure is memory consumption. For a small number of keys a structure
-     * that searches the entire set of keys is fast enough. However this requires that the
-     * keys are unique and ordered.
-     *
-     * <p>This method will return an ordered interval of indices when {@code n} is small.
-     * When {@code n} is large then a BitSet-type structure is returned. The maximum
-     * memory consumption is approximately {@code size / 8} bytes.
-     *
-     * @param size Length of the data to partition.
-     * @param k Indices.
-     * @param n Count of indices (must be strictly positive).
-     * @return the index interval (or {@code null} to recommend a full sort)
-     */
-    static SearchableInterval createSearchableInterval(int size, int[] k, int n) {
-        if (size < MIN_QUICKSELECT_SIZE) {
-            // Sort tiny data
-            return null;
-        }
-
-        // The partition algorithm performs a full sort of data when any sub-length
-        // is below 32. If keys are separated by at most 32 throughout the range
-        // then the data is suitable for a full sort. However benchmarking shows that
-        // partitioning with many indices performs close to the speed of a full sort
-        // using the same quicksort algorithm; even when keys should be saturated,
-        // e.g. 5000 random indices in length 10000. Thus switching to a full sort is
-        // not performed until it is obvious the indices saturate the range.
-        // Note that this method cannot know about any structure in the data.
-        // Data that is structured (runs of continuous ascending/descending
-        // data) will benefit from the additional algorithms within the JDK sort function
-        // such as merge sort. The JDK sort function also supports parallel execution
-        // which can outperform single-threaded partitioning depending on parallelism
-        // and the spread of indices.
-
-        // We check for saturation by compressing each index by 16-to-1. Any indices
-        // separated by < 16 will be the same compressed index or adjacent compressed indices.
-        // Any indices separated by [16, 32) may be compressed indices separated by 1 or 2.
-        // If there are no gaps in the compressed indices then a full sort is recommended
-        // as it is clear that all regions must be sorted. This heuristic avoids switching
-        // to a full sort in all but the most obvious cases of saturation; however it may
-        // choose to partition when a full sort would be faster.
-
-        // Set the limit on the number of indices that have to be sorted.
-        // Subtracting the quickselect size pads the min/max range of indices
-        // at the ends.
-        final int limit = size - MIN_QUICKSELECT_SIZE;
-
-        // Use a shift with a long to avoid overflow (of an excessive number of keys !!!).
-        // It is not expected to partition more than a few hundred keys.
-        if (((long) n << LOG2_HALF_QUICKSELECT_SIZE) > limit) {
-            // Keys could cover the entire data.
-            final IndexSet keys = IndexSet.of(k, n);
-            // Quick check if the range is smaller than the limit.
-            if ((keys.right() - keys.left()) < limit) {
-                return keys;
-            }
-            // Special cardinality count using 16-to-1 compression
-            final int c = keys.cardinality16();
-            return c < limit ? keys : null;
-        }
-
-        // This occurs when the indices cannot saturate the range.
-        return IndexIntervals.createSearchableInterval(k, n);
-    }
-
-    /**
      * Partition the array such that indices {@code k} correspond to their correctly
      * sorted value in the equivalent fully sorted array. For all indices {@code k}
      * and any index {@code i}:
@@ -3163,7 +2887,7 @@ final class Partition {
             //                      -----d2----
             final int d1 = k - l;
             final int d2 = r - k;
-            if (Math.min(d1, d2) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(d1, d2) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
@@ -3311,7 +3035,7 @@ final class Partition {
             //                      -----d2----
             final int d1 = k - l;
             final int d2 = r - k;
-            if (Math.min(d1, d2) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(d1, d2) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
@@ -3458,7 +3182,7 @@ final class Partition {
             //                      -----d2----
             final int d1 = k - l;
             final int d2 = r - k;
-            if (Math.min(d1, d2) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(d1, d2) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
@@ -3598,7 +3322,7 @@ final class Partition {
             final int d3 = r - kb1;
             final int d4 = r - ka1;
             if (maxDepth == 0 ||
-                Math.min(d1 + d3, Math.min(d2, d4)) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                Math.min(d1 + d3, Math.min(d2, d4)) < edgeSelectConstant) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
                 // Note: Does not use the edgeSelection function as the indices are not a range
                 heapSelectPair(a, l, r, ka1, kb1);
@@ -3709,7 +3433,7 @@ final class Partition {
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            if (Math.min(kb - l, r - ka) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, ka, kb);
                 return;
             }
@@ -3823,8 +3547,7 @@ final class Partition {
             // |l|-----|ka1|--------|kb1|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            if (Math.min(kb1 - l, r - ka1) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
-                    edgeSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
+            if (Math.min(kb1 - l, r - ka1) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
@@ -3973,8 +3696,7 @@ final class Partition {
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            if (Math.min(kb - l, r - ka) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
-                    edgeSelectDynamicMask & heapSelectEdgeDistanceSP(n))) {
+            if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
                 return;
@@ -4094,7 +3816,7 @@ final class Partition {
             // |l|-----|lo|--------|hi|------|right|
             //  ---------d1----------
             //          --------------d2-----------
-            if (Math.min(hi - l, right - lo) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(hi - l, right - lo) < edgeSelectConstant) {
                 if (hi - l > right - lo) {
                     // Right end. Do not check above hi, just select to the end
                     edgeSelection.partition(a, l, right, lo, right);
@@ -4405,7 +4127,7 @@ final class Partition {
             //                      -----d3----
             final int d1 = k - l;
             final int d3 = r - k;
-            if (Math.min(d1, d3) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(d1, d3) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, k, k);
                 // Last known unsorted value >= k
                 return r;
@@ -4512,7 +4234,7 @@ final class Partition {
             final int s3 = r - kb1;
             final int s4 = r - ka1;
             if (maxDepth == 0 ||
-                Math.min(s1 + s3, Math.min(s2, s4)) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+                Math.min(s1 + s3, Math.min(s2, s4)) < edgeSelectConstant) {
                 // Too much recursion, or ka1 and kb1 are both close to the ends
                 // Note: Does not use the edgeSelection function as the indices are not a range
                 heapSelectPair(a, l, r, ka1, kb1);
@@ -4632,10 +4354,7 @@ final class Partition {
             // |l|-----|ka1|--------|kb1|------|r|
             //  ---------s2-----------
             //          ----------s4-----------
-            // Note: The overhead of dynamic heap select distance computation is negligible.
-            // This allows various strategies for heapselect to be tested.
-            if (Math.min(kb1 - l, r - ka1) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
-                    edgeSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
+            if (Math.min(kb1 - l, r - ka1) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, ka1, kb1);
                 recursionConsumer.accept(maxDepth);
                 return;
@@ -4774,10 +4493,7 @@ final class Partition {
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2-----------
             //          ----------s4-----------
-            // Note: The overhead of dynamic heap select distance computation is negligible.
-            // This allows various strategies for heapselect to be tested.
-            if (Math.min(kb - l, r - ka) < Math.max((n >>> edgeSelectShift) + edgeSelectConstant,
-                    edgeSelectDynamicMask & heapSelectEdgeDistanceDP(n))) {
+            if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, ka, kb);
                 recursionConsumer.accept(maxDepth);
                 return;
@@ -4927,7 +4643,7 @@ final class Partition {
             // |l|-----|lo|--------|hi|------|right|
             //  ---------d1----------
             //          --------------d2-----------
-            if (Math.min(hi - l, right - lo) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(hi - l, right - lo) < edgeSelectConstant) {
                 if (hi - l > right - lo) {
                     // Right end. Do not check above hi, just select to the end
                     edgeSelection.partition(a, l, right, lo, right);
@@ -5245,7 +4961,7 @@ final class Partition {
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            if (Math.min(k - l, r - k) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(k - l, r - k) < edgeSelectConstant) {
                 edgeSelection.partition(a, l, r, k, k);
                 return;
             }
@@ -5492,7 +5208,7 @@ final class Partition {
             // |l|-----|ka|--------|kb|------|r|
             //  ---------s2----------
             //          ----------s4-----------
-            if (Math.min(k - l, r - k) < ((n >>> edgeSelectShift) + edgeSelectConstant)) {
+            if (Math.min(k - l, r - k) < edgeSelectConstant) {
                 edgeSelection.partition(x, l, r, k, k);
                 bounds[0] = bounds[1] = k;
                 return;
@@ -5806,11 +5522,6 @@ final class Partition {
             x[i] = x[--j];
             x[j] = v;
         }
-//        for (int i = a - 1, j = c - Math.min(b + 1 - a, c - b); j < c;) {
-//            final double v = x[++i];
-//            x[i] = x[++j];
-//            x[j] = v;
-//        }
     }
 
     /**
@@ -5829,30 +5540,6 @@ final class Partition {
     private static void vectorSwapL(double[] x, int a, int b, int c, double v) {
         for (int i = a - 1, j = c + 1, m = Math.min(b + 1 - a, c - b); --m >= 0;) {
             x[++i] = x[--j];
-            x[j] = v;
-        }
-    }
-
-    /**
-     * Vector swap x[a:b] <-> x[b+1:c] means the first m = min(b+1-a, c-b)
-     * elements of the array x[a:c] are exchanged with its last m elements.
-     *
-     * <p>This is a specialisation of {@link #vectorSwap(double[], int, int, int)}
-     * where the current left-most value is a constant {@code v}. It differs
-     * from {@link #vectorSwapL(double[], int, int, int, double)} by swapping
-     * the ends in the same order rather than reversing the order.
-     *
-     * @param x Array.
-     * @param a Index.
-     * @param b Index.
-     * @param c Index.
-     * @param v Constant value in [a, b]
-     */
-    @SuppressWarnings("used for testing if the swap order changes performance")
-    private static void vectorSwapL2(double[] x, int a, int b, int c, double v) {
-        int m = Math.min(b + 1 - a, c - b);
-        for (int i = a - 1, j = c - m; --m >= 0;) {
-            x[++i] = x[++j];
             x[j] = v;
         }
     }
@@ -8643,115 +8330,6 @@ final class Partition {
         int flags = Integer.MIN_VALUE - maxDepth * RECURSION_INCREMENT;
         flags &= ~SORTSELECT_MASK;
         return flags | ss;
-    }
-
-    /**
-     * Determine a threshold for the distance of a partition index {@code k} from the end
-     * of the length to switch to heapselect. Applies to single-pivot partitioning.
-     * For convenience this method accepts length {@code n = r - l} and not the correct
-     * {@code n = r - l + 1}.
-     *
-     * <p>This method is used to estimate when heapselect will be faster than repeat
-     * partitioning using quickselect. Heapselect will use a heap of size {@code k}. When
-     * {@code k} is very small, relative to the length of the data, it is faster to
-     * perform a single pass heapselect.
-     *
-     * <p>This method requires some more analysis of a suitable switch point.
-     *
-     * @param n Length.
-     * @return distance
-     */
-    static int heapSelectEdgeDistanceSP(int n) {
-        // Note:
-        // 1. Heapselect is slow compared to insertion sort on small data.
-        // 2. Heapselect can be much faster on large data.
-        // Benchmarking shows that heapselect 1 is useful in SP partitioning
-        // even at small lengths.
-        // Here we set a conservative threshold using floor(log2(n)) but we
-        // shift n to avoid heapselect on tiny lengths.
-        // n   threshold
-        // 8   1
-        // 16  2
-        // 32  3
-        return floorLog2(n >> 2);
-    }
-
-    /**
-     * Determine a threshold for the distance of a partition index {@code k} from the end
-     * of the length to switch to heapselect. Applies to dual-pivot partitioning.
-     * For convenience this method accepts length {@code n = r - l} and not the correct
-     * {@code n = r - l + 1}.
-     *
-     * <p>This method is used to estimate when heapselect will be faster than repeat
-     * partitioning using quickselect. Heapselect will use a heap of size {@code k}. When
-     * {@code k} is very small, relative to the length of the data, it is faster to
-     * perform a single pass heapselect.
-     *
-     * <p>Measurements on random data of variable length observed that the heapselect and
-     * quickselect run times were approximately equal when {@code k == (n >> 6)}.
-     *
-     * <p>However quickselect performs faster on structured data introducing an additional
-     * length dependence. This is observed to be approximately
-     * {@code k == (n >> log3(n))}. This threshold may be too conservative for some data
-     * (e.g. random data) and too high for other data. Note that this only occurs when the
-     * distance from the end is very small:
-     *
-     * <pre>{@code
-     *           n  (n >> log3(n)) / (double) n
-     *           8     0.250000
-     *          64    0.0625000
-     *         512    0.0156250
-     *        4096   0.00390625
-     *       32768  0.000976563
-     *      262144  0.000488281
-     *     2097152  0.000122070
-     *    16777216  3.05176e-05
-     *   134217728  7.62939e-06
-     *  1073741824  1.90735e-06
-     * }</pre>
-     *
-     * <p>As such it is very infrequent that heapselect is useful; it can be used to quickly collect
-     * a key at the end of the range. For example if a partition index cut a pair of target indices
-     * (k, k+1) leaving k or k+1 at the edge.
-     *
-     * @param n Length.
-     * @return distance
-     */
-    static int heapSelectEdgeDistanceDP(int n) {
-        // Note:
-        // 1. Heapselect is slow compared to insertion sort on small data.
-        // 2. Heapselect can be much faster on large data.
-        // Benchmarking shows that heapselect 1 is useful in DP partitioning
-        // when length is ~21.
-        // Here we set a conservative threshold using floor(log2(n)) but we
-        // shift n to avoid heapselect on tiny lengths.
-        // n   threshold
-        // 8   0
-        // 16  1
-        // 32  2
-        //return floorLog2(n >> 3);
-
-        // Ideally this should be monotonic.
-        // Applying a shift to n is not monotonic when log3(n+1) = log3(n) + 1.
-        // Thus we use a power of 2:
-        // n >> log3(n) ~ n / 2^log3(n) ~ 2^(log2(n) - log3(n))
-        // == 1 << (log2(n) - log3(n))
-
-        // compute log2(n) as (floor(log2(x)))
-        // compute log3(n) as (floor(log2(x))+1) * 323 / 512
-        //final int log2p1 = 32 - Integer.numberOfLeadingZeros(n);
-        //return 1 << (log2p1 - 1 - ((log2p1 * 323) >> 9));
-
-        // log2(n) - log3(n) = log2(n) - log2(n) / log2(3)
-        // log2(3) ~ 512/323
-        // => log2(n) - log2(n) * 323/512 = log2(n) * 189/512
-        // Too high for small n
-        // n   threshold
-        // 1   1
-        // 8   2
-        // 64  4
-        // May be better as a look-up table based on highest 1 bit
-        return 1 << ((floorLog2(n & ~0x7) * 189) >>> 9);
     }
 
     /**

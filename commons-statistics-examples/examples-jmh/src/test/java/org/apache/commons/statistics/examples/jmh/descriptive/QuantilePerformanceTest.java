@@ -40,18 +40,8 @@ class QuantilePerformanceTest {
     }
 
     @Test
-    void testGetHeapSelectShift() {
-        assertIntParameter(Partition.HEAPSELECT_SHIFT, "ES", QuantilePerformance::getEdgeSelectShift);
-    }
-
-    @Test
     void testGetHeapSelectConstant() {
-        assertIntParameter(Partition.HEAPSELECT_CONSTANT, "EC", QuantilePerformance::getEdgeSelectConstant);
-    }
-
-    @Test
-    void testGetHeapSelectMaskShift() {
-        assertIntParameter(Partition.HEAPSELECT_MASK_SHIFT, "MS", QuantilePerformance::getEdgeSelectMaskShift);
+        assertIntParameter(Partition.EDGESELECT_CONSTANT, "EC", QuantilePerformance::getEdgeSelectConstant);
     }
 
     @Test

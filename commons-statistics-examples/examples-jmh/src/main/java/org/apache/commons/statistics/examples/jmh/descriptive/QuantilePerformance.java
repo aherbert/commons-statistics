@@ -125,17 +125,10 @@ public class QuantilePerformance {
      * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
 
-    // TODO - how to configure ISP via the name.
-    // ISP_SP,ISP_BM,ISP_KBM ...
-
     /** Pattern for the minimum quickselect size. */
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
-    /** Pattern for the edgeselect shift. */
-    private static final Pattern ES_PATTERN = Pattern.compile("ES(\\d+)");
     /** Pattern for the edgeselect constant. */
     private static final Pattern EC_PATTERN = Pattern.compile("EC(\\d+)");
-    /** Pattern for the edgeselect mask shift. */
-    private static final Pattern MS_PATTERN = Pattern.compile("MS(\\d+)");
     /** Pattern for the sub-sampling size. */
     private static final Pattern SU_PATTERN = Pattern.compile("SU(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
@@ -2526,14 +2519,14 @@ public class QuantilePerformance {
             // introselect methods - these should be configured to not use edgeselect.
             // These directly call the introselect method to skip NaN/signed zero processing.
             } else if (name.startsWith(ISP)) {
-                final Partition part = createPartition(name, ISP, 0, 0);
+                final Partition part = createPartition(name, ISP);
                 function = (data, indices) -> {
                     part.introselect(part.getSPFunction(), data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
                     return extractIndices(data, indices[0], indices[1]);
                 };
             } else if (name.startsWith(IDP)) {
-                final Partition part = createPartition(name, IDP, 0, 0);
+                final Partition part = createPartition(name, IDP);
                 function = (data, indices) -> {
                     part.introselect(Partition::partitionDP, data,
                         0, data.length - 1, IndexIntervals.interval(indices[0], indices[1]), 10000);
@@ -2783,7 +2776,7 @@ public class QuantilePerformance {
         return Quantile.withDefaults()
             .with(EstimationMethod.HF6)
             .withOverwrite(true)
-            .withKthSelector(createKthSelector(name, prefix, 0));
+            .withKthSelector(createKthSelector(name, prefix));
     }
 
     /**
@@ -2800,7 +2793,22 @@ public class QuantilePerformance {
         return Quantile.withDefaults()
             .with(EstimationMethod.HF6)
             .withOverwrite(true)
-            .withPartition(createPartition(name, prefix, 0, 0));
+            .withPartition(createPartition(name, prefix));
+    }
+
+    /**
+     * Creates the {@link KthSelector}. Parameters are derived from the {@code name}.
+     *
+     * <p>After parameters are harvested the only allowed characters are underscores,
+     * otherwise an exception is thrown. This ensures the parameters in the name were
+     * correct.
+     *
+     * @param name Name.
+     * @param prefix Method prefix.
+     * @return the {@link KthSelector} instance
+     */
+    static KthSelector createKthSelector(String name, String prefix) {
+        return createKthSelector(name, prefix, 0);
     }
 
     /**
@@ -2815,7 +2823,7 @@ public class QuantilePerformance {
      * @param qs Minimum quickselect size (if non-zero).
      * @return the {@link KthSelector} instance
      */
-    static KthSelector createKthSelector(String name, String prefix, int qs) {
+    private static KthSelector createKthSelector(String name, String prefix, int qs) {
         final String[] s = {name};
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
         final PivotingStrategy sp = getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY);
@@ -2838,6 +2846,21 @@ public class QuantilePerformance {
      *
      * @param name Name.
      * @param prefix Method prefix.
+     * @return the {@link Partition} instance
+     */
+    static Partition createPartition(String name, String prefix) {
+        return createPartition(name, prefix, 0, 0);
+    }
+
+    /**
+     * Creates the {@link Partition}. Parameters are derived from the {@code name}.
+     *
+     * <p>After parameters are harvested the only allowed characters are underscores,
+     * otherwise an exception is thrown. This ensures the parameters in the name were
+     * correct.
+     *
+     * @param name Name.
+     * @param prefix Method prefix.
      * @param qs Minimum quickselect size (if non-zero).
      * @param ec Minimum edgeselect constant (if non-zero).
      * @return the {@link Partition} instance
@@ -2847,9 +2870,7 @@ public class QuantilePerformance {
         final PivotingStrategy sp = getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY);
         final DualPivotingStrategy dp = getEnumOrElse(s, DualPivotingStrategy.class, Partition.DUAL_PIVOTING_STRATEGY);
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
-        final int edgeSelectShift = getEdgeSelectShift(s);
         final int edgeSelectConstant = ec != 0 ? ec : getEdgeSelectConstant(s);
-        final int edgeSelectMaskShift = getEdgeSelectMaskShift(s);
         final int subSamplingSize = getSubSamplingSize(s);
         final KeyStrategy keyStartegy = getEnumOrElse(s, KeyStrategy.class, Partition.KEY_STRATEGY);
         final PairedKeyStrategy pairedKeyStartegy =
@@ -2869,8 +2890,7 @@ public class QuantilePerformance {
             }
         }
         final Partition p = new Partition(sp, dp, minQuickSelectSize,
-            edgeSelectShift, edgeSelectConstant, edgeSelectMaskShift,
-            subSamplingSize);
+            edgeSelectConstant, subSamplingSize);
         // Some values do not have to be final as they are not used within optimised
         // partitioning code.
         p.setKeyStrategy(keyStartegy);
@@ -2905,22 +2925,6 @@ public class QuantilePerformance {
     }
 
     /**
-     * Gets the length shift for the edgeselect distance-from-end computation.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the edgeselect shift
-     */
-    static int getEdgeSelectShift(String[] name) {
-        final Matcher m = ES_PATTERN.matcher(name[0]);
-        if (m.find()) {
-            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
-            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
-            return i;
-        }
-        return Partition.HEAPSELECT_SHIFT;
-    }
-
-    /**
      * Gets the constant for the edgeselect distance-from-end computation.
      *
      * @param name Algorithm name (updated in-place to remove the parameter).
@@ -2933,24 +2937,7 @@ public class QuantilePerformance {
             name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
             return i;
         }
-        return Partition.HEAPSELECT_CONSTANT;
-    }
-
-    /**
-     * Gets the length shift for the mask applied to the dynamic edgeselect
-     * distance-from-end computation.
-     *
-     * @param name Algorithm name (updated in-place to remove the parameter).
-     * @return the edgeselect mask shift
-     */
-    static int getEdgeSelectMaskShift(String[] name) {
-        final Matcher m = MS_PATTERN.matcher(name[0]);
-        if (m.find()) {
-            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
-            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
-            return i;
-        }
-        return Partition.HEAPSELECT_MASK_SHIFT;
+        return Partition.EDGESELECT_CONSTANT;
     }
 
     /**
