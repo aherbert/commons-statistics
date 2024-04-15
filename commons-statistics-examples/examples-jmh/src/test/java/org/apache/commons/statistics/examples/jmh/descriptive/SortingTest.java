@@ -526,6 +526,16 @@ class SortingTest {
         assertDoubleMedian5(a, x -> Sorting.median5c(x, 0), 0, 1, 2, 3, 4);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort5"})
+    void testMedian5d(double[] a) {
+        // This method computes in place
+        assertDoubleMedian5(a, x -> {
+            Sorting.median5d(x, 0);
+            return 2;
+        }, 0, 1, 2, 3, 4);
+    }
+
     /**
      * Assert that the median {@code function} computes the same result as
      * {@link Arrays#sort(double[])} run on the provided {@code indices}. Ignores signed
@@ -553,6 +563,11 @@ class SortingTest {
             }
             Assertions.assertEquals(values[i], data[i]);
         }
+        // This is not a strict requirement but check that no swaps occur on a second pass
+        final double[] x = data.clone();
+        final int m2 = function.applyAsInt(data);
+        Assertions.assertEquals(m, m2);
+        Assertions.assertArrayEquals(x, data);
     }
 
     private static int[] extractIndices(int[] values, int[] indices) {

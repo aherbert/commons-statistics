@@ -2241,6 +2241,8 @@ public class QuantilePerformance {
                 function = x -> x[0] = Sorting.median5b(x, 0);
             } else if ("med5c".equals(name)) {
                 function = x -> x[0] = Sorting.median5c(x, 0);
+            } else if ("med5d".equals(name)) {
+                function = x -> Sorting.median5d(x, 0);
             } else {
                 throw new IllegalStateException("Unknown sort5 function: " + name);
             }

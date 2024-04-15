@@ -5900,13 +5900,11 @@ final class Partition {
             //final int m = Sorting.median5b(a, e - 5);
             // Sorting network of 4 + insertion (3-4% slower)
             //final int m = Sorting.median5c(a, e - 5);
-            // Sorting of 5
+            // In-place median: Sorting of 5, or median of 5
             //final int m = e - 3;
+            //Sorting.sort(a, e - 5, e - 1); // insertion sort
             //Sorting.sort5(a, e - 5, e - 4, e - 3, e - 2, e - 1);
-
-            // Not as fast to use insertion sort on 5 elements (10-12% slower)
-            //Sorting.sort(a, e - 5, e - 1);
-            //final int m = e - 3;
+            //Sorting.median5d(a, e - 5);
 
             final double v = a[m];
             a[m] = a[++rr];

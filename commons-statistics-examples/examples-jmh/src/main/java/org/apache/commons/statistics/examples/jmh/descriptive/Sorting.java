@@ -817,21 +817,20 @@ final class Sorting {
             }
             // 1,3(2<5 4)
             return a[i2] < a[i4] ? i2 : i4;
-        } else {
-            // 3(1<2 4 5)
-            if (a[i5] < a[i4]) {
-                final double v = a[i5];
-                a[i5] = a[i4];
-                a[i4] = v;
-            }
-            // 3(1<2 4<5)
-            if (a[i1] < a[i4]) {
-                // 3,1(2 4<5)
-                return a[i2] < a[i4] ? i2 : i4;
-            }
-            // 3,4(1<2 5)
-            return a[i1] < a[i5] ? i1 : i5;
         }
+        // 3(1<2 4 5)
+        if (a[i5] < a[i4]) {
+            final double v = a[i5];
+            a[i5] = a[i4];
+            a[i4] = v;
+        }
+        // 3(1<2 4<5)
+        if (a[i1] < a[i4]) {
+            // 3,1(2 4<5)
+            return a[i2] < a[i4] ? i2 : i4;
+        }
+        // 3,4(1<2 5)
+        return a[i1] < a[i5] ? i1 : i5;
     }
 
     /**
@@ -874,21 +873,20 @@ final class Sorting {
             }
             // 1,3(2<5 4)
             return a[i2] < a[i4] ? i2 : i4;
-        } else {
-            // 3(1<2 4 5)
-            if (a[i5] < a[i4]) {
-                final double v = a[i5];
-                a[i5] = a[i4];
-                a[i4] = v;
-            }
-            // 3(1<2 4<5)
-            if (a[i1] < a[i4]) {
-                // 3,1(2 4<5)
-                return a[i2] < a[i4] ? i2 : i4;
-            }
-            // 3,4(1<2 5)
-            return a[i1] < a[i5] ? i1 : i5;
         }
+        // 3(1<2 4 5)
+        if (a[i5] < a[i4]) {
+            final double v = a[i5];
+            a[i5] = a[i4];
+            a[i4] = v;
+        }
+        // 3(1<2 4<5)
+        if (a[i1] < a[i4]) {
+            // 3,1(2 4<5)
+            return a[i2] < a[i4] ? i2 : i4;
+        }
+        // 3,4(1<2 5)
+        return a[i1] < a[i5] ? i1 : i5;
     }
 
     /**
@@ -936,25 +934,24 @@ final class Sorting {
             }
             // 1,3(2<5 4)
             return a[i2] < a[i4] ? i2 : i4;
-        } else {
-            // 3(1<2 4 5)
-            if (a[i5] < a[i4]) {
-                // 3(1<2 5<4)
-                if (a[i1] < a[i5]) {
-                    // 3,1(2 5<4)
-                    return a[i2] < a[i5] ? i2 : i5;
-                }
-                // 3,5(1<2 4)
-                return a[i1] < a[i4] ? i1 : i4;
-            }
-            // 3(1<2 4<5)
-            if (a[i1] < a[i4]) {
-                // 3,1(2 4<5)
-                return a[i2] < a[i4] ? i2 : i4;
-            }
-            // 3,4(1<2 5)
-            return a[i1] < a[i5] ? i1 : i5;
         }
+        // 3(1<2 4 5)
+        if (a[i5] < a[i4]) {
+            // 3(1<2 5<4)
+            if (a[i1] < a[i5]) {
+                // 3,1(2 5<4)
+                return a[i2] < a[i5] ? i2 : i5;
+            }
+            // 3,5(1<2 4)
+            return a[i1] < a[i4] ? i1 : i4;
+        }
+        // 3(1<2 4<5)
+        if (a[i1] < a[i4]) {
+            // 3,1(2 4<5)
+            return a[i2] < a[i4] ? i2 : i4;
+        }
+        // 3,4(1<2 5)
+        return a[i1] < a[i5] ? i1 : i5;
     }
 
     /**
@@ -976,6 +973,63 @@ final class Sorting {
             ++m;
         }
         return m;
+    }
+
+    /**
+     * Place the median of a continuous block of 5 elements in the middle; the smaller
+     * 2 elements in the first two positions; and the larger two elements in the last
+     * two positions.
+     *
+     * @param x Values
+     * @param a First index.
+     */
+    static void median5d(double[] x, int a) {
+        // 6 comparison decision tree from:
+        // Alexandrescu (2016) Fast Deterministic Selection, arXiv:1606.00484, Algorithm 4
+        // https://arxiv.org/abs/1606.00484
+        final int b = a + 1;
+        final int c = a + 2;
+        final int d = a + 3;
+        final int e = a + 4;
+        if (x[c] < x[a]) {
+            final double v = x[c];
+            x[c] = x[a];
+            x[a] = v;
+        }
+        if (x[d] < x[b]) {
+            final double u = x[d];
+            x[d] = x[b];
+            x[b] = u;
+        }
+        if (x[d] < x[c]) {
+            final double v = x[d];
+            x[d] = x[c];
+            x[c] = v;
+            final double u = x[b];
+            x[b] = x[a];
+            x[a] = u;
+        }
+        if (x[e] < x[b]) {
+            final double v = x[e];
+            x[e] = x[b];
+            x[b] = v;
+        }
+        if (x[e] < x[c]) {
+            final double v = x[e];
+            x[e] = x[c];
+            x[c] = v;
+            if (x[c] < x[a]) {
+                final double u = x[c];
+                x[c] = x[a];
+                x[a] = u;
+            }
+        } else {
+            if (x[c] < x[b]) {
+                final double u = x[c];
+                x[c] = x[b];
+                x[b] = u;
+            }
+        }
     }
 
     /**
