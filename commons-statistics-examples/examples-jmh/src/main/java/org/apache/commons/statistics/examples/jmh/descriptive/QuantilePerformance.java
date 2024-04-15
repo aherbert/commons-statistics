@@ -129,6 +129,8 @@ public class QuantilePerformance {
     private static final Pattern QS_PATTERN = Pattern.compile("QS(\\d+)");
     /** Pattern for the edgeselect constant. */
     private static final Pattern EC_PATTERN = Pattern.compile("EC(\\d+)");
+    /** Pattern for the edgeselect constant for linear select. */
+    private static final Pattern LC_PATTERN = Pattern.compile("LC(\\d+)");
     /** Pattern for the sub-sampling size. */
     private static final Pattern SU_PATTERN = Pattern.compile("SU(\\d+)");
     /** Pattern for the recursion multiple (simple float format). */
@@ -2871,6 +2873,7 @@ public class QuantilePerformance {
         final DualPivotingStrategy dp = getEnumOrElse(s, DualPivotingStrategy.class, Partition.DUAL_PIVOTING_STRATEGY);
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
         final int edgeSelectConstant = ec != 0 ? ec : getEdgeSelectConstant(s);
+        final int linearSortSelectConstant = getLinearSortSelectConstant(s);
         final int subSamplingSize = getSubSamplingSize(s);
         final KeyStrategy keyStartegy = getEnumOrElse(s, KeyStrategy.class, Partition.KEY_STRATEGY);
         final PairedKeyStrategy pairedKeyStartegy =
@@ -2902,6 +2905,7 @@ public class QuantilePerformance {
         p.setSPStrategy(spStrategy);
         p.setEdgeSelectStrategy(esStrategy);
         p.setStopperStrategy(stopStrategy);
+        p.setLinearSortSelectSize(linearSortSelectConstant);
 
         return p;
     }
@@ -2938,6 +2942,22 @@ public class QuantilePerformance {
             return i;
         }
         return Partition.EDGESELECT_CONSTANT;
+    }
+
+    /**
+     * Gets the constant for the sortselect distance-from-end computation for linearselect.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @return the sortselect constant
+     */
+    static int getLinearSortSelectConstant(String[] name) {
+        final Matcher m = LC_PATTERN.matcher(name[0]);
+        if (m.find()) {
+            final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
+            name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
+            return i;
+        }
+        return Partition.LINEAR_SORTSELECT_SIZE;
     }
 
     /**

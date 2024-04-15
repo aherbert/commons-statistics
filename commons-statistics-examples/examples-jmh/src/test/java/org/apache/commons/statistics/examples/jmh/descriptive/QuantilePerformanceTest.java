@@ -40,8 +40,13 @@ class QuantilePerformanceTest {
     }
 
     @Test
-    void testGetHeapSelectConstant() {
+    void testGetEdgeSelectConstant() {
         assertIntParameter(Partition.EDGESELECT_CONSTANT, "EC", QuantilePerformance::getEdgeSelectConstant);
+    }
+
+    @Test
+    void testGetLinearSortSelectConstant() {
+        assertIntParameter(Partition.LINEAR_SORTSELECT_SIZE, "LC", QuantilePerformance::getLinearSortSelectConstant);
     }
 
     @Test
