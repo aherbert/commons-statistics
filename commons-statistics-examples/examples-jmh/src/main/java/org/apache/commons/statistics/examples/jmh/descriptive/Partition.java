@@ -913,6 +913,49 @@ final class Partition {
         void partition(double[] a, int left, int right, int ka, int kb);
     }
 
+    // TODO - Build QuickselectAdaptive derivatives based on this
+
+    /**
+     * Single-pivot partition method handling a pre-partitioned range in the centre.
+     */
+    @FunctionalInterface
+    interface ExpandPartition {
+        /**
+         * Expand a partition around a single pivot. Partitioning exchanges array
+         * elements such that all elements smaller than pivot are before it and all
+         * elements larger than pivot are after it. The central region is already
+         * partitioned.
+         *
+         * <pre>{@code
+         * |l             |s   |p0 p1|   e|                r|
+         * |    ???       | <P | ==P | >P |        ???      |
+         * }</pre>
+         *
+         * <p>Note: Requires that the range contains no NaN values.
+         *
+         * <p>This method returns 2 points describing the pivot range of equal values.
+         * <pre>{@code
+         * |l                  |k0 k1|                     r|
+         * |         <P        | ==P |            >P        |
+         * }</pre>
+         * <ul>
+         * <li>k0: lower pivot point
+         * <li>k1: upper pivot point (inclusive)
+         * </ul>
+         *
+         * @param a Data array.
+         * @param left Lower bound (inclusive).
+         * @param right Upper bound (inclusive).
+         * @param start Start of the partition range (inclusive).
+         * @param end End of the partitioned range (inclusive).
+         * @param p0 Lower pivot location (inclusive).
+         * @param p1 Upper pivot location (inclusive).
+         * @param upper Upper bound (inclusive) of the pivot range [k1].
+         * @return Lower bound (inclusive) of the pivot range [k0].
+         */
+        int partition(double[] a, int left, int right, int start, int end, int p0, int p1, int[] upper);
+    }
+
     /**
      * Constructor with defaults.
      */
