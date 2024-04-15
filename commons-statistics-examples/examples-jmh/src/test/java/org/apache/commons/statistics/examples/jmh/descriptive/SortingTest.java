@@ -407,8 +407,38 @@ class SortingTest {
         return builder.build();
     }
 
-    static Stream<Arguments> testDoubleSort5() {
-        final Stream.Builder<Arguments> builder = Stream.builder();
+    static Stream<double[]> testDoubleSort4() {
+        final Stream.Builder<double[]> builder = Stream.builder();
+        final double[] a = new double[4];
+        // Permutations is 4! = 24
+        final int shift = 42;
+        for (int i = 0; i < 4; i++) {
+            a[0] = i + shift;
+            for (int j = 0; j < 4; j++) {
+                if (j == i) {
+                    continue;
+                }
+                a[1] = j + shift;
+                for (int k = 0; k < 4; k++) {
+                    if (k == j || k == i) {
+                        continue;
+                    }
+                    a[2] = k + shift;
+                    for (int l = 0; l < 4; l++) {
+                        if (l == k || l == j || l == i) {
+                            continue;
+                        }
+                        a[3] = l + shift;
+                        builder.add(a.clone());
+                    }
+                }
+            }
+        }
+        return builder.build();
+    }
+
+    static Stream<double[]> testDoubleSort5() {
+        final Stream.Builder<double[]> builder = Stream.builder();
         final double[] a = new double[5];
         // Permutations is 5! = 120
         final int shift = 42;
@@ -434,7 +464,7 @@ class SortingTest {
                                 continue;
                             }
                             a[3] = m + shift;
-                            builder.add(Arguments.of(a.clone(), 2));
+                            builder.add(a.clone());
                         }
                     }
                 }
@@ -498,6 +528,98 @@ class SortingTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4Internal"})
+    void testMedian4lInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        assertDoubleMedian(values, x -> {
+            Sorting.median4l(x, a, b, c, d);
+            return b;
+        }, true, false, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4Internal"})
+    void testMedian4lbInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        assertDoubleMedian(values, x -> {
+            Sorting.median4lb(x, a, b, c, d);
+            return b;
+        }, true, true, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4Internal"})
+    void testMedian4lcInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        assertDoubleMedian(values, x -> {
+            Sorting.median4lc(x, a, b, c, d);
+            return b;
+        }, true, true, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4Internal"})
+    void testMedian4ldInternal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        final int d = indices[3];
+        assertDoubleMedian(values, x -> {
+            Sorting.median4ld(x, a, b, c, d);
+            return b;
+        }, true, true, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4"})
+    void testMedian4l(double[] a) {
+        // This method computes in place
+        assertDoubleMedian(a, x -> {
+            Sorting.median4l(x, 0, 1, 2, 3);
+            return 1;
+        }, true, false, 0, 1, 2, 3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4"})
+    void testMedian4lb(double[] a) {
+        // This method computes in place
+        assertDoubleMedian(a, x -> {
+            Sorting.median4lb(x, 0, 1, 2, 3);
+            return 1;
+        }, true, true, 0, 1, 2, 3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4"})
+    void testMedian4lc(double[] a) {
+        // This method computes in place
+        assertDoubleMedian(a, x -> {
+            Sorting.median4lc(x, 0, 1, 2, 3);
+            return 1;
+        }, true, true, 0, 1, 2, 3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4"})
+    void testMedian4ld(double[] a) {
+        // This method computes in place
+        assertDoubleMedian(a, x -> {
+            Sorting.median4ld(x, 0, 1, 2, 3);
+            return 1;
+        }, true, true, 0, 1, 2, 3);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testDoubleSort5Internal"})
     void testMedian5Internal(double[] values, int[] indices) {
         final int a = indices[0];
@@ -505,25 +627,25 @@ class SortingTest {
         final int c = indices[2];
         final int d = indices[3];
         final int e = indices[4];
-        assertDoubleMedian5(values, x -> Sorting.median5(x, a, b, c, d, e), indices);
+        assertDoubleMedian5(values, x -> Sorting.median5(x, a, b, c, d, e), false, indices);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort5"})
     void testMedian5(double[] a) {
-        assertDoubleMedian5(a, x -> Sorting.median5(x, 0), 0, 1, 2, 3, 4);
+        assertDoubleMedian5(a, x -> Sorting.median5(x, 0), false, 0, 1, 2, 3, 4);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort5"})
     void testMedian5b(double[] a) {
-        assertDoubleMedian5(a, x -> Sorting.median5b(x, 0), 0, 1, 2, 3, 4);
+        assertDoubleMedian5(a, x -> Sorting.median5b(x, 0), true, 0, 1, 2, 3, 4);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort5"})
     void testMedian5c(double[] a) {
-        assertDoubleMedian5(a, x -> Sorting.median5c(x, 0), 0, 1, 2, 3, 4);
+        assertDoubleMedian5(a, x -> Sorting.median5c(x, 0), true, 0, 1, 2, 3, 4);
     }
 
     @ParameterizedTest
@@ -531,9 +653,9 @@ class SortingTest {
     void testMedian5d(double[] a) {
         // This method computes in place
         assertDoubleMedian5(a, x -> {
-            Sorting.median5d(x, 0);
+            Sorting.median5d(x, 0, 1, 2, 3, 4);
             return 2;
-        }, 0, 1, 2, 3, 4);
+        }, true, 0, 1, 2, 3, 4);
     }
 
     /**
@@ -543,9 +665,11 @@ class SortingTest {
      *
      * @param values Data.
      * @param function Sort function.
+     * @param stable If true then no swaps should be made on the second pass.
      * @param indices Indices.
      */
-    private static void assertDoubleMedian5(double[] values, ToIntFunction<double[]> function, int... indices) {
+    private static void assertDoubleMedian(double[] values, ToIntFunction<double[]> function,
+        boolean lower, boolean stable, int... indices) {
         Assertions.assertFalse(containsDuplicates(indices), () -> "Duplicate indices: " + Arrays.toString(indices));
         // Pick out the data to sort
         final double[] expected = extractIndices(values, indices);
@@ -553,7 +677,7 @@ class SortingTest {
         final double[] data = values.clone();
         final int m = function.applyAsInt(data);
         // Only the magnitude matters so use a delta of 0 to allow -0.0 == 0.0
-        Assertions.assertEquals(expected[expected.length >>> 1], data[m], 0.0);
+        Assertions.assertEquals(expected[(lower ? -1 : 0) + (expected.length >>> 1)], data[m], 0.0);
         // Check outside the sorted indices
         OUTSIDE: for (int i = 0; i < values.length; i++) {
             for (final int ignore : indices) {
@@ -564,10 +688,27 @@ class SortingTest {
             Assertions.assertEquals(values[i], data[i]);
         }
         // This is not a strict requirement but check that no swaps occur on a second pass
-        final double[] x = data.clone();
-        final int m2 = function.applyAsInt(data);
-        Assertions.assertEquals(m, m2);
-        Assertions.assertArrayEquals(x, data);
+        if (stable) {
+            final double[] x = data.clone();
+            final int m2 = function.applyAsInt(data);
+            Assertions.assertEquals(m, m2);
+            Assertions.assertArrayEquals(x, data);
+        }
+    }
+
+    /**
+     * Assert that the median {@code function} computes the same result as
+     * {@link Arrays#sort(double[])} run on the provided {@code indices}. Ignores signed
+     * zeros.
+     *
+     * @param values Data.
+     * @param function Sort function.
+     * @param stable If true then no swaps should be made on the second pass.
+     * @param indices Indices.
+     */
+    private static void assertDoubleMedian5(double[] values, ToIntFunction<double[]> function,
+        boolean stable, int... indices) {
+        assertDoubleMedian(values, function, false, stable, indices);
     }
 
     private static int[] extractIndices(int[] values, int[] indices) {

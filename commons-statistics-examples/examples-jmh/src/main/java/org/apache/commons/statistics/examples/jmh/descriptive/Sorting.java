@@ -777,6 +777,179 @@ final class Sorting {
     }
 
     /**
+     * Place the lower median of 4 elements in {@code b}; the smaller element in
+     * {@code a}; and the larger two elements in {@code c, d}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     */
+    static void median4l(double[] x, int a, int b, int c, int d) {
+        // 4 comparisons
+        // Works but is not stable on repeat calls
+        if (x[d] < x[b]) {
+            final double u = x[d];
+            x[d] = x[b];
+            x[b] = u;
+        }
+        if (x[c] < x[a]) {
+            final double v = x[c];
+            x[c] = x[a];
+            x[a] = v;
+        }
+        if (x[b] < x[a]) {
+            final double v = x[c];
+            final double u = x[d];
+            x[c] = x[a];
+            x[d] = x[b];
+            x[a] = v;
+            x[b] = u;
+        }
+        if (x[c] < x[b]) {
+            final double u = x[c];
+            x[c] = x[b];
+            x[b] = u;
+        }
+    }
+
+    /**
+     * Place the lower median of 4 elements in {@code b}; the smaller element in
+     * {@code a}; and the larger two elements in {@code c, d}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     */
+    static void median4lb(double[] x, int a, int b, int c, int d) {
+        // 3 or 5 comparisons
+        // Stable on repeat calls
+        // Set min of [b, c, d]
+        if (x[d] < x[b]) {
+            final double u = x[d];
+            x[d] = x[b];
+            x[b] = u;
+        }
+        if (x[c] < x[b]) {
+            final double v = x[c];
+            x[c] = x[b];
+            x[b] = v;
+        }
+        // b < {c,d}
+        if (x[b] < x[a]) {
+            final double w = x[b];
+            x[b] = x[a];
+            x[a] = w;
+            // a < b,{c,d}
+            // Set min of [b, c, d]
+            if (x[d] < x[b]) {
+                final double u = x[d];
+                x[d] = x[b];
+                x[b] = u;
+            }
+            if (x[c] < x[b]) {
+                final double v = x[c];
+                x[c] = x[b];
+                x[b] = v;
+            }
+        }
+    }
+
+    /**
+     * Place the lower median of 4 elements in {@code b}; the smaller element in
+     * {@code a}; and the larger two elements in {@code c, d}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     */
+    static void median4lc(double[] x, int a, int b, int c, int d) {
+        // 3, 4, 5 comparisons
+        // Stable on repeat calls
+        if (x[d] < x[b]) {
+            final double u = x[d];
+            x[d] = x[b];
+            x[b] = u;
+        }
+        if (x[c] < x[a]) {
+            final double v = x[c];
+            x[c] = x[a];
+            x[a] = v;
+        }
+        if (x[c] < x[b]) {
+            final double u = x[c];
+            x[c] = x[b];
+            x[b] = u;
+        } else if (x[b] < x[a]) {
+            final double v = x[b];
+            x[b] = x[a];
+            x[a] = v;
+            if (x[d] < x[b]) {
+                final double u = x[d];
+                x[d] = x[b];
+                x[b] = u;
+            }
+        }
+    }
+
+    /**
+     * Place the lower median of 4 elements in {@code b}; the smaller element in
+     * {@code a}; and the larger two elements in {@code c, d}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     */
+    static void median4ld(double[] x, int a, int b, int c, int d) {
+        // 4 comparisons
+        // Stable on repeat calls
+        if (x[d] < x[a]) {
+            final double u = x[d];
+            x[d] = x[a];
+            x[a] = u;
+        }
+        if (x[c] < x[b]) {
+            final double v = x[c];
+            x[c] = x[b];
+            x[b] = v;
+        }
+        // a--------d
+        //    b--c
+        if (x[b] < x[a]) {
+            final double u = x[a];
+            x[a] = x[b];
+            x[b] = u;
+            //    b--d
+            // a--c
+            if (x[c] < u) {
+                x[b] = x[c];
+                x[c] = u;
+                // fully sorted here
+            }
+            // else full sort requires c:d ordering
+            // Not fully sorted for 6 of 24 permutations
+        } else if (x[d] < x[b]) {
+            // a--d
+            //       b--c
+            final double v = x[d];
+            // Do a full sort for 1 additional swap
+            x[d] = x[c];
+            x[c] = x[b];
+            x[b] = v;
+            // minimum swaps to put the lower median at b
+            //x[d] = x[b];
+            //x[b] = v;
+        }
+    }
+
+    /**
      * Return the median of a continuous block of 5 elements.
      * Data may be partially reordered.
      *
@@ -976,21 +1149,20 @@ final class Sorting {
     }
 
     /**
-     * Place the median of a continuous block of 5 elements in the middle; the smaller
-     * 2 elements in the first two positions; and the larger two elements in the last
-     * two positions.
+     * Place the median of 5 elements in {@code c}; the smaller 2 elements in
+     * {@code a, b}; and the larger two elements in {@code d, e}.
      *
      * @param x Values
-     * @param a First index.
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     * @param e Index.
      */
-    static void median5d(double[] x, int a) {
+    static void median5d(double[] x, int a, int b, int c, int d, int e) {
         // 6 comparison decision tree from:
         // Alexandrescu (2016) Fast Deterministic Selection, arXiv:1606.00484, Algorithm 4
         // https://arxiv.org/abs/1606.00484
-        final int b = a + 1;
-        final int c = a + 2;
-        final int d = a + 3;
-        final int e = a + 4;
         if (x[c] < x[a]) {
             final double v = x[c];
             x[c] = x[a];
@@ -1015,11 +1187,10 @@ final class Sorting {
             x[b] = v;
         }
         if (x[e] < x[c]) {
-            final double v = x[e];
+            final double u = x[e];
             x[e] = x[c];
-            x[c] = v;
-            if (x[c] < x[a]) {
-                final double u = x[c];
+            x[c] = u;
+            if (u < x[a]) {
                 x[c] = x[a];
                 x[a] = u;
             }
