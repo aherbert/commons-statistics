@@ -948,12 +948,13 @@ final class Partition {
          * @param right Upper bound (inclusive).
          * @param start Start of the partition range (inclusive).
          * @param end End of the partitioned range (inclusive).
-         * @param p0 Lower pivot location (inclusive).
-         * @param p1 Upper pivot location (inclusive).
+         * @param pivot0 Lower pivot location (inclusive).
+         * @param pivot1 Upper pivot location (inclusive).
          * @param upper Upper bound (inclusive) of the pivot range [k1].
          * @return Lower bound (inclusive) of the pivot range [k0].
          */
-        int partition(double[] a, int left, int right, int start, int end, int p0, int p1, int[] upper);
+        int partition(double[] a, int left, int right, int start, int end,
+            int pivot0, int pivot1, int[] upper);
     }
 
     /**
@@ -7833,6 +7834,83 @@ final class Partition {
         }
 
         return lower;
+    }
+
+    /**
+     * Expand a partition around a single pivot. Partitioning exchanges array
+     * elements such that all elements smaller than pivot are before it and all
+     * elements larger than pivot are after it. The central region is already
+     * partitioned.
+     *
+     * <pre>{@code
+     * |l             |s   |p0 p1|   e|                r|
+     * |    ???       | <P | ==P | >P |        ???      |
+     * }</pre>
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * @param a Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param start Start of the partition range (inclusive).
+     * @param end End of the partitioned range (inclusive).
+     * @param pivot0 Lower pivot location (inclusive).
+     * @param pivot1 Upper pivot location (inclusive).
+     * @param upper Upper bound (inclusive) of the pivot range [k1].
+     * @return Lower bound (inclusive) of the pivot range [k0].
+     */
+    private static int expandPartition1(double[] a, int left, int right, int start, int end,
+        int pivot0, int pivot1, int[] upper) {
+        // 3-way partition of the data using a pivot value into
+        // less-than, equal or greater-than.
+        // Based on Sedgewick's Bentley-McIroy partitioning: always swap i<->j then
+        // check for equal to the pivot and move again.
+        //
+        // Move sentinels from start and end to to left and right. Scan towards the
+        // sentinels until >=,<=. Swap then move == to the pivot region.
+        //           <-i                           j->
+        // |l |        |            |p0  p1|       |             | r|
+        // |>=|   ???  |     <      |  ==  |   >   |     ???     |<=|
+        //
+        // When either i or j reach the edge move the sentinel back and perform
+        // finishing loop. For i move the sentinel to p1, p0-1 to the end, and shift the pivot:
+        //                                            j->
+        // |l |                     |p0  p1|           |         | r|
+        // |>=|      <              |  ==  |       >   |   ???   |<=|
+        //
+        // Finish loop for j<r:
+        //                                             j->
+        // |l                     |p0  p1|             |         | r|
+        // |        <             |  ==  |         >   |   ???   |<=|
+
+        // Positioned for pre-in/decrement to write to pivot region
+        int p0 = pivot0;
+        int p1 = pivot1;
+        final double v = a[p0];
+        if (a[left] < v) {
+            // a[left] is not a sentinel
+            final double w = a[left];
+            if (a[right] > v) {
+                // Most likely case: ends can be sentinels
+                a[left] = a[right];
+                a[right] = w;
+            } else {
+                // a[right] is a sentinel; use pivot for left
+                a[left] = v;
+                a[p0] = w;
+                p0++;
+            }
+        } else if (a[right] > v) {
+            // a[right] is not a sentinel; use pivot
+            a[p1] = a[right];
+            p1--;
+            a[right] = v;
+        }
+
+        // TODO...
+
+        return 0;
     }
 
     /**
