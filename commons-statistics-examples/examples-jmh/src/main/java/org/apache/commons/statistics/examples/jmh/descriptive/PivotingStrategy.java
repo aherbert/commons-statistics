@@ -65,7 +65,7 @@ enum PivotingStrategy {
      * Pivot around the median of 9 values within the range.
      * Uses the median of 3 medians of 3. The returned value
      * is ranked 4, 5, or 6 out of the 9 values.
-     * This is also known in the literature as a "ninther" pivot.
+     * This is also known in the literature as Tukey’s "ninther" pivot.
      */
     MEDIAN_OF_9 {
         @Override
