@@ -189,6 +189,10 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
     /** Default single-pivot strategy. */
+    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.E1;
+    /** Default single-pivot strategy. */
+    static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.BFPRT;
+    /** Default single-pivot strategy. */
     static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
     /** Default single-pivot strategy. */
     static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SLS;
@@ -376,6 +380,10 @@ final class Partition {
 
     /** The single-pivot partition function. */
     private SPEPartition spFunction;
+    /** The expand partition function. */
+    private ExpandPartition expandFunction;
+    /** The single-pivot linear partition function. */
+    private SPEPartition linearSpFunction;
     /** Selection function used when {@code k} is close to the edge of the range. */
     private SelectFunction edgeSelection;
     /** Selection function used when quickselect progress is poor. */
@@ -471,6 +479,8 @@ final class Partition {
      * the equal value region in the middle. This requires that every element is moved
      * during traversal, even if already {@code <, >}. This can be mitigated by fast-forward
      * of pointers at the current {@code <, >} end points until the condition is not true.
+     *
+     * @see SPEPartition
      */
     enum SPStrategy {
         /**
@@ -520,6 +530,37 @@ final class Partition {
          * traversal.
          */
         DNF3;
+    }
+
+    /**
+     * Define the strategy for expanding a partition. This function is used when
+     * partitioning has used a sample located within the range to find the pivot.
+     * The remaining range below and above the sample can be partitioned without
+     * re-processing the sample.
+     *
+     * <p>Schemes may be binary ({@code <, >}), or ternary ({@code <, ==, >}) by
+     * collecting values equal to the pivot value.
+     *
+     * @see ExpandPartition
+     */
+    enum ExpandStrategy {
+        /** Method handling equal values. */
+        E1;
+    }
+
+    /**
+     * Define the strategy for the linear select single-pivot partition function.
+     * Linear select functions use a deterministic sample to find a pivot value
+     * that will eliminate at least a set fraction of the range. After the sample
+     * has been processed to find a pivot the entire range is partitioned. This
+     * can be done by re-processing the entire range, or expanding the partition.
+     *
+     * @see SPEPartition
+     * @see ExpandPartition
+     */
+    enum LinearStrategy {
+        /** . */
+        BFPRT;
     }
 
     /**
@@ -1056,6 +1097,8 @@ final class Partition {
         setSPStrategy(SP_STRATEGY);
         setEdgeSelectStrategy(EDGE_STRATEGY);
         setStopperStrategy(STOPPER_STRATEGY);
+        setExpandStrategy(EXPAND_STRATEGY);
+        setLinearStrategy(LINEAR_STRATEGY);
     }
 
     /**
@@ -1089,6 +1132,45 @@ final class Partition {
             break;
         default:
             throw new IllegalArgumentException("Unknown single-pivot strategy: " + v);
+        }
+        return this;
+    }
+
+    /**
+     * Sets the single-pivot partition expansion strategy.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setExpandStrategy(ExpandStrategy v) {
+        switch (v) {
+        case E1:
+            expandFunction = Partition::expandPartitionE1;
+            break;
+        default:
+            throw new IllegalArgumentException("Unknown expand strategy: " + v);
+        }
+        return this;
+    }
+
+    /**
+     * Sets the single-pivot linear select strategy.
+     *
+     * <p>Note: This value should be set after either {@link #setSPStrategy(SPStrategy)}
+     * or {@link #setExpandStrategy(ExpandStrategy)}; the linear select strategy
+     * will partition remaining range after computing a pivot from a sample by
+     * single-pivot partitioning or by expanding the partition.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setLinearStrategy(LinearStrategy v) {
+        switch (v) {
+        case BFPRT:
+            linearSpFunction = this::linearBFPRTBaseline;
+            break;
+        default:
+            throw new IllegalArgumentException("Unknown linear strategy: " + v);
         }
         return this;
     }
@@ -5729,7 +5811,13 @@ final class Partition {
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
      * <p>Uses the configured single-pivot quicksort method;
-     * and median of medians algorithm for pivot selection.
+     * and median of medians algorithm for pivot selection with medians-of-5.
+     *
+     * <p>Note:
+     * <p>This method is not configurable with the exception of the single-pivot quickselect method
+     * and the size to stop quickselect recursion and finish using sort select. It has been superceded by
+     * {@link #partitionLinear(double[], int[], int)} which has configurable deterministic
+     * pivot selection including those using partition expansion in-place of full partitioning.
      *
      * @param data Values.
      * @param k Indices (may be destructively modified).
@@ -5982,29 +6070,20 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
-     * <p>Uses the a median of medians algorithm to provide Order(n)
-     * performance.
+     * <p>Uses the a median of medians algorithm to provide Order(n) performance.
+     * This method has configurable deterministic pivot selection including those using
+     * partition expansion in-place of full partitioning. The methods are based on the
+     * QuickselectAdaptive method of Alexandrescu.
      *
      * @param data Values.
      * @param k Indices (may be destructively modified).
      * @param n Count of indices.
      */
     void partitionLinear(double[] data, int[] k, int n) {
-        // TODO: configurable choice of median-of-median partition function
-        // Write:
-        // bfprtBaseline
+        // TODO: 
         // repeatedStep
         // then do the improvements - these need the expand partition function
-        // have a spLinearAlgorithm that is configured in the constructor with:
-        // enum for expand partition function
-        // enum for linear partition function (uses expand function / sp partition function)
-        // adaptive QS will require a different quickSelect driver that makes decisions.
-
-        // first get one method working. bfprtBaseline should be the same
-        // speed as the current partitionLSP. If so then keep as a reference
-        // as document that it is superceded by this configurable method.
-
-        quickSelect(this::linearBFPRTBaseline, data, k, n);
+        quickSelect(linearSpFunction, data, k, n);
     }
 
     /**
@@ -8045,7 +8124,7 @@ final class Partition {
      */
     // TODO: alternative scheme without equal values.
     // scheme with scan towards the pivot with bounds checks vs start/end.
-    private static int expandPartition1(double[] a, int left, int right, int start, int end,
+    private static int expandPartitionE1(double[] a, int left, int right, int start, int end,
         int pivot0, int pivot1, int[] upper) {
         // 3-way partition of the data using a pivot value into
         // less-than, equal or greater-than.
@@ -8230,8 +8309,7 @@ final class Partition {
         final int m = (l + rr + 1) >>> 1;
         // mutual recursion
         quickSelect(this::linearBFPRTBaseline, a, l, rr, m, m, upper);
-        // For simplicity this is currently not configurable
-        return partitionKBM(a, l, r, m, upper);
+        return spFunction.partition(a, l, r, m, upper);
     }
 
     /**
