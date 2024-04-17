@@ -559,8 +559,12 @@ final class Partition {
      * @see ExpandPartition
      */
     enum LinearStrategy {
-        /** . */
-        BFPRT;
+        /** Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
+         * with medians of 5. */
+        BFPRT,
+        /** Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+         * with medians of 3. */
+        RS;
     }
 
     /**
@@ -1168,6 +1172,9 @@ final class Partition {
         switch (v) {
         case BFPRT:
             linearSpFunction = this::linearBFPRTBaseline;
+            break;
+        case RS:
+            linearSpFunction = this::linearRepeatedStepBaseline;
             break;
         default:
             throw new IllegalArgumentException("Unknown linear strategy: " + v);
@@ -8281,7 +8288,7 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
      *
-     * <p>Uses a the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
+     * <p>Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
      * with medians of 5.
      *
      * @param a Data array.
@@ -8317,10 +8324,60 @@ final class Partition {
         final int m = (l + rr + 1) >>> 1;
         // mutual recursion
         quickSelect(this::linearBFPRTBaseline, a, l, rr, m, m, upper);
+        // Note: repartions already partition data [l, rr]
         return spFunction.partition(a, l, r, m, upper);
     }
 
-    // TODO: repeated step
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>The index {@code k} is the target element. This method ignores this value.
+     * The value is included to match the method signature of the {@link SPEPartition} interface.
+     * Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with medians of 3.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int linearRepeatedStepBaseline(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 5.
+        // Moves the responsibility for selection when r-l <= 8 to the caller.
+        // Process blocks of 3, and repeat.
+        int j = l - 1;
+        for (int e = l + 2; e <= r; e += 3) {
+            Sorting.sort3(a, e - 2, e - 1, e);
+            // Median to first tertile
+            final double v = a[e - 1];
+            a[e - 1] = a[++j];
+            a[j] = v;
+        }
+        int rr = l - 1;
+        for (int e = l + 2; e <= j; e += 3) {
+            Sorting.sort3(a, e - 2, e - 1, e);
+            // Median to first 9th-tile
+            final double v = a[e - 1];
+            a[e - 1] = a[++rr];
+            a[rr] = v;
+        }
+        final int m = (l + rr + 1) >>> 1;
+        // mutual recursion
+        quickSelect(this::linearRepeatedStepBaseline, a, l, rr, m, m, upper);
+        // Note: repartions already partition data [l, rr]
+        return spFunction.partition(a, l, r, m, upper);
+    }
 
     /**
      * Move NaN values to the end of the array.
