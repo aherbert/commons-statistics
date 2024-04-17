@@ -6183,6 +6183,10 @@ final class Partition {
             // Optimal value for this is much higher than standard quickselect due
             // to the high cost of median-of-medians pivot computation and reuse via
             // mutual recursion so we have a different value.
+            // Note: Use of this will not break the Order(n) performance for worst
+            // case data, i.e. data where all values require full insertion.
+            // This will be Order(n * k) == Order(n); k becomes a multiplier as long as
+            // k << n; otherwise worst case is Order(n^2 / 2) when k=n/2.
             if (Math.min(kb - l, r - ka) < linearSortSelectSize) {
                 sortSelectRange(a, l, r, ka, kb);
                 // We could scan left/right to extend the bounds here after the sort.
@@ -6453,6 +6457,10 @@ final class Partition {
             }
 
             // Single-pivot partitioning handling equal values.
+            // TODO: Update pivot selection to ensure l<=p, r>=p.
+            // Can be done using post processing of the FR sample.
+            // ninther pivot already ensures this. Then use a modified
+            // partition method that requires x[l] <= v <= x[r].
             final int p0 = partitionKBM(a, l, r, pivot, upper);
             final int p1 = upper[0];
 
@@ -8311,6 +8319,8 @@ final class Partition {
         quickSelect(this::linearBFPRTBaseline, a, l, rr, m, m, upper);
         return spFunction.partition(a, l, r, m, upper);
     }
+
+    // TODO: repeated step
 
     /**
      * Move NaN values to the end of the array.
