@@ -1343,7 +1343,16 @@ public class QuantilePerformance {
         @Param({"10"})
         private int repeats;
         /** Distribution mode. K indices can be distributed randomly or uniformly.
-         * Index mode uses k as the target index. */
+         * <ul>
+         * <li>"random": distribute k indices randomly
+         * <li>"uniform": distribute k indices uniformly
+         * <li>"index": Use a single index at k
+         * <li>"single": Use a single index at k uniformly spaced points. This mode
+         * first generates the spacing for the indices. Then samples from that spacing
+         * using the configured repeats. Common usage of k=10 will have 10 samples with a
+         * single index, each in a different position.
+         * </ul>
+         */
         @Param({"random"})
         private String mode;
         /** Separation. K can be single indices (s=0) or paired (s!=0). Paired indices are
@@ -1402,6 +1411,7 @@ public class QuantilePerformance {
                 throw new IllegalStateException("Invalid separation: " + s);
             }
             super.setup();
+
             // Data will be randomized per iteration
             if (indices == null) {
                 // First call, create objects
@@ -1460,6 +1470,33 @@ public class QuantilePerformance {
                             k1[m] = p;
                         }
                         indices[index++] = k1;
+                    }
+                }
+            } else if ("single".equals(mode)) {
+                // uniform indices with a random start
+                for (int i = 0; i < noOfSamples; i++) {
+                    // Reduce length by the separation
+                    final int n = getDataSize(i) - s;
+                    int[] samples;
+                    // When k approaches n then a linear spacing covers every part
+                    // of the array and we sample. Do this when n < k/4. This handles
+                    // k > n (saturation).
+                    if (n < (k >> 2)) {
+                        samples = rng.ints(k, 0, n).toArray();
+                    } else {
+                        // Linear spacing
+                        final int step = n / k;
+                        samples = new int[k];
+                        for (int j = 0, x = step >> 1; j < k; j++, x += step) {
+                            samples[j] = x;
+                        }
+                    }
+                    for (int j = 0; j < repeats; j++) {
+                        final int ii = j % k;
+                        if (ii == 0) {
+                            PermutationSampler.shuffle(rng, samples);
+                        }
+                        indices[index++] = new int[] {samples[ii]};
                     }
                 }
             } else if ("index".equals(mode)) {
