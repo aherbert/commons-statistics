@@ -6087,7 +6087,7 @@ final class Partition {
      * @param n Count of indices.
      */
     void partitionLinear(double[] data, int[] k, int n) {
-        // TODO: 
+        // TODO:
         // repeatedStep
         // then do the improvements - these need the expand partition function
         quickSelect(linearSpFunction, data, k, n);
@@ -8324,7 +8324,7 @@ final class Partition {
         final int m = (l + rr + 1) >>> 1;
         // mutual recursion
         quickSelect(this::linearBFPRTBaseline, a, l, rr, m, m, upper);
-        // Note: repartions already partition data [l, rr]
+        // Note: repartions already partitioned data [l, rr]
         return spFunction.partition(a, l, r, m, upper);
     }
 
@@ -8375,7 +8375,7 @@ final class Partition {
         final int m = (l + rr + 1) >>> 1;
         // mutual recursion
         quickSelect(this::linearRepeatedStepBaseline, a, l, rr, m, m, upper);
-        // Note: repartions already partition data [l, rr]
+        // Note: repartions already partitioned data [l, rr]
         return spFunction.partition(a, l, r, m, upper);
     }
 
