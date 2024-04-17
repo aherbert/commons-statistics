@@ -119,8 +119,12 @@ public class QuantilePerformance {
     private static final String ISP = "ISP";
     /** Introselect implementation with dual-pivot partitioning. */
     private static final String IDP = "IDP";
-    /** Linearselect implementation with single pivot partitioning. */
+    /** Linearselect implementation with single pivot partitioning using median-of-medians-of-5
+     * for pivot selection. */
     private static final String LSP = "LSP";
+    /** Linearselect implementation with single pivot partitioning using optimised
+     * median-of-medians. */
+    private static final String LINEAR = "Linear";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
      * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
@@ -2259,7 +2263,7 @@ public class QuantilePerformance {
             SP, BM, SBM,
             DP, DP5, DNF,
             SBM2,
-            ISP, IDP, LSP, SELECT})
+            ISP, IDP, LSP, LINEAR, SELECT})
         private String name;
 
         /** Override of minimum quickselect size. */
@@ -2410,6 +2414,13 @@ public class QuantilePerformance {
                 final Partition part = createPartition(name, LSP, qs, ec);
                 function = (data, indices) -> {
                     part.partitionLSP(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            // Linearselect (optimised median-of-medians) implementation (stopper for quickselect)
+            } else if (name.startsWith(LINEAR)) {
+                final Partition part = createPartition(name, LINEAR, qs, ec);
+                function = (data, indices) -> {
+                    part.partitionLinear(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Heapselect implementation (stopper for quickselect)

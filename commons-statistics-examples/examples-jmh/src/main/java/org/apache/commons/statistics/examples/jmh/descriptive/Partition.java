@@ -74,7 +74,9 @@ import org.apache.commons.rng.simple.RandomSource;
  *
  * <p>A worst-case linear time algorithm PICK is described in Blum et al [7]. This uses the median
  * of medians as a partition element for selection which ensures a minimum fraction of the
- * elements are eliminated per iteration.
+ * elements are eliminated per iteration. This was extended to use an asymmetric pivot choice
+ * with efficient reuse of the medians sample in the QuickselectAdpative algorithm of
+ * Alexandrescu [8].
  *
  * <ol>
  * <li>
@@ -105,6 +107,9 @@ import org.apache.commons.rng.simple.RandomSource;
  * Time bounds for selection.
  * <a href="https://doi.org/10.1016%2FS0022-0000%2873%2980033-9">
  * Journal of Computer and System Sciences. 7 (4): 448–461</a>.
+ * <li>Alexandrescu (2016)
+ * Fast Deterministic Selection
+ * <a href="https://arxiv.org/abs/1606.00484">arXiv:1606.00484</a>.
  * <li><a href="https://en.wikipedia.org/wiki/Quickselect">Quickselect (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introselect">Introselect (Wikipedia)</a>
@@ -5955,7 +5960,7 @@ final class Partition {
             a[rr] = v;
         }
 
-        int m = (l + rr) >>> 1;
+        int m = (l + rr + 1) >>> 1;
         // mutual recursion
         linearSelect(part, a, l, rr, m, m, bounds);
         // bounds contains the range of the pivot.
@@ -5963,6 +5968,184 @@ final class Partition {
         m = bounds[1];
         bounds[1] = rr;
         return m;
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses the a median of medians algorithm to provide Order(n)
+     * performance.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionLinear(double[] data, int[] k, int n) {
+        // TODO: configurable choice of median-of-median partition function
+        // Write:
+        // bfprtBaseline
+        // repeatedStep
+        // then do the improvements - these need the expand partition function
+        // have a spLinearAlgorithm that is configured in the constructor with:
+        // enum for expand partition function
+        // enum for linear partition function (uses expand function / sp partition function)
+        // adaptive QS will require a different quickSelect driver that makes decisions.
+
+        // first get one method working. bfprtBaseline should be the same
+        // speed as the current partitionLSP. If so then keep as a reference
+        // as document that it is superceded by this configurable method.
+
+        quickSelect(this::linearBFPRTBaseline, data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>This method assumes that the partition function can compute a pivot.
+     * It is used for variants of the median of medians algorithm which use mutual
+     * recursion for pivot selection.
+     *
+     * <p>WARNING: Currently this only supports a single or range of {@code k}.
+     * For parity with other select methods this accepts an array {@code k} and pre/post
+     * processes the data for NaN and signed zeros.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    private void quickSelect(SPEPartition part, double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            if (n != 0) {
+                final int ka = Math.min(k[0], k[n - 1]);
+                final int kb = Math.max(k[0], k[n - 1]);
+                quickSelect(part, a, 0, end - 1, ka, kb, new int[2]);
+            }
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code [ka, kb]} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < ka] <= data[ka] <= data[kb] <= data[kb < i]
+     * }</pre>
+     *
+     * <p>This function accepts indices {@code [ka, kb]} that define the
+     * range of indices to partition. It is expected that the range is small.
+     *
+     * <p>This method assumes that the partition function can compute a pivot.
+     * It is used for variants of the median of medians algorithm which use mutual
+     * recursion for pivot selection. This method is based on the improvements
+     * for median-of-medians algorithm in Alexandrescu (2016).
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * <p>Returns the bounds containing {@code [ka, kb]}. These will be lower/higher
+     * than the keys if equal values are present in the data.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka First key of interest.
+     * @param kb Last key of interest.
+     * @param bounds Bounds of the range containing {@code [ka, kb]} (inclusive).
+     */
+    private void quickSelect(SPEPartition part, double[] a, int left, int right, int ka, int kb,
+            int[] bounds) {
+        int l = left;
+        int r = right;
+        while (true) {
+            // Select when ka and kb are close to the same end
+            // |l|-----|ka|kkkkkkkk|kb|------|r|
+            // Optimal value for this is much higher than standard quickselect due
+            // to the high cost of median-of-medians pivot computation and reuse via
+            // mutual recursion so we have a different value.
+            if (Math.min(kb - l, r - ka) < linearSortSelectSize) {
+                sortSelectRange(a, l, r, ka, kb);
+                // We could scan left/right to extend the bounds here after the sort.
+                // TODO - update sortSelectRange to sortSelectRange2 and return the
+                // known equal value below/above the target left/right k.
+                bounds[0] = ka;
+                bounds[1] = kb;
+                return;
+            }
+            // Only target ka; kb is assumed to be close
+            final int p0 = part.partition(a, l, r, ka, bounds);
+            final int p1 = bounds[0];
+
+            // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
+            //                   p0 p1
+            // |l|--|ka|kkkk|kb|--|P|-------------------|r|
+            // |l|----------------|P|--|ka|kkk|kb|------|r|
+            // |l|-----------|ka|k|P|k|kb|--------------|r|
+            if (kb < p0) {
+                // Entirely on left side
+                r = p0 - 1;
+            } else if (ka > p1) {
+                // Entirely on right side
+                l = p1 + 1;
+            } else {
+                // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
+                // Here we set the bounds for use after median-of-medians pivot selection.
+                // In the event there are many equal values this allows collecting those
+                // known to be equal together when moving around the medians sample.
+                bounds[0] = p0;
+                bounds[1] = p1;
+                if (ka < p0) {
+                    sortSelectRight(a, l, p0, ka);
+                    bounds[0] = ka;
+                }
+                if (kb > p1) {
+                    sortSelectLeft(a, p1, r, kb);
+                    bounds[1] = kb;
+                }
+                return;
+            }
+        }
     }
 
     /**
@@ -7860,6 +8043,8 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range [k1].
      * @return Lower bound (inclusive) of the pivot range [k0].
      */
+    // TODO: alternative scheme without equal values.
+    // scheme with scan towards the pivot with bounds checks vs start/end.
     private static int expandPartition1(double[] a, int left, int right, int start, int end,
         int pivot0, int pivot1, int[] upper) {
         // 3-way partition of the data using a pivot value into
@@ -7908,9 +8093,145 @@ final class Partition {
             a[right] = v;
         }
 
-        // TODO...
+        int i = start;
+        int j = end;
+        while (true) {
+            do {
+                --i;
+            } while (a[i] < v);
+            do {
+                ++j;
+            } while (a[j] > v);
+            final double vj = a[i];
+            final double vi = a[j];
+            a[i] = vi;
+            a[j] = vj;
+            // Move the equal values to pivot region
+            if (vi == v) {
+                a[i] = a[--p0];
+                a[p0] = v;
+            }
+            if (vj == v) {
+                a[j] = a[++p1];
+                a[p1] = v;
+            }
+            // Termination check
+            if (i == left || j == right) {
+                break;
+            }
+        }
 
-        return 0;
+        // TODO: are these better served inside the main loop?
+        // Finishing loops.
+        // Require the == region to be non-zero length
+        // so check and relocate the pivot back to the centre.
+        if (p1 < p0) {
+            // A single pivot value either at left or right as a sentinel.
+            // A terminated scan would move the pivot back to the centre.
+            // The pivot is at the non-terminated side.
+            if (i == left) {
+                // i terminated
+                assert j < right : "j should continue";
+                assert a[right] == v : "pivot not at right";
+                assert a[p1] <= v : "upper pivot marker should be below pivot value";
+                a[right] = a[p1];
+                a[p1] = v;
+                p1++;
+            } else {
+                // j terminated
+                assert i > left : "i should continue";
+                assert a[left] == v : "pivot not at left";
+                assert a[p0] >= v : "lower pivot marker should be above pivot value";
+                a[left] = a[p0];
+                a[p0] = v;
+                p0--;
+            }
+        }
+
+        while (i > left) {
+            do {
+                --i;
+            } while (a[i] < v);
+            final double w = a[i];
+            // Move lower bound of pivot region
+            a[i] = a[--p0];
+            a[p0] = v;
+            if (w > v) {
+                // Move upper bound of pivot region
+                a[p1] = w;
+                p1--;
+            }
+        }
+        while (j < right) {
+            do {
+                ++j;
+            } while (a[j] > v);
+            final double w = a[j];
+            // Move upper bound of pivot region
+            a[j] = a[++p1];
+            a[p1] = v;
+            if (w < v) {
+                // Move lower bound of pivot region
+                a[p0] = w;
+                p0++;
+            }
+        }
+
+        upper[0] = p1;
+        return p0;
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>The index {@code k} is the target element. This method ignores this value.
+     * The value is included to match the method signature of the {@link SPEPartition} interface.
+     * Assumes the range {@code r - l >= 4}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses a the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
+     * with medians of 5.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int linearBFPRTBaseline(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 3.
+        // Moves the responsibility for selection when r-l <= 4 to the caller.
+        // Process blocks of 5.
+        // Moves the median of each block to the left of the array.
+        int rr = l - 1;
+        for (int e = l + 4; e <= r; e += 5) {
+//            // Loop terminated on final block of size 1-5.
+//            if (e >= r) {
+//                Sorting.sort(a, e - 4, r);
+//                // ((e-4) + (r+1)) / 2
+//                final int m = (e - 3 + r) >>> 1;
+//                final double v = a[m];
+//                a[m] = a[++rr];
+//                a[rr] = v;
+//                break;
+//            }
+            Sorting.median5d(a, e - 4, e - 3, e - 2, e - 1, e);
+            // Median to first quintile
+            final double v = a[e - 2];
+            a[e - 2] = a[++rr];
+            a[rr] = v;
+        }
+        final int m = (l + rr + 1) >>> 1;
+        // mutual recursion
+        quickSelect(this::linearBFPRTBaseline, a, l, rr, m, m, upper);
+        // For simplicity this is currently not configurable
+        return partitionKBM(a, l, r, m, upper);
     }
 
     /**
