@@ -191,7 +191,7 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T1;
     /** Default single-pivot strategy. */
-    static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.BFPRT;
+    static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.RS_IM;
     /** Default single-pivot strategy. */
     static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
     /** Default single-pivot strategy. */
