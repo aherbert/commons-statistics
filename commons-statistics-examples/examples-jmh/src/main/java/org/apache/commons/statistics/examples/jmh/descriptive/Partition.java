@@ -555,16 +555,28 @@ final class Partition {
      * has been processed to find a pivot the entire range is partitioned. This
      * can be done by re-processing the entire range, or expanding the partition.
      *
+     * @see SPStrategy
+     * @see ExpandStrategy
      * @see SPEPartition
      * @see ExpandPartition
      */
     enum LinearStrategy {
         /** Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
-         * with medians of 5. */
+         * with medians of 5. This is the baseline version that creates the median sample
+         * at the left end and repartitions the entire range using the pivot. */
         BFPRT,
         /** Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-         * with medians of 3. */
-        RS;
+         * with medians of 3. This is the baseline version that creates the median sample
+         * at the left end and repartitions the entire range using the pivot. */
+        RS,
+        /** Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
+         * with medians of 5. This is the improved version that creates the median sample
+         * in the centre and expands the partition around the pivot sample. */
+        BFPRT_IM,
+        /** Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+         * with medians of 3. This is the improved version that creates the median sample
+         * in the centre and expands the partition around the pivot sample. */
+        RS_IM;
     }
 
     /**
@@ -1175,6 +1187,12 @@ final class Partition {
             break;
         case RS:
             linearSpFunction = this::linearRepeatedStepBaseline;
+            break;
+        case BFPRT_IM:
+            linearSpFunction = this::linearBFPRTImproved;
+            break;
+        case RS_IM:
+            linearSpFunction = this::linearRepeatedStepImproved;
             break;
         default:
             throw new IllegalArgumentException("Unknown linear strategy: " + v);
@@ -6087,9 +6105,6 @@ final class Partition {
      * @param n Count of indices.
      */
     void partitionLinear(double[] data, int[] k, int n) {
-        // TODO:
-        // repeatedStep
-        // then do the improvements - these need the expand partition function
         quickSelect(linearSpFunction, data, k, n);
     }
 
@@ -8209,65 +8224,43 @@ final class Partition {
                 a[j] = a[++p1];
                 a[p1] = v;
             }
-            // Termination check
-            if (i == left || j == right) {
+            // Termination check and finishing loops.
+            // Note: this works even if pivot region is zero length (p1 == p0-1)
+            // due to pivot use as a sentinel on one side because we pre-inc/decrement
+            // one side and post-inc/decrement the other side.
+            if (i == left) {
+                while (j < right) {
+                    do {
+                        ++j;
+                    } while (a[j] > v);
+                    final double w = a[j];
+                    // Move upper bound of pivot region
+                    a[j] = a[++p1];
+                    a[p1] = v;
+                    if (w < v) {
+                        // Move lower bound of pivot region
+                        a[p0] = w;
+                        p0++;
+                    }
+                }
                 break;
             }
-        }
-
-        // TODO: are these better served inside the main loop?
-        // Finishing loops.
-        // Require the == region to be non-zero length
-        // so check and relocate the pivot back to the centre.
-        if (p1 < p0) {
-            // A single pivot value either at left or right as a sentinel.
-            // A terminated scan would move the pivot back to the centre.
-            // The pivot is at the non-terminated side.
-            if (i == left) {
-                // i terminated
-                assert j < right : "j should continue";
-                assert a[right] == v : "pivot not at right";
-                assert a[p1] <= v : "upper pivot marker should be below pivot value";
-                a[right] = a[p1];
-                a[p1] = v;
-                p1++;
-            } else {
-                // j terminated
-                assert i > left : "i should continue";
-                assert a[left] == v : "pivot not at left";
-                assert a[p0] >= v : "lower pivot marker should be above pivot value";
-                a[left] = a[p0];
-                a[p0] = v;
-                p0--;
-            }
-        }
-
-        while (i > left) {
-            do {
-                --i;
-            } while (a[i] < v);
-            final double w = a[i];
-            // Move lower bound of pivot region
-            a[i] = a[--p0];
-            a[p0] = v;
-            if (w > v) {
-                // Move upper bound of pivot region
-                a[p1] = w;
-                p1--;
-            }
-        }
-        while (j < right) {
-            do {
-                ++j;
-            } while (a[j] > v);
-            final double w = a[j];
-            // Move upper bound of pivot region
-            a[j] = a[++p1];
-            a[p1] = v;
-            if (w < v) {
-                // Move lower bound of pivot region
-                a[p0] = w;
-                p0++;
+            if (j == right) {
+                while (i > left) {
+                    do {
+                        --i;
+                    } while (a[i] < v);
+                    final double w = a[i];
+                    // Move lower bound of pivot region
+                    a[i] = a[--p0];
+                    a[p0] = v;
+                    if (w > v) {
+                        // Move upper bound of pivot region
+                        a[p1] = w;
+                        p1--;
+                    }
+                }
+                break;
             }
         }
 
@@ -8289,7 +8282,7 @@ final class Partition {
      * This does not respect the ordering of signed zeros.
      *
      * <p>Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
-     * with medians of 5.
+     * with medians of 5 with the sample medians computed in the first quintile.
      *
      * @param a Data array.
      * @param l Lower bound (inclusive).
@@ -8301,8 +8294,7 @@ final class Partition {
     private int linearBFPRTBaseline(double[] a, int l, int r, int k, int[] upper) {
         // Adapted from Alexandrescu (2016), algorithm 3.
         // Moves the responsibility for selection when r-l <= 4 to the caller.
-        // Process blocks of 5.
-        // Moves the median of each block to the left of the array.
+        // Compute the median of each contiguous set of 5 to the first quintile.
         int rr = l - 1;
         for (int e = l + 4; e <= r; e += 5) {
 //            // Loop terminated on final block of size 1-5.
@@ -8328,7 +8320,6 @@ final class Partition {
         return spFunction.partition(a, l, r, m, upper);
     }
 
-
     /**
      * Partition an array slice around a pivot. Partitioning exchanges array elements such
      * that all elements smaller than pivot are before it and all elements larger than
@@ -8343,7 +8334,7 @@ final class Partition {
      * This does not respect the ordering of signed zeros.
      *
      * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-     * with medians of 3.
+     * with medians of 3 with the samples computed in the first tertile and 9th-tile.
      *
      * @param a Data array.
      * @param l Lower bound (inclusive).
@@ -8355,7 +8346,7 @@ final class Partition {
     private int linearRepeatedStepBaseline(double[] a, int l, int r, int k, int[] upper) {
         // Adapted from Alexandrescu (2016), algorithm 5.
         // Moves the responsibility for selection when r-l <= 8 to the caller.
-        // Process blocks of 3, and repeat.
+        // Compute the median of each contiguous set of 3 to the first tertile, and repeat.
         int j = l - 1;
         for (int e = l + 2; e <= r; e += 3) {
             Sorting.sort3(a, e - 2, e - 1, e);
@@ -8377,6 +8368,94 @@ final class Partition {
         quickSelect(this::linearRepeatedStepBaseline, a, l, rr, m, m, upper);
         // Note: repartions already partitioned data [l, rr]
         return spFunction.partition(a, l, r, m, upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>The index {@code k} is the target element. This method ignores this value.
+     * The value is included to match the method signature of the {@link SPEPartition} interface.
+     * Assumes the range {@code r - l >= 4}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
+     * with medians of 5 with the sample medians computed in the central quintile.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int linearBFPRTImproved(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 6.
+        // Moves the responsibility for selection when r-l <= 4 to the caller.
+        // Compute the median of each non-contiguous set of 5 to the middle quintile.
+        final int f = (r - l + 1) / 5;
+        final int f3 = 3 * f;
+        // middle quintile: [2f:3f)
+        final int s = l + (f << 1);
+        final int e = s + f - 1;
+        for (int i = l, j = s; i < s; i += 2, j++) {
+            Sorting.median5d(a, i, i + 1, j, f3 + i, f3 + i + 1);
+        }
+        final int m = (s + e + 1) >> 1;
+        // mutual recursion
+        quickSelect(this::linearBFPRTImproved, a, s, e, m, m, upper);
+        //return spFunction.partition(a, l, r, m, upper);
+        // broken
+        return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>The index {@code k} is the target element. This method ignores this value.
+     * The value is included to match the method signature of the {@link SPEPartition} interface.
+     * Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with medians of 3 with the samples computed in the middle tertile and 9th-tile.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int linearRepeatedStepImproved(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 7.
+        // Moves the responsibility for selection when r-l <= 8 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        final int m = (s + e + 1) >>> 1;
+        // mutual recursion
+        quickSelect(this::linearRepeatedStepImproved, a, s, e, m, m, upper);
+        return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
     }
 
     /**
