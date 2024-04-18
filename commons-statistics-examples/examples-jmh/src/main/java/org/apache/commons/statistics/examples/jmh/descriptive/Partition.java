@@ -550,7 +550,18 @@ final class Partition {
         /** Ternary partition method 1. Sweeps outwards and uses sentinels at the ends
          * to avoid pointer range checks. Equal values are move directly into the
          * central pivot range. */
-        T1;
+        T1,
+        /** Ternary partition method 2. Sweeps inwards and uses sentinels at the ends
+         * to avoid pointer range checks. Equal values are move to the outer edges;
+         * these are swapped to the pivot region in the final step using minimum moves.
+         * In the event of no equal values this requires no additional swaps. */
+        T2,
+        /** Binary partition method 1. Sweeps outwards and uses sentinels at the ends
+         * to avoid pointer range checks. */
+        B1,
+        /** Binary partition method 2. Sweeps inwards and uses sentinels at the ends
+         * to avoid pointer range checks. */
+        B2,
     }
 
     /**
