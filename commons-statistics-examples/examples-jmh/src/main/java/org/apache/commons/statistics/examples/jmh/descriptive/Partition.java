@@ -1180,6 +1180,12 @@ final class Partition {
         case B1:
             expandFunction = Partition::expandPartitionB1;
             break;
+        case T2:
+            expandFunction = Partition::expandPartitionT2;
+            break;
+        case B2:
+            expandFunction = Partition::expandPartitionB2;
+            break;
         default:
             throw new IllegalArgumentException("Unknown expand strategy: " + v);
         }
@@ -8176,16 +8182,16 @@ final class Partition {
         // Based on Sedgewick's Bentley-McIroy partitioning: always swap i<->j then
         // check for equal to the pivot and move again.
         //
-        // Move sentinels from start and end to to left and right. Scan towards the
+        // Move sentinels from start and end to left and right. Scan towards the
         // sentinels until >=,<=. Swap then move == to the pivot region.
         //           <-i                           j->
         // |l |        |            |p0  p1|       |             | r|
         // |>=|   ???  |     <      |  ==  |   >   |     ???     |<=|
         //
         // When either i or j reach the edge perform finishing loop.
-        // Finish loop for j<r moves values to p0 for < or p1+1 for ==
-        // and moves the pivot up; replaces j with either p1+1:
-        //                                            j->
+        // Finish loop for a[j] <= v replaces j with p1+1, moves value to p0
+        // for < or p1+1 for == and updates the pivot range:
+        //                                             j->
         // |l |                     |p0  p1|           |         | r|
         // |>=|      <              |  ==  |       >   |   ???   |<=|
 
@@ -8311,15 +8317,15 @@ final class Partition {
         // 2-way partition of the data using a pivot value into
         // less-than, or greater-than.
         //
-        // Move sentinels from start and end to to left and right. Scan towards the
+        // Move sentinels from start and end to left and right. Scan towards the
         // sentinels until >=,<= then swap.
         //           <-i                           j->
         // |l |        |              | p|         |             | r|
         // |>=|   ???  |     <        |==|     >   |     ???     |<=|
         //
         // When either i or j reach the edge perform finishing loop.
-        // Finish loop for j<=r moves values to p and moves the pivot up;
-        // replaces j with p+1:
+        // Finish loop for a[j] <= v replaces j with p1+1, moves value to p
+        // and moves the pivot up:
         //                                            j->
         // |l |                       | p|            |         | r|
         // |>=|      <                |==|        >   |   ???   |<=|
@@ -8401,6 +8407,232 @@ final class Partition {
                     a[left] = a[p];
                     a[p] = v;
                 }
+                while (i > left) {
+                    do {
+                        --i;
+                    } while (a[i] < v);
+                    // Move pivot
+                    a[p] = a[i];
+                    a[i] = a[--p];
+                    a[p] = v;
+                }
+                break;
+            }
+        }
+
+        upper[0] = p;
+        return p;
+    }
+
+    /**
+     * Expand a partition around a single pivot. Partitioning exchanges array
+     * elements such that all elements smaller than pivot are before it and all
+     * elements larger than pivot are after it. The central region is already
+     * partitioned.
+     *
+     * <pre>{@code
+     * |l             |s   |p0 p1|   e|                r|
+     * |    ???       | <P | ==P | >P |        ???      |
+     * }</pre>
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>This is similar to {@link #expandPartitionT1(double[], int, int, int, int, int, int, int[])}
+     * with a change to how the end-point sentinels are created. It does not use the pivot
+     * but uses values at start and end. This increases the length of the lower/upper ranges
+     * by 1 for the main scan.
+     *
+     * @param a Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param start Start of the partition range (inclusive).
+     * @param end End of the partitioned range (inclusive).
+     * @param pivot0 Lower pivot location (inclusive).
+     * @param pivot1 Upper pivot location (inclusive).
+     * @param upper Upper bound (inclusive) of the pivot range [k1].
+     * @return Lower bound (inclusive) of the pivot range [k0].
+     */
+    private static int expandPartitionT2(double[] a, int left, int right, int start, int end,
+        int pivot0, int pivot1, int[] upper) {
+        // 3-way partition of the data using a pivot value into
+        // less-than, equal or greater-than.
+        // Based on Sedgewick's Bentley-McIroy partitioning: always swap i<->j then
+        // check for equal to the pivot and move again.
+        //
+        // Move sentinels from start and end to left and right. Scan towards the
+        // sentinels until >=,<=. Swap then move == to the pivot region.
+        //           <-i                           j->
+        // |l |        |            |p0  p1|       |             | r|
+        // |>=|   ???  |     <      |  ==  |   >   |     ???     |<=|
+        //
+        // When either i or j reach the edge perform finishing loop.
+        // Finish loop for a[j] <= v replaces j with p1+1, moves value to p0
+        // for < or p1+1 for == and updates the pivot range:
+        //                                             j->
+        // |l |                     |p0  p1|           |         | r|
+        // |>=|      <              |  ==  |       >   |   ???   |<=|
+
+        // Positioned for pre-in/decrement to write to pivot region
+        int p0 = pivot0;
+        int p1 = pivot1;
+        final double v = a[p0];
+        // Use start/end as sentinels
+        double vi = a[start];
+        double vj = a[end];
+        a[start] = a[left];
+        a[end] = a[right];
+        a[left] = vj;
+        a[right] = vi;
+
+        int i = start + 1;
+        int j = end - 1;
+        while (true) {
+            do {
+                --i;
+            } while (a[i] < v);
+            do {
+                ++j;
+            } while (a[j] > v);
+            vj = a[i];
+            vi = a[j];
+            a[i] = vi;
+            a[j] = vj;
+            // Move the equal values to pivot region
+            if (vi == v) {
+                a[i] = a[--p0];
+                a[p0] = v;
+            }
+            if (vj == v) {
+                a[j] = a[++p1];
+                a[p1] = v;
+            }
+            // Termination check and finishing loops.
+            if (i == left) {
+                while (j < right) {
+                    do {
+                        ++j;
+                    } while (a[j] > v);
+                    final double w = a[j];
+                    // Move upper bound of pivot region
+                    a[j] = a[++p1];
+                    a[p1] = v;
+                    if (w < v) {
+                        // Move lower bound of pivot region
+                        a[p0] = w;
+                        p0++;
+                    }
+                }
+                break;
+            }
+            if (j == right) {
+                while (i > left) {
+                    do {
+                        --i;
+                    } while (a[i] < v);
+                    final double w = a[i];
+                    // Move lower bound of pivot region
+                    a[i] = a[--p0];
+                    a[p0] = v;
+                    if (w > v) {
+                        // Move upper bound of pivot region
+                        a[p1] = w;
+                        p1--;
+                    }
+                }
+                break;
+            }
+        }
+
+        upper[0] = p1;
+        return p0;
+    }
+
+    /**
+     * Expand a partition around a single pivot. Partitioning exchanges array
+     * elements such that all elements smaller than pivot are before it and all
+     * elements larger than pivot are after it. The central region is already
+     * partitioned.
+     *
+     * <pre>{@code
+     * |l             |s   |p0 p1|   e|                r|
+     * |    ???       | <P | ==P | >P |        ???      |
+     * }</pre>
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>This is similar to {@link #expandPartitionT2(double[], int, int, int, int, int, int, int[])}
+     * with a change to binary partitioning. It is simpler than
+     * {@link #expandPartitionB1(double[], int, int, int, int, int, int, int[])} as the pivot is
+     * not moved.
+     *
+     * @param a Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param start Start of the partition range (inclusive).
+     * @param end End of the partitioned range (inclusive).
+     * @param pivot0 Lower pivot location (inclusive).
+     * @param pivot1 Upper pivot location (inclusive).
+     * @param upper Upper bound (inclusive) of the pivot range [k1].
+     * @return Lower bound (inclusive) of the pivot range [k0].
+     */
+    private static int expandPartitionB2(double[] a, int left, int right, int start, int end,
+        int pivot0, int pivot1, int[] upper) {
+        // 2-way partition of the data using a pivot value into
+        // less-than, or greater-than.
+        //
+        // Move sentinels from start and end to left and right. Scan towards the
+        // sentinels until >=,<= then swap.
+        //           <-i                           j->
+        // |l |        |              | p|         |             | r|
+        // |>=|   ???  |     <        |==|     >   |     ???     |<=|
+        //
+        // When either i or j reach the edge perform finishing loop.
+        // Finish loop for a[j] <= v replaces j with p1+1, moves value to p
+        // and moves the pivot up:
+        //                                            j->
+        // |l |                       | p|            |         | r|
+        // |>=|      <                |==|        >   |   ???   |<=|
+
+        // Pivot
+        int p = pivot0;
+        final double v = a[p];
+        // Use start/end as sentinels
+        double vi = a[start];
+        double vj = a[end];
+        a[start] = a[left];
+        a[end] = a[right];
+        a[left] = vj;
+        a[right] = vi;
+
+        int i = start + 1;
+        int j = end - 1;
+        while (true) {
+            do {
+                --i;
+            } while (a[i] < v);
+            do {
+                ++j;
+            } while (a[j] > v);
+            vj = a[i];
+            vi = a[j];
+            a[i] = vi;
+            a[j] = vj;
+            // Termination check and finishing loops
+            if (i == left) {
+                while (j < right) {
+                    do {
+                        ++j;
+                    } while (a[j] > v);
+                    // Move pivot
+                    a[p] = a[j];
+                    a[j] = a[++p];
+                    a[p] = v;
+                }
+                break;
+            }
+            if (j == right) {
                 while (i > left) {
                     do {
                         --i;
