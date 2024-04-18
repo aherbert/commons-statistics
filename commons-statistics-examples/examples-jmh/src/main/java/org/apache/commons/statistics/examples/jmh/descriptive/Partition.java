@@ -189,7 +189,7 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
     /** Default single-pivot strategy. */
-    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.E1;
+    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T1;
     /** Default single-pivot strategy. */
     static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.BFPRT;
     /** Default single-pivot strategy. */
@@ -539,13 +539,18 @@ final class Partition {
      * re-processing the sample.
      *
      * <p>Schemes may be binary ({@code <, >}), or ternary ({@code <, ==, >}) by
-     * collecting values equal to the pivot value.
+     * collecting values equal to the pivot value. Schemes may process the
+     * unpartitioned range below and above the partitioned middle using a sweep
+     * outwards towards the ends; or start at the ends and sweep inwards towards
+     * the partitioned middle.
      *
      * @see ExpandPartition
      */
     enum ExpandStrategy {
-        /** Method handling equal values. */
-        E1;
+        /** Ternary partition method 1. Sweeps outwards and uses sentinels at the ends
+         * to avoid pointer range checks. Equal values are move directly into the
+         * central pivot range. */
+        T1;
     }
 
     /**
@@ -975,8 +980,6 @@ final class Partition {
         void partition(double[] a, int left, int right, int ka, int kb);
     }
 
-    // TODO - Build QuickselectAdaptive derivatives based on this
-
     /**
      * Single-pivot partition method handling a pre-partitioned range in the centre.
      */
@@ -1160,7 +1163,7 @@ final class Partition {
      */
     Partition setExpandStrategy(ExpandStrategy v) {
         switch (v) {
-        case E1:
+        case T1:
             expandFunction = Partition::expandPartitionE1;
             break;
         default:
