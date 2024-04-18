@@ -33,6 +33,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.ExpandStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.LinearStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKeyStrategy;
@@ -917,6 +918,19 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setLinearSortSelectSize(indices.length == 1 ? 3 : 5)
             .setLinearStrategy(LinearStrategy.BFPRT)
+            ::partitionLinear);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionLinearBFPRTB1(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 5: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setLinearSortSelectSize(indices.length == 1 ? 3 : 5)
+            .setLinearStrategy(LinearStrategy.BFPRT)
+            .setExpandStrategy(ExpandStrategy.B1)
             ::partitionLinear);
     }
 

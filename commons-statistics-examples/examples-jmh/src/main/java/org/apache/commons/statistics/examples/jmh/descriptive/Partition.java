@@ -1175,7 +1175,10 @@ final class Partition {
     Partition setExpandStrategy(ExpandStrategy v) {
         switch (v) {
         case T1:
-            expandFunction = Partition::expandPartitionE1;
+            expandFunction = Partition::expandPartitionT1;
+            break;
+        case B1:
+            expandFunction = Partition::expandPartitionB1;
             break;
         default:
             throw new IllegalArgumentException("Unknown expand strategy: " + v);
@@ -8166,9 +8169,7 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range [k1].
      * @return Lower bound (inclusive) of the pivot range [k0].
      */
-    // TODO: alternative scheme without equal values.
-    // scheme with scan towards the pivot with bounds checks vs start/end.
-    private static int expandPartitionE1(double[] a, int left, int right, int start, int end,
+    private static int expandPartitionT1(double[] a, int left, int right, int start, int end,
         int pivot0, int pivot1, int[] upper) {
         // 3-way partition of the data using a pivot value into
         // less-than, equal or greater-than.
@@ -8181,16 +8182,12 @@ final class Partition {
         // |l |        |            |p0  p1|       |             | r|
         // |>=|   ???  |     <      |  ==  |   >   |     ???     |<=|
         //
-        // When either i or j reach the edge move the sentinel back and perform
-        // finishing loop. For i move the sentinel to p1, p0-1 to the end, and shift the pivot:
+        // When either i or j reach the edge perform finishing loop.
+        // Finish loop for j<r moves values to p0 for < or p1+1 for ==
+        // and moves the pivot up; replaces j with either p1+1:
         //                                            j->
         // |l |                     |p0  p1|           |         | r|
         // |>=|      <              |  ==  |       >   |   ???   |<=|
-        //
-        // Finish loop for j<r:
-        //                                             j->
-        // |l                     |p0  p1|             |         | r|
-        // |        <             |  ==  |         >   |   ???   |<=|
 
         // Positioned for pre-in/decrement to write to pivot region
         int p0 = pivot0;
@@ -8283,6 +8280,145 @@ final class Partition {
     }
 
     /**
+     * Expand a partition around a single pivot. Partitioning exchanges array
+     * elements such that all elements smaller than pivot are before it and all
+     * elements larger than pivot are after it. The central region is already
+     * partitioned.
+     *
+     * <pre>{@code
+     * |l             |s   |p0 p1|   e|                r|
+     * |    ???       | <P | ==P | >P |        ???      |
+     * }</pre>
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>This is similar to {@link #expandPartitionT1(double[], int, int, int, int, int, int, int[])}
+     * with a change to binary partitioning.
+     *
+     * @param a Data array.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param start Start of the partition range (inclusive).
+     * @param end End of the partitioned range (inclusive).
+     * @param pivot0 Lower pivot location (inclusive).
+     * @param pivot1 Upper pivot location (inclusive).
+     * @param upper Upper bound (inclusive) of the pivot range [k1].
+     * @return Lower bound (inclusive) of the pivot range [k0].
+     */
+    private static int expandPartitionB1(double[] a, int left, int right, int start, int end,
+        int pivot0, int pivot1, int[] upper) {
+        // 2-way partition of the data using a pivot value into
+        // less-than, or greater-than.
+        //
+        // Move sentinels from start and end to to left and right. Scan towards the
+        // sentinels until >=,<= then swap.
+        //           <-i                           j->
+        // |l |        |              | p|         |             | r|
+        // |>=|   ???  |     <        |==|     >   |     ???     |<=|
+        //
+        // When either i or j reach the edge perform finishing loop.
+        // Finish loop for j<=r moves values to p and moves the pivot up;
+        // replaces j with p+1:
+        //                                            j->
+        // |l |                       | p|            |         | r|
+        // |>=|      <                |==|        >   |   ???   |<=|
+
+        // Pivot may be moved to use as a sentinel
+        int p = pivot0;
+        final double v = a[p];
+        if (a[left] < v) {
+            // a[left] is not a sentinel
+            final double w = a[left];
+            if (a[right] > v) {
+                // Most likely case: ends can be sentinels
+                a[left] = a[right];
+                a[right] = w;
+            } else {
+                // a[right] is a sentinel; use pivot for left
+                a[left] = v;
+                a[p] = w;
+                p++;
+            }
+        } else if (a[right] > v) {
+            // a[right] is not a sentinel; use pivot
+            a[p] = a[right];
+            p--;
+            a[right] = v;
+        }
+
+        int i = start;
+        int j = end;
+        while (true) {
+            do {
+                --i;
+            } while (a[i] < v);
+            do {
+                ++j;
+            } while (a[j] > v);
+            final double vj = a[i];
+            final double vi = a[j];
+            a[i] = vi;
+            a[j] = vj;
+            // Termination check and finishing loops.
+            // These reset the pivot if it was moved then slide it as required.
+            if (i == left) {
+                if (j == right) {
+                    break;
+                }
+                // Reset the pivot and sentinel
+                if (p < pivot0) {
+                    // Pivot is in right; a[p] <= v
+                    a[right] = a[p];
+                    a[p] = v;
+                } else if (p > pivot0) {
+                    // Pivot was in left (now swapped to j); a[p] >= v
+                    a[j] = a[p];
+                    a[p] = v;
+                }
+                while (j < right) {
+                    do {
+                        ++j;
+                    } while (a[j] > v);
+                    // Move pivot
+                    a[p] = a[j];
+                    a[j] = a[++p];
+                    a[p] = v;
+                }
+                break;
+            }
+            if (j == right) {
+                if (i == left) {
+                    break;
+                }
+                // Reset the pivot and sentinel
+                if (p < pivot0) {
+                    // Pivot was in right (now swapped to i); a[p] <= v
+                    a[i] = a[p];
+                    a[p] = v;
+                } else if (p > pivot0) {
+                    // Pivot is in left; a[p] >= v
+                    a[left] = a[p];
+                    a[p] = v;
+                }
+                while (i > left) {
+                    do {
+                        --i;
+                    } while (a[i] < v);
+                    // Move pivot
+                    a[p] = a[i];
+                    a[i] = a[--p];
+                    a[p] = v;
+                }
+                break;
+            }
+        }
+
+        upper[0] = p;
+        return p;
+    }
+
+    /**
      * Partition an array slice around a pivot. Partitioning exchanges array elements such
      * that all elements smaller than pivot are before it and all elements larger than
      * pivot are after it.
@@ -8311,16 +8447,6 @@ final class Partition {
         // Compute the median of each contiguous set of 5 to the first quintile.
         int rr = l - 1;
         for (int e = l + 4; e <= r; e += 5) {
-//            // Loop terminated on final block of size 1-5.
-//            if (e >= r) {
-//                Sorting.sort(a, e - 4, r);
-//                // ((e-4) + (r+1)) / 2
-//                final int m = (e - 3 + r) >>> 1;
-//                final double v = a[m];
-//                a[m] = a[++rr];
-//                a[rr] = v;
-//                break;
-//            }
             Sorting.median5d(a, e - 4, e - 3, e - 2, e - 1, e);
             // Median to first quintile
             final double v = a[e - 2];
