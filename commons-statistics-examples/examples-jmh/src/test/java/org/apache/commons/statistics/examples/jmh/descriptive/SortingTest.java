@@ -545,112 +545,112 @@ class SortingTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4Internal"})
-    void testMedian4lInternal(double[] values, int[] indices) {
+    void testLowerMedian4Internal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
         final int d = indices[3];
         assertDoubleMedian(values, x -> {
-            Sorting.median4l(x, a, b, c, d);
+            Sorting.lowerMedian4(x, a, b, c, d);
             return b;
         }, true, false, indices);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4Internal"})
-    void testMedian4lbInternal(double[] values, int[] indices) {
+    void testLowerMedian4bInternal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
         final int d = indices[3];
         assertDoubleMedian(values, x -> {
-            Sorting.median4lb(x, a, b, c, d);
+            Sorting.lowerMedian4b(x, a, b, c, d);
             return b;
         }, true, true, indices);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4Internal"})
-    void testMedian4lcInternal(double[] values, int[] indices) {
+    void testLowerMedian4cInternal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
         final int d = indices[3];
         assertDoubleMedian(values, x -> {
-            Sorting.median4lc(x, a, b, c, d);
+            Sorting.lowerMedian4c(x, a, b, c, d);
             return b;
         }, true, true, indices);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4Internal"})
-    void testMedian4ldInternal(double[] values, int[] indices) {
+    void testLowerMedian4dInternal(double[] values, int[] indices) {
         final int a = indices[0];
         final int b = indices[1];
         final int c = indices[2];
         final int d = indices[3];
         assertDoubleMedian(values, x -> {
-            Sorting.median4ld(x, a, b, c, d);
+            Sorting.lowerMedian4d(x, a, b, c, d);
             return b;
         }, true, true, indices);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4"})
-    void testMedian4l(double[] a) {
+    void testLowerMedian4(double[] a) {
         // This method computes in place
         assertDoubleMedian(a, x -> {
-            Sorting.median4l(x, 0, 1, 2, 3);
+            Sorting.lowerMedian4(x, 0, 1, 2, 3);
             return 1;
         }, true, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4"})
-    void testMedian4lb(double[] a) {
+    void testLowerMedian4b(double[] a) {
         // This method computes in place
         assertDoubleMedian(a, x -> {
-            Sorting.median4lb(x, 0, 1, 2, 3);
+            Sorting.lowerMedian4b(x, 0, 1, 2, 3);
             return 1;
         }, true, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4"})
-    void testMedian4lc(double[] a) {
+    void testLowerMedian4c(double[] a) {
         // This method computes in place
         assertDoubleMedian(a, x -> {
-            Sorting.median4lc(x, 0, 1, 2, 3);
+            Sorting.lowerMedian4c(x, 0, 1, 2, 3);
             return 1;
         }, true, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4"})
-    void testMedian4ld(double[] a) {
+    void testLowerMedian4d(double[] a) {
         // This method computes in place
         assertDoubleMedian(a, x -> {
-            Sorting.median4ld(x, 0, 1, 2, 3);
+            Sorting.lowerMedian4d(x, 0, 1, 2, 3);
             return 1;
         }, true, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4"})
-    void testMedian4u(double[] a) {
+    void testUpperMedian4(double[] a) {
         // This method computes in place
         assertDoubleMedian(a, x -> {
-            Sorting.median4u(x, 0, 1, 2, 3);
+            Sorting.upperMedian4(x, 0, 1, 2, 3);
             return 2;
         }, false, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testDoubleSort4"})
-    void testMedian4ud(double[] a) {
+    void testUpperMedian4d(double[] a) {
         // This method computes in place
         assertDoubleMedian(a, x -> {
-            Sorting.median4ud(x, 0, 1, 2, 3);
+            Sorting.upperMedian4d(x, 0, 1, 2, 3);
             return 2;
         }, false, true, 0, 1, 2, 3);
     }

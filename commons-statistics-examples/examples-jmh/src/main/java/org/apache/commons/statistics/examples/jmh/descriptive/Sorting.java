@@ -823,7 +823,7 @@ final class Sorting {
      * @param c Index.
      * @param d Index.
      */
-    static void median4l(double[] x, int a, int b, int c, int d) {
+    static void lowerMedian4(double[] x, int a, int b, int c, int d) {
         // 4 comparisons
         if (x[d] < x[b]) {
             final double u = x[d];
@@ -864,7 +864,7 @@ final class Sorting {
      * @param c Index.
      * @param d Index.
      */
-    static void median4lb(double[] x, int a, int b, int c, int d) {
+    static void lowerMedian4b(double[] x, int a, int b, int c, int d) {
         // 3 or 5 comparisons
         // Set min of [b, c, d]
         if (x[d] < x[b]) {
@@ -907,7 +907,7 @@ final class Sorting {
      * @param c Index.
      * @param d Index.
      */
-    static void median4lc(double[] x, int a, int b, int c, int d) {
+    static void lowerMedian4c(double[] x, int a, int b, int c, int d) {
         // 3, 4, 5 comparisons
         if (x[d] < x[b]) {
             final double u = x[d];
@@ -951,7 +951,7 @@ final class Sorting {
      * @param c Index.
      * @param d Index.
      */
-    static void median4ld(double[] x, int a, int b, int c, int d) {
+    static void lowerMedian4d(double[] x, int a, int b, int c, int d) {
         // 4 comparisons
         if (x[d] < x[a]) {
             final double u = x[d];
@@ -1002,7 +1002,7 @@ final class Sorting {
      * @param c Index.
      * @param d Index.
      */
-    static void median4u(double[] x, int a, int b, int c, int d) {
+    static void upperMedian4(double[] x, int a, int b, int c, int d) {
         // 4 comparisons
         if (x[d] < x[b]) {
             final double u = x[d];
@@ -1043,7 +1043,7 @@ final class Sorting {
      * @param c Index.
      * @param d Index.
      */
-    static void median4ud(double[] x, int a, int b, int c, int d) {
+    static void upperMedian4d(double[] x, int a, int b, int c, int d) {
         // 4 comparisons
         if (x[d] < x[a]) {
             final double u = x[d];
