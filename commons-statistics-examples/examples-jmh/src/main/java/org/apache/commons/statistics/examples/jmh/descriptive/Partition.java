@@ -8473,11 +8473,10 @@ final class Partition {
         // |l |                     |p0  p1|           |         | r|
         // |>=|      <              |  ==  |       >   |   ???   |<=|
 
-        // Positioned for pre-in/decrement to write to pivot region
-        int p0 = pivot0;
-        int p1 = pivot1;
-        final double v = a[p0];
-        // Use start/end as sentinels
+        final double v = a[pivot0];
+        // Use start/end as sentinels.
+        // This requires start != end
+        assert start != end;
         double vi = a[start];
         double vj = a[end];
         a[start] = a[left];
@@ -8487,6 +8486,11 @@ final class Partition {
 
         int i = start + 1;
         int j = end - 1;
+
+        // Positioned for pre-in/decrement to write to pivot region
+        int p0 = pivot0 == start ? i : pivot0;
+        int p1 = pivot1 == end ? j : pivot1;
+
         while (true) {
             do {
                 --i;
@@ -8508,6 +8512,9 @@ final class Partition {
                 a[p1] = v;
             }
             // Termination check and finishing loops.
+            // Note: this works even if pivot region is zero length (p1 == p0-1
+            // due to single length pivot region at either start/end) because we pre-inc/decrement
+            // one side and post-inc/decrement the other side.
             if (i == left) {
                 while (j < right) {
                     do {
@@ -8598,7 +8605,17 @@ final class Partition {
         // Pivot
         int p = pivot0;
         final double v = a[p];
-        // Use start/end as sentinels
+        // Use start/end as sentinels.
+        // This requires start != end
+        assert start != end;
+        // Note: Must not move pivot as this invalidates the finishing loops.
+        // See logic in method B1 to see added complexity of pivot location.
+        // This method is not better than T2 for data with no repeat elements
+        // and is slower for repeat elements when used with the improved
+        // versions.
+        if (p == start || p == end) {
+            return expandPartitionB1(a, left, right, start, end, pivot0, pivot1, upper);
+        }
         double vi = a[start];
         double vj = a[end];
         a[start] = a[left];
