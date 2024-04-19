@@ -94,14 +94,14 @@ class SortingTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleSort"})
+    @MethodSource(value = {"testDoubleSort", "testDoubleSort3"})
     void testDoubleSort3(double[] values) {
         final double[] data = Arrays.copyOf(values, 3);
         assertDoubleSort(data, x -> Sorting.sort3(x, 0, 1, 2));
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testDoubleSort"})
+    @MethodSource(value = {"testDoubleSort", "testDoubleSort4"})
     void testDoubleSort4(double[] values) {
         final double[] data = Arrays.copyOf(values, 4);
         assertDoubleSort(data, x -> Sorting.sort4(x, 0, 1, 2, 3));
@@ -405,6 +405,22 @@ class SortingTest {
             }
         }
         return builder.build();
+    }
+
+    static Stream<double[]> testDoubleSort3() {
+        // Permutations is 3! = 6
+        final double x = 3.35;
+        final double y = 12.3;
+        final double z = -9.99;
+        final double[][] a = {
+            {x, y, z},
+            {x, z, y},
+            {z, x, y},
+            {y, x, z},
+            {y, z, x},
+            {z, y, x},
+        };
+        return Arrays.stream(a);
     }
 
     static Stream<double[]> testDoubleSort4() {

@@ -369,20 +369,57 @@ final class Sorting {
         // Order pair:
         //[(0,2)]
         // Move point 1 above point 2 or below point 0
-        if (data[i2] < data[i0]) {
-            final double v = data[i2];
-            data[i2] = data[i0];
-            data[i0] = v;
+//        if (data[i2] < data[i0]) {
+//            final double v = data[i2];
+//            data[i2] = data[i0];
+//            data[i0] = v;
+//        }
+//        if (data[i2] < data[i1]) {
+//            final double v = data[i2];
+//            data[i2] = data[i1];
+//            data[i1] = v;
+//        } else if (data[i1] < data[i0]) {
+//            final double v = data[i1];
+//            data[i1] = data[i0];
+//            data[i0] = v;
+//        }
+
+        // Decision tree avoiding swaps:
+        // Order [(0,2)]
+        // Move point 1 above point 2 or below point 0
+        final double x = data[i0];
+        final double y = data[i1];
+        final double z = data[i2];
+        if (z < x) {
+            if (y < z) {
+                data[i0] = y;
+                data[i1] = z;
+                data[i2] = x;
+                return;
+            }
+            if (x < y) {
+                data[i0] = z;
+                data[i1] = x;
+                data[i2] = y;
+                return;
+            }
+            // z < y < z
+            data[i0] = z;
+            data[i2] = x;
+            return;
         }
-        if (data[i2] < data[i1]) {
-            final double v = data[i2];
-            data[i2] = data[i1];
-            data[i1] = v;
-        } else if (data[i1] < data[i0]) {
-            final double v = data[i1];
-            data[i1] = data[i0];
-            data[i0] = v;
+        if (y < x) {
+            // y < x < z
+            data[i0] = y;
+            data[i1] = x;
+            return;
         }
+        if (z < y) {
+            // x < z < y
+            data[i1] = z;
+            data[i2] = y;
+        }
+        // x < y < z
     }
 
     /**
