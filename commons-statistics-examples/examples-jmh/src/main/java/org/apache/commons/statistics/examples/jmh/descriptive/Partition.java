@@ -189,7 +189,7 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
     /** Default single-pivot strategy. */
-    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T1;
+    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T2;
     /** Default single-pivot strategy. */
     static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.RS_IM;
     /** Default single-pivot strategy. */
