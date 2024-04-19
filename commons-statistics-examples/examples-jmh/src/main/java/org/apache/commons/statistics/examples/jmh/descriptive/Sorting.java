@@ -825,7 +825,6 @@ final class Sorting {
      */
     static void median4l(double[] x, int a, int b, int c, int d) {
         // 4 comparisons
-        // Works but is not stable on repeat calls
         if (x[d] < x[b]) {
             final double u = x[d];
             x[d] = x[b];
@@ -836,14 +835,18 @@ final class Sorting {
             x[c] = x[a];
             x[a] = v;
         }
+        // a--c
+        // b--d
         if (x[b] < x[a]) {
-            final double v = x[c];
-            final double u = x[d];
-            x[c] = x[a];
-            x[d] = x[b];
-            x[a] = v;
-            x[b] = u;
+            final double v = x[a];
+            final double u = x[c];
+            x[a] = x[b];
+            x[c] = x[d];
+            x[b] = v;
+            x[d] = u;
         }
+        // a--c
+        //    b--d
         if (x[c] < x[b]) {
             final double u = x[c];
             x[c] = x[b];
@@ -863,7 +866,6 @@ final class Sorting {
      */
     static void median4lb(double[] x, int a, int b, int c, int d) {
         // 3 or 5 comparisons
-        // Stable on repeat calls
         // Set min of [b, c, d]
         if (x[d] < x[b]) {
             final double u = x[d];
@@ -880,7 +882,7 @@ final class Sorting {
             final double w = x[b];
             x[b] = x[a];
             x[a] = w;
-            // a < b,{c,d}
+            // a < {b,c,d}
             // Set min of [b, c, d]
             if (x[d] < x[b]) {
                 final double u = x[d];
@@ -907,7 +909,6 @@ final class Sorting {
      */
     static void median4lc(double[] x, int a, int b, int c, int d) {
         // 3, 4, 5 comparisons
-        // Stable on repeat calls
         if (x[d] < x[b]) {
             final double u = x[d];
             x[d] = x[b];
@@ -918,14 +919,20 @@ final class Sorting {
             x[c] = x[a];
             x[a] = v;
         }
+        // a--c
+        // b--d
         if (x[c] < x[b]) {
             final double u = x[c];
             x[c] = x[b];
             x[b] = u;
         } else if (x[b] < x[a]) {
+            //   a--c
+            // b----d
             final double v = x[b];
             x[b] = x[a];
             x[a] = v;
+            //   b--c
+            // a----d
             if (x[d] < x[b]) {
                 final double u = x[d];
                 x[d] = x[b];
@@ -946,7 +953,6 @@ final class Sorting {
      */
     static void median4ld(double[] x, int a, int b, int c, int d) {
         // 4 comparisons
-        // Stable on repeat calls
         if (x[d] < x[a]) {
             final double u = x[d];
             x[d] = x[a];
@@ -957,17 +963,17 @@ final class Sorting {
             x[c] = x[b];
             x[b] = v;
         }
-        // a--------d
-        //    b--c
+        // a--d
+        // b--c
         if (x[b] < x[a]) {
-            final double u = x[a];
+            final double xb = x[a];
             x[a] = x[b];
-            x[b] = u;
+            x[b] = xb;
             //    b--d
             // a--c
-            if (x[c] < u) {
+            if (x[c] < xb) {
                 x[b] = x[c];
-                x[c] = u;
+                x[c] = xb;
                 // fully sorted here
             }
             // else full sort requires c:d ordering
@@ -980,6 +986,98 @@ final class Sorting {
             x[d] = x[c];
             x[c] = x[b];
             x[b] = v;
+            // minimum swaps to put the lower median at b
+            //x[d] = x[b];
+            //x[b] = v;
+        }
+    }
+
+    /**
+     * Place the lower median of 4 elements in {@code b}; the smaller element in
+     * {@code a}; and the larger two elements in {@code c, d}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     */
+    static void median4u(double[] x, int a, int b, int c, int d) {
+        // 4 comparisons
+        if (x[d] < x[b]) {
+            final double u = x[d];
+            x[d] = x[b];
+            x[b] = u;
+        }
+        if (x[c] < x[a]) {
+            final double v = x[c];
+            x[c] = x[a];
+            x[a] = v;
+        }
+        // a--c
+        // b--d
+        if (x[d] < x[c]) {
+            final double v = x[a];
+            final double u = x[c];
+            x[a] = x[b];
+            x[c] = x[d];
+            x[b] = v;
+            x[d] = u;
+        }
+        // a--c
+        //    b--d
+        if (x[c] < x[b]) {
+            final double u = x[c];
+            x[c] = x[b];
+            x[b] = u;
+        }
+    }
+
+    /**
+     * Place the upper median of 4 elements in {@code c}; the smaller two elements in
+     * {@code a,b}; and the larger two element in {@code d}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     * @param d Index.
+     */
+    static void median4ud(double[] x, int a, int b, int c, int d) {
+        // 4 comparisons
+        if (x[d] < x[a]) {
+            final double u = x[d];
+            x[d] = x[a];
+            x[a] = u;
+        }
+        if (x[c] < x[b]) {
+            final double v = x[c];
+            x[c] = x[b];
+            x[b] = v;
+        }
+        // a--d
+        // b--c
+        if (x[d] < x[c]) {
+            final double xc = x[d];
+            x[d] = x[c];
+            x[c] = xc;
+            // a--c
+            //    b--d
+            if (xc < x[b]) {
+                x[c] = x[b];
+                x[b] = xc;
+                // fully sorted here
+            }
+            // else full sort requires a:b ordering
+            // Not fully sorted for 6 of 24 permutations
+        } else if (x[c] < x[a]) {
+            //       a--d
+            // b--c
+            final double v = x[a];
+            // Do a full sort for 1 additional swap
+            x[a] = x[b];
+            x[b] = x[c];
+            x[c] = v;
             // minimum swaps to put the lower median at b
             //x[d] = x[b];
             //x[b] = v;

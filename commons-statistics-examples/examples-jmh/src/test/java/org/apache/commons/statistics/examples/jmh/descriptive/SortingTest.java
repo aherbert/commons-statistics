@@ -602,7 +602,7 @@ class SortingTest {
         assertDoubleMedian(a, x -> {
             Sorting.median4l(x, 0, 1, 2, 3);
             return 1;
-        }, true, false, 0, 1, 2, 3);
+        }, true, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
@@ -633,6 +633,26 @@ class SortingTest {
             Sorting.median4ld(x, 0, 1, 2, 3);
             return 1;
         }, true, true, 0, 1, 2, 3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4"})
+    void testMedian4u(double[] a) {
+        // This method computes in place
+        assertDoubleMedian(a, x -> {
+            Sorting.median4u(x, 0, 1, 2, 3);
+            return 2;
+        }, false, true, 0, 1, 2, 3);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort4"})
+    void testMedian4ud(double[] a) {
+        // This method computes in place
+        assertDoubleMedian(a, x -> {
+            Sorting.median4ud(x, 0, 1, 2, 3);
+            return 2;
+        }, false, true, 0, 1, 2, 3);
     }
 
     @ParameterizedTest
@@ -681,6 +701,7 @@ class SortingTest {
      *
      * @param values Data.
      * @param function Sort function.
+     * @param lower For even lengths use the lower median; else the upper median.
      * @param stable If true then no swaps should be made on the second pass.
      * @param indices Indices.
      */
