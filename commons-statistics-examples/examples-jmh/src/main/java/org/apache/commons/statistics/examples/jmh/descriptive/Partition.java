@@ -592,7 +592,12 @@ final class Partition {
         /** Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
          * with medians of 3. This is the improved version that creates the median sample
          * in the centre and expands the partition around the pivot sample. */
-        RS_IM;
+        RS_IM,
+        /** Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+         * with medians of 3. This is the adaptive version that creates the median sample
+         * in the centre and expands the partition around the pivot sample; the adaption
+         * is to use k to define the pivot in the sample instead of using the median. */
+        RSA;
     }
 
     /**
@@ -1216,6 +1221,9 @@ final class Partition {
             break;
         case RS_IM:
             linearSpFunction = this::linearRepeatedStepImproved;
+            break;
+        case RSA:
+            linearSpFunction = this::linearRepeatedStepAdaptive;
             break;
         default:
             throw new IllegalArgumentException("Unknown linear strategy: " + v);
@@ -8842,6 +8850,51 @@ final class Partition {
             Sorting.sort3(a, i - f, i, i + f);
         }
         final int m = (s + e + 1) >>> 1;
+        // mutual recursion
+        quickSelect(this::linearRepeatedStepImproved, a, s, e, m, m, upper);
+        return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with medians of 3 with the samples computed in the middle tertile and 9th-tile.
+     * The pivot chosen from the sample is adaptive using the input {@code k}.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int linearRepeatedStepAdaptive(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 8.
+        // Moves the responsibility for selection when r-l <= 8 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        // Adaption: target kf/|A| (round down to avoid m > e)
+        final int m = s + (int) ((k - l) * (f / (r - l + 1.0)));
         // mutual recursion
         quickSelect(this::linearRepeatedStepImproved, a, s, e, m, m, upper);
         return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
