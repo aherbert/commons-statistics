@@ -940,7 +940,7 @@ class PartitionTest {
     void testPartitionLinearBFPRTT2(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Require the range >= 10: uses a special sortselect size
+        // Require the range >= 2*5: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 10)
             .setLinearStrategy(LinearStrategy.BFPRT)
@@ -953,9 +953,9 @@ class PartitionTest {
     void testPartitionLinearBFPRTB2(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Require the range >= 10: uses a special sortselect size
+        // Require the range >= 2*5: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setLinearSortSelectSize(indices.length == 1 ? 6 : 10)
+            .setLinearSortSelectSize(indices.length == 1 ? 5 : 10)
             .setLinearStrategy(LinearStrategy.BFPRT)
             .setExpandStrategy(ExpandStrategy.B2)
             ::partitionLinear);
@@ -966,10 +966,11 @@ class PartitionTest {
     void testPartitionLinearRS(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Uses a special sortselect size so ensure this is set
+        // Require the range >= 9: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setLinearSortSelectSize(indices.length == 1 ? 5 : 9)
             .setLinearStrategy(LinearStrategy.RS)
+            .setExpandStrategy(ExpandStrategy.T1)
             ::partitionLinear);
     }
 
@@ -978,9 +979,9 @@ class PartitionTest {
     void testPartitionLinearBFPRTImprovedT2(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Require the range >= 10: uses a special sortselect size
+        // Require the range >= 2*5: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setLinearSortSelectSize(indices.length == 1 ? 6 : 10)
+            .setLinearSortSelectSize(indices.length == 1 ? 5 : 10)
             .setLinearStrategy(LinearStrategy.BFPRT_IM)
             .setExpandStrategy(ExpandStrategy.T2)
             ::partitionLinear);
@@ -991,9 +992,9 @@ class PartitionTest {
     void testPartitionLinearRSImproved(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Require the range >= 18: uses a special sortselect size
+        // Require the range >= 2*9: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setLinearSortSelectSize(indices.length == 1 ? 10 : 18)
+            .setLinearSortSelectSize(indices.length == 1 ? 9 : 18)
             .setLinearStrategy(LinearStrategy.RS_IM)
             .setExpandStrategy(ExpandStrategy.B2)
             ::partitionLinear);
@@ -1004,11 +1005,24 @@ class PartitionTest {
     void testPartitionLinearRSAdaptive(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Require the range >= 18: uses a special sortselect size
+        // Require the range >= 9: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setLinearSortSelectSize(indices.length == 1 ? 10 : 18)
+            .setLinearSortSelectSize(indices.length == 1 ? 5 : 9)
             .setLinearStrategy(LinearStrategy.RSA)
+            .setExpandStrategy(ExpandStrategy.T1)
             ::partitionLinear);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionQA(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
+            .setExpandStrategy(ExpandStrategy.T1)
+            ::partitionQA);
     }
 
     @ParameterizedTest

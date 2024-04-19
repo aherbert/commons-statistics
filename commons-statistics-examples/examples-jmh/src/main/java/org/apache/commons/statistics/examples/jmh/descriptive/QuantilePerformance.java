@@ -118,6 +118,8 @@ public class QuantilePerformance {
     /** Linearselect implementation with single pivot partitioning using optimised
      * median-of-medians. */
     private static final String LINEAR = "Linear";
+    /** Quickselect adaptive implementation. */
+    private static final String QA = "QA";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
      * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
@@ -2434,6 +2436,12 @@ public class QuantilePerformance {
                 final Partition part = PartitionFactory.createPartition(name, LINEAR, qs, ec);
                 function = (data, indices) -> {
                     part.partitionLinear(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(QA)) {
+                final Partition part = PartitionFactory.createPartition(name, QA, qs, ec);
+                function = (data, indices) -> {
+                    part.partitionQA(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             // Heapselect implementation (stopper for quickselect)

@@ -283,6 +283,15 @@ final class Partition {
     /** log2(e). Used for conversions: log2(x) = ln(x) * log2(e) */
     private static final double LOG2_E = 1.4426950408889634;
 
+    /** Threshold to use repeated step left: 7 / 16. */
+    private static final double STEP_LEFT = 0.4375;
+    /** Threshold to use repeated step right: 9 / 16. */
+    private static final double STEP_RIGHT = 0.5625;
+    /** Threshold to use repeated step far-left: 1 / 12. */
+    private static final double STEP_FAR_LEFT = 0.08333333333333333;
+    /** Threshold to use repeated step far-right: 11 / 12. */
+    private static final double STEP_FAR_RIGHT = 0.9166666666666666;
+
     // Use final for settings/objects used within partitioning functions
 
     /** A {@link PivotingStrategy} used for pivoting. */
@@ -5955,7 +5964,7 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
-     * <p>Returns the bounds containing {@code [ka, kb]}. These will be lower/higher
+     * <p>Returns the bounds containing {@code [ka, kb]}. These may be lower/higher
      * than the keys if equal values are present in the data. This is to be used by
      * {@link #pivotMedianOfMedians(SPEPartition, double[], int, int, int[])} to identify
      * the equal value range of the pivot.
@@ -6126,7 +6135,7 @@ final class Partition {
      * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
      * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
      *
-     * <p>Uses the a median of medians algorithm to provide Order(n) performance.
+     * <p>Uses the median of medians algorithm to provide Order(n) performance.
      * This method has configurable deterministic pivot selection including those using
      * partition expansion in-place of full partitioning. The methods are based on the
      * QuickselectAdaptive method of Alexandrescu.
@@ -6215,7 +6224,7 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
-     * <p>Returns the bounds containing {@code [ka, kb]}. These will be lower/higher
+     * <p>Returns the bounds containing {@code [ka, kb]}. These may be lower/higher
      * than the keys if equal values are present in the data.
      *
      * @param part Partition function.
@@ -6280,6 +6289,183 @@ final class Partition {
                     bounds[1] = kb;
                 }
                 return;
+            }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data in {@code [0, length)}.
+     * It assumes no NaNs or signed zeros in the data. Data must be pre- and post-processed.
+     *
+     * <p>Uses the QuickselectAdaptive method of Alexandrescu. This is based on the
+     * median of medians algorithm. The median sample is strategy is chosen based on
+     * the target index.
+     *
+     * @param data Values.
+     * @param k Indices (may be destructively modified).
+     * @param n Count of indices.
+     */
+    void partitionQA(double[] data, int[] k, int n) {
+        quickSelectAdaptive(data, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array. For all indices {@code k}
+     * and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>The method assumes all {@code k} are valid indices into the data.
+     * It handles NaN and signed zeros in the data.
+     *
+     * <p>WARNING: Currently this only supports a single or range of {@code k}.
+     * For parity with other select methods this accepts an array {@code k} and pre/post
+     * processes the data for NaN and signed zeros.
+     *
+     * @param a Values.
+     * @param k Indices (may be destructively modified).
+     * @param count Count of indices.
+     */
+    private void quickSelectAdaptive(double[] a, int[] k, int count) {
+        // Handle NaN / signed zeros
+        final DoubleDataTransformer t = SORT_TRANSFORMER.get();
+        // Assume this is in-place
+        t.preProcess(a);
+        final int end = t.length();
+        int n = count;
+        if (end > 1) {
+            // Filter indices invalidated by NaN check
+            if (end < a.length) {
+                for (int i = n; --i >= 0;) {
+                    final int v = k[i];
+                    if (v >= end) {
+                        // swap(k, i, --n)
+                        k[i] = k[--n];
+                        k[n] = v;
+                    }
+                }
+            }
+            if (n != 0) {
+                final int ka = Math.min(k[0], k[n - 1]);
+                final int kb = Math.max(k[0], k[n - 1]);
+                quickSelectAdaptive(a, 0, end - 1, ka, kb, new int[1]);
+            }
+        }
+        // Restore signed zeros
+        t.postProcess(a, k, n);
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code [ka, kb]} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < ka] <= data[ka] <= data[kb] <= data[kb < i]
+     * }</pre>
+     *
+     * <p>This function accepts indices {@code [ka, kb]} that define the
+     * range of indices to partition. It is expected that the range is small.
+     *
+     * <p>Uses the QuickselectAdaptive method of Alexandrescu. This is based on the
+     * median of medians algorithm. The median sample is strategy is chosen based on
+     * the target index.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * <p>Returns the bounds containing {@code [ka, kb]}. These may be lower/higher
+     * than the keys if equal values are present in the data.
+     *
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka First key of interest.
+     * @param kb Last key of interest.
+     * @param bounds Upper bound of the range containing {@code [ka, kb]} (inclusive).
+     * @return Lower bound of the range containing {@code [ka, kb]} (inclusive).
+     */
+    private int quickSelectAdaptive(double[] a, int left, int right, int ka, int kb,
+            int[] bounds) {
+        int l = left;
+        int r = right;
+        while (true) {
+            // Select when ka and kb are close to the same end
+            // |l|-----|ka|kkkkkkkk|kb|------|r|
+            // Optimal value for this is much higher than standard quickselect due
+            // to the high cost of median-of-medians pivot computation and reuse via
+            // mutual recursion so we have a different value.
+            // Note: Use of this will not break the Order(n) performance for worst
+            // case data, i.e. data where all values require full insertion.
+            // This will be Order(n * k) == Order(n); k becomes a multiplier as long as
+            // k << n; otherwise worst case is Order(n^2 / 2) when k=n/2.
+            if (Math.min(kb - l, r - ka) < linearSortSelectSize) {
+                sortSelectRange(a, l, r, ka, kb);
+                // We could scan left/right to extend the bounds here after the sort.
+                // TODO - update sortSelectRange to sortSelectRange2 and return the
+                // known equal value below/above the target left/right k.
+                bounds[0] = kb;
+                return ka;
+            }
+
+            // Only target ka; kb is assumed to be close
+            int p0;
+            final double f = (ka - l) / (r - l + 1.0);
+            if (f <= STEP_LEFT) {
+                if (f <= STEP_FAR_LEFT) {
+                    p0 = repeatedStepFarLeft(a, l, r, ka, bounds);
+                } else {
+                    p0 = repeatedStepLeft(a, l, r, ka, bounds);
+                }
+            } else if (f >= STEP_RIGHT) {
+                if (f >= STEP_FAR_RIGHT) {
+                    p0 = repeatedStepFarRight(a, l, r, ka, bounds);
+                } else {
+                    p0 = repeatedStepRight(a, l, r, ka, bounds);
+                }
+            } else {
+                p0 = repeatedStep(a, l, r, ka, bounds);
+            }
+
+            // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
+            //                   p0 p1
+            // |l|--|ka|kkkk|kb|--|P|-------------------|r|
+            // |l|----------------|P|--|ka|kkk|kb|------|r|
+            // |l|-----------|ka|k|P|k|kb|--------------|r|
+            final int p1 = bounds[0];
+            if (kb < p0) {
+                // Entirely on left side
+                r = p0 - 1;
+            } else if (ka > p1) {
+                // Entirely on right side
+                l = p1 + 1;
+            } else {
+                // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
+                // Here we set the bounds for use after median-of-medians pivot selection.
+                // In the event there are many equal values this allows collecting those
+                // known to be equal together when moving around the medians sample.
+                if (kb > p1) {
+                    sortSelectLeft(a, p1, r, kb);
+                    bounds[0] = kb;
+                }
+                if (ka < p0) {
+                    sortSelectRight(a, l, p0, ka);
+                    p0 = ka;
+                }
+                return p0;
             }
         }
     }
@@ -8620,7 +8806,7 @@ final class Partition {
         // See logic in method B1 to see added complexity of pivot location.
         // This method is not better than T2 for data with no repeat elements
         // and is slower for repeat elements when used with the improved
-        // versions.
+        // versions (e.g. linearBFPRTImproved).
         if (p == start || p == end) {
             return expandPartitionB1(a, left, right, start, end, pivot0, pivot1, upper);
         }
@@ -8893,11 +9079,253 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - f, i, i + f);
         }
-        // Adaption: target kf/|A| (round down to avoid m > e)
-        final int m = s + (int) ((k - l) * (f / (r - l + 1.0)));
+        // Adaption to target kf/|A|
+        final int p = s + mapK(k, l, r, f);
         // mutual recursion
-        quickSelect(this::linearRepeatedStepImproved, a, s, e, m, m, upper);
+        quickSelect(this::linearRepeatedStepImproved, a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
+    }
+
+    /**
+     * Map the index {@code [l <= k <= r]} to a new index in {@code [0, n)}.
+     *
+     * @param k Index.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param n New upper bound (exclusive).
+     * @return the mapped index in [0, n)
+     */
+    private static int mapK(int k, int l, int r, int n) {
+        // If k==r this returns n-1
+        return (int) ((double) (k - l) * n / (r - l + 1.0));
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with the median of 3 then median of 3; the final sample is placed in the
+     * 5-th 9th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int repeatedStep(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 8.
+        // Moves the responsibility for selection when r-l <= 8 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        // Adaption to target kf/|A|
+        int p = s + mapK(k, l, r, f);
+        // mutual recursion
+        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Assumes the range {@code r - l >= 11}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with the lower median of 4 then median of 3; the final sample is placed in the
+     * 4-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    // TODO - do this
+    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 9.
+        // Moves the responsibility for selection when r-l <= 11 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        // Adaption to target kf/|A|
+        int p = s + mapK(k, l, r, f);
+        // mutual recursion
+        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Assumes the range {@code r - l >= 11}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with the lower median of 4 then minimum of 3; the final sample is placed in the
+     * 4-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    // TODO - do this
+    private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 9.
+        // Moves the responsibility for selection when r-l <= 11 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        // Adaption to target kf/|A|
+        int p = s + mapK(k, l, r, f);
+        // mutual recursion
+        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Assumes the range {@code r - l >= 11}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with the upper median of 4 then median of 3; the final sample is placed in the
+     * 9-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    // TODO - do this
+    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 9.
+        // Moves the responsibility for selection when r-l <= 11 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        // Adaption to target kf/|A|
+        int p = s + mapK(k, l, r, f);
+        // mutual recursion
+        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
+    }
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Assumes the range {@code r - l >= 11}; the caller is responsible for selection on a smaller
+     * range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+     * with the upper median of 4 then maximum of 3; the final sample is placed in the
+     * 9-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    // TODO - do this
+    private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper) {
+        // Adapted from Alexandrescu (2016), algorithm 9.
+        // Moves the responsibility for selection when r-l <= 11 to the caller.
+        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+        final int f = (r - l + 1) / 9;
+        final int f3 = 3 * f;
+        // i in tertile [3f:6f)
+        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            Sorting.sort3(a, i - f3, i, i + f3);
+        }
+        // i in 9th-tile: [4f:5f)
+        final int s = l + (f << 2);
+        final int e = s + f - 1;
+        for (int i = s; i <= e; i++) {
+            Sorting.sort3(a, i - f, i, i + f);
+        }
+        // Adaption to target kf/|A|
+        int p = s + mapK(k, l, r, f);
+        // mutual recursion
+        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
     /**
