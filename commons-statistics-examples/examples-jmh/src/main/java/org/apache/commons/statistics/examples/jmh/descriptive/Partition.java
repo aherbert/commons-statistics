@@ -197,7 +197,7 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SLS;
 
-    /** Control flag for the pivoting strategy. */
+    /** Control flag for Floyd-Rivest pivoting strategy when below the sampling size. */
     static final int FLAG_PIVOTING_STRATGEY = 0x1;
     /** Control flag for random sampling. */
     static final int FLAG_RANDOM_SAMPLING = 0x2;
@@ -212,6 +212,10 @@ final class Partition {
     static final int FLAG_SPLITTABLE_RANDOM = 0x20;
     /** Control flag for MSWS RNG. */
     static final int FLAG_MSWS = 0x40;
+    /** Control flag for quickselect adaptive to not use sampling mode. */
+    static final int FLAG_QA_NO_SAMPLING = 0x1;
+    /** Control flag for quickselect adaptive to propagate the no sampling mode recursively. */
+    static final int FLAG_QA_PROPAGATE = 0x2;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -397,6 +401,10 @@ final class Partition {
     private SelectFunction edgeSelection;
     /** Selection function used when quickselect progress is poor. */
     private SelectFunction stopperSelection;
+    /** Mask applied to the quickselect adaptive flags before mutual recursion.
+     * If the sign-bit is not masked out then no sampling mode is enabled through
+     * the call stack. */
+    private int qaFlagMask;
 
     /**
      * Define the strategy for processing multiple keys.
@@ -1356,6 +1364,11 @@ final class Partition {
      */
     Partition setControlFlags(int v) {
         this.controlFlags = v;
+        // Set the QA mask
+        qaFlagMask = 0;
+        if ((v & FLAG_QA_NO_SAMPLING | FLAG_QA_PROPAGATE) != 0) {
+            qaFlagMask = Integer.MIN_VALUE;
+        }
         return this;
     }
 
@@ -6359,7 +6372,8 @@ final class Partition {
             if (n != 0) {
                 final int ka = Math.min(k[0], k[n - 1]);
                 final int kb = Math.max(k[0], k[n - 1]);
-                quickSelectAdaptive(a, 0, end - 1, ka, kb, new int[1]);
+                quickSelectAdaptive(a, 0, end - 1, ka, kb, new int[1],
+                    (controlFlags & FLAG_QA_NO_SAMPLING) != 0 ? -1 : 0);
             }
         }
         // Restore signed zeros
@@ -6387,6 +6401,11 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
+     * <p>The control {@code flags} sign bit is set when the full repeated step algorithm
+     * should be used. Otherwise the sampling mode is enabled which skips the first median
+     * step in all repeated step algorithms. This reduces the deterministic margins
+     * around the pivot but increases speed.
+     *
      * <p>Returns the bounds containing {@code [ka, kb]}. These may be lower/higher
      * than the keys if equal values are present in the data.
      *
@@ -6396,12 +6415,14 @@ final class Partition {
      * @param ka First key of interest.
      * @param kb Last key of interest.
      * @param bounds Upper bound of the range containing {@code [ka, kb]} (inclusive).
+     * @param flags Control flags.
      * @return Lower bound of the range containing {@code [ka, kb]} (inclusive).
      */
     private int quickSelectAdaptive(double[] a, int left, int right, int ka, int kb,
-            int[] bounds) {
+            int[] bounds, int flags) {
         int l = left;
         int r = right;
+        int cf = flags;
         while (true) {
             // Select when ka and kb are close to the same end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
@@ -6423,21 +6444,38 @@ final class Partition {
 
             // Only target ka; kb is assumed to be close
             int p0;
-            final double f = (ka - l) / (r - l + 1.0);
+            int n = r - l + 1;
+            final double f = (double) (ka - l) / n;
+            // Note: Margins for fraction left/right of pivot L : R.
+            // Subtract the larger margin to create the estimated size
+            // after partitioning. If the new size subtracted from
+            // the estimated size is negative (partition did not meet
+            // the margin guarantees) then sampling is disabled by setting the
+            // control flags sign bit.
             if (f <= STEP_LEFT) {
                 if (f <= STEP_FAR_LEFT) {
-                    p0 = repeatedStepFarLeft(a, l, r, ka, bounds);
+                    // 1/12 : 3/8
+                    n -= (n >> 2) + (n >> 3);
+                    p0 = repeatedStepFarLeft(a, l, r, ka, bounds, cf);
                 } else {
-                    p0 = repeatedStepLeft(a, l, r, ka, bounds);
+                    // 1/6 : 1/4
+                    n -= n >> 2;
+                    p0 = repeatedStepLeft(a, l, r, ka, bounds, cf);
                 }
             } else if (f >= STEP_RIGHT) {
                 if (f >= STEP_FAR_RIGHT) {
-                    p0 = repeatedStepFarRight(a, l, r, ka, bounds);
+                    // 1/4 : 1/6
+                    n -= n >> 2;
+                    p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
                 } else {
-                    p0 = repeatedStepRight(a, l, r, ka, bounds);
+                    // 3/8 : 1/12
+                    n -= (n >> 2) + (n >> 3);
+                    p0 = repeatedStepRight(a, l, r, ka, bounds, cf);
                 }
             } else {
-                p0 = repeatedStep(a, l, r, ka, bounds);
+                // 2/9 : 2/9 (use 1/4 - 1/32 ~ 0.219)
+                n -= (n >> 2) - (n >> 5);
+                p0 = repeatedStep(a, l, r, ka, bounds, cf);
             }
 
             // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
@@ -6467,6 +6505,8 @@ final class Partition {
                 }
                 return p0;
             }
+            // Update sampling mode: set sign bit if did not reach expected size n
+            cf |= n - r + l;
         }
     }
 
@@ -9120,16 +9160,19 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
+     * @param flags Control flags.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStep(double[] a, int l, int r, int k, int[] upper) {
+    private int repeatedStep(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Adapted from Alexandrescu (2016), algorithm 8.
         // Moves the responsibility for selection when r-l <= 8 to the caller.
         final int f = (r - l + 1) / 9;
-        final int f3 = 3 * f;
-        // i in tertile [3f:6f)
-        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
-            Sorting.sort3(a, i - f3, i, i + f3);
+        if (flags < 0) {
+            // i in tertile [3f:6f)
+            final int f3 = 3 * f;
+            for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+                Sorting.sort3(a, i - f3, i, i + f3);
+            }
         }
         // i in 9th-tile: [4f:5f)
         final int s = l + (f << 2);
@@ -9139,7 +9182,7 @@ final class Partition {
         }
         // Adaption to target kf/|A|
         int p = s + mapK(k, l, r, f);
-        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9163,16 +9206,19 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
+     * @param flags Control flags.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper) {
+    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Adapted from Alexandrescu (2016), algorithm 9.
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
-        final int f2 = f + f;
-        // i in quartile [f:2f)
-        for (int i = l + f, e = l + f2; i < e; i++) {
-            Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
+        if (flags < 0) {
+            // i in quartile [f:2f)
+            final int f2 = f + f;
+            for (int i = l + f, e = l + f2; i < e; i++) {
+                Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
+            }
         }
         final int fp = f / 3;
         // Modification from Alexandrescu: i in 5th 12-th tile rather than 4th 12-th tile.
@@ -9185,7 +9231,7 @@ final class Partition {
         }
         // Adaption to target kf'/|A|
         int p = s + mapK(k, l, r, fp);
-        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9209,16 +9255,19 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
+     * @param flags Control flags.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper) {
+    private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Adapted from Alexandrescu (2016), algorithm 10.
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
-        final int f2 = f + f;
-        // i in quartile [f:2f)
-        for (int i = l + f, e = l + f2; i < e; i++) {
-            Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
+        if (flags < 0) {
+            // i in quartile [f:2f)
+            final int f2 = f + f;
+            for (int i = l + f, e = l + f2; i < e; i++) {
+                Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
+            }
         }
         final int fp = f / 3;
         final int fp2 = fp << 1;
@@ -9240,7 +9289,7 @@ final class Partition {
         }
         // Adaption to target kf'/|A|
         int p = s + mapK(k, l, r, fp);
-        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9264,26 +9313,29 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
+     * @param flags Control flags.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper) {
+    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Mirror image repeatedStepLeft using upper median into 3rd quartile
         final int f = (r - l + 1) >> 2;
-        final int f2 = f + f;
-        // i in quartile [f:2f)
-        for (int i = l + f, e = l + f2; i < e; i++) {
-            Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
+        if (flags < 0) {
+            // i in quartile [f:2f)
+            final int f2 = f + f;
+            for (int i = l + f, e = l + f2; i < e; i++) {
+                Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
+            }
         }
         final int fp = f / 3;
         // i in 8th 12-th tile
-        final int s = l + f2 + fp;
+        final int s = l + f + f + fp;
         final int e = s + fp - 1;
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
         // Adaption to target kf'/|A|
         int p = s + mapK(k, l, r, fp);
-        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
     /**
@@ -9306,20 +9358,23 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
+     * @param flags Control flags.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper) {
+    private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Mirror image repeatedStepFarLeft using upper median into 3rd quartile
         final int f = (r - l + 1) >> 2;
-        final int f2 = f + f;
-        // i in quartile [f:2f)
-        for (int i = l + f, e = l + f2; i < e; i++) {
-            Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
+        if (flags < 0) {
+            // i in quartile [f:2f)
+            final int f2 = f + f;
+            for (int i = l + f, e = l + f2; i < e; i++) {
+                Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
+            }
         }
         final int fp = f / 3;
         final int fp2 = fp << 1;
         // i in 9th 12th-tile
-        final int s = l + f2 + fp2;
+        final int s = l + f + f + fp2;
         final int e = s + fp - 1;
         for (int i = s; i <= e; i++) {
             // max into i
@@ -9336,7 +9391,7 @@ final class Partition {
         }
         // Adaption to target kf'/|A|
         int p = s + mapK(k, l, r, fp);
-        p = quickSelectAdaptive(a, s, e, p, p, upper);
+        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
