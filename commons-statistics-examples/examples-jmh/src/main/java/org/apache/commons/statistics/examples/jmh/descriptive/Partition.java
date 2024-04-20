@@ -9125,7 +9125,6 @@ final class Partition {
     private int repeatedStep(double[] a, int l, int r, int k, int[] upper) {
         // Adapted from Alexandrescu (2016), algorithm 8.
         // Moves the responsibility for selection when r-l <= 8 to the caller.
-        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
         final int f = (r - l + 1) / 9;
         final int f3 = 3 * f;
         // i in tertile [3f:6f)
@@ -9140,7 +9139,6 @@ final class Partition {
         }
         // Adaption to target kf/|A|
         int p = s + mapK(k, l, r, f);
-        // mutual recursion
         p = quickSelectAdaptive(a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9167,26 +9165,26 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    // TODO - do this
     private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper) {
         // Adapted from Alexandrescu (2016), algorithm 9.
         // Moves the responsibility for selection when r-l <= 11 to the caller.
-        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
-        final int f = (r - l + 1) / 9;
-        final int f3 = 3 * f;
-        // i in tertile [3f:6f)
-        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
-            Sorting.sort3(a, i - f3, i, i + f3);
+        final int f = (r - l + 1) >> 2;
+        final int f2 = f + f;
+        // i in quartile [f:2f)
+        for (int i = l + f, e = l + f2; i < e; i++) {
+            Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
         }
-        // i in 9th-tile: [4f:5f)
-        final int s = l + (f << 2);
-        final int e = s + f - 1;
+        final int fp = f / 3;
+        // Modification from Alexandrescu: i in 5th 12-th tile rather than 4th 12-th tile.
+        // Otherwise this is identical to repeatedStepFarLeft. This matches the text
+        // stating |A|/6 are on the left (1/4 * 1/3 * 2).
+        final int s = l + f + fp;
+        final int e = s + fp - 1;
         for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - f, i, i + f);
+            Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // Adaption to target kf/|A|
-        int p = s + mapK(k, l, r, f);
-        // mutual recursion
+        // Adaption to target kf'/|A|
+        int p = s + mapK(k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9213,26 +9211,35 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    // TODO - do this
     private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper) {
-        // Adapted from Alexandrescu (2016), algorithm 9.
+        // Adapted from Alexandrescu (2016), algorithm 10.
         // Moves the responsibility for selection when r-l <= 11 to the caller.
-        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
-        final int f = (r - l + 1) / 9;
-        final int f3 = 3 * f;
-        // i in tertile [3f:6f)
-        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
-            Sorting.sort3(a, i - f3, i, i + f3);
+        final int f = (r - l + 1) >> 2;
+        final int f2 = f + f;
+        // i in quartile [f:2f)
+        for (int i = l + f, e = l + f2; i < e; i++) {
+            Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
         }
-        // i in 9th-tile: [4f:5f)
-        final int s = l + (f << 2);
-        final int e = s + f - 1;
+        final int fp = f / 3;
+        final int fp2 = fp << 1;
+        // i in 4th 12th-tile
+        final int s = l + f;
+        final int e = s + fp - 1;
         for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - f, i, i + f);
+            // min into i
+            if (a[i] > a[i + fp]) {
+                final double u = a[i];
+                a[i] = a[i + fp];
+                a[i + fp] = u;
+            }
+            if (a[i] > a[i + fp2]) {
+                final double v = a[i];
+                a[i] = a[i + fp2];
+                a[i + fp2] = v;
+            }
         }
-        // Adaption to target kf/|A|
-        int p = s + mapK(k, l, r, f);
-        // mutual recursion
+        // Adaption to target kf'/|A|
+        int p = s + mapK(k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9259,26 +9266,23 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    // TODO - do this
     private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper) {
-        // Adapted from Alexandrescu (2016), algorithm 9.
-        // Moves the responsibility for selection when r-l <= 11 to the caller.
-        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
-        final int f = (r - l + 1) / 9;
-        final int f3 = 3 * f;
-        // i in tertile [3f:6f)
-        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
-            Sorting.sort3(a, i - f3, i, i + f3);
+        // Mirror image repeatedStepLeft using upper median into 3rd quartile
+        final int f = (r - l + 1) >> 2;
+        final int f2 = f + f;
+        // i in quartile [f:2f)
+        for (int i = l + f, e = l + f2; i < e; i++) {
+            Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
         }
-        // i in 9th-tile: [4f:5f)
-        final int s = l + (f << 2);
-        final int e = s + f - 1;
+        final int fp = f / 3;
+        // i in 8th 12-th tile
+        final int s = l + f2 + fp;
+        final int e = s + fp - 1;
         for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - f, i, i + f);
+            Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // Adaption to target kf/|A|
-        int p = s + mapK(k, l, r, f);
-        // mutual recursion
+        // Adaption to target kf'/|A|
+        int p = s + mapK(k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9304,26 +9308,34 @@ final class Partition {
      * @param upper Upper bound (inclusive) of the pivot range.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    // TODO - do this
     private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper) {
-        // Adapted from Alexandrescu (2016), algorithm 9.
-        // Moves the responsibility for selection when r-l <= 11 to the caller.
-        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
-        final int f = (r - l + 1) / 9;
-        final int f3 = 3 * f;
-        // i in tertile [3f:6f)
-        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
-            Sorting.sort3(a, i - f3, i, i + f3);
+        // Mirror image repeatedStepFarLeft using upper median into 3rd quartile
+        final int f = (r - l + 1) >> 2;
+        final int f2 = f + f;
+        // i in quartile [f:2f)
+        for (int i = l + f, e = l + f2; i < e; i++) {
+            Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
         }
-        // i in 9th-tile: [4f:5f)
-        final int s = l + (f << 2);
-        final int e = s + f - 1;
+        final int fp = f / 3;
+        final int fp2 = fp << 1;
+        // i in 9th 12th-tile
+        final int s = l + f2 + fp2;
+        final int e = s + fp - 1;
         for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - f, i, i + f);
+            // max into i
+            if (a[i] < a[i - fp]) {
+                final double u = a[i];
+                a[i] = a[i - fp];
+                a[i - fp] = u;
+            }
+            if (a[i] < a[i - fp2]) {
+                final double v = a[i];
+                a[i] = a[i - fp2];
+                a[i - fp2] = v;
+            }
         }
-        // Adaption to target kf/|A|
-        int p = s + mapK(k, l, r, f);
-        // mutual recursion
+        // Adaption to target kf'/|A|
+        int p = s + mapK(k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }

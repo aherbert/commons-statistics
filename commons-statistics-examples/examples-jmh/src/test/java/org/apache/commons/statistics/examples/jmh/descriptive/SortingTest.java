@@ -733,6 +733,68 @@ class SortingTest {
         }
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort3"})
+    void testMin3(double[] a) {
+        assertDoubleMinMax(a, x -> Sorting.min3(x, 0, 1, 2), true, 0, 1, 2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort3"})
+    void testMax3(double[] a) {
+        assertDoubleMinMax(a, x -> Sorting.max3(x, 0, 1, 2), false, 0, 1, 2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort3Internal"})
+    void testMin3Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        assertDoubleMinMax(values, x -> Sorting.min3(x, a, b, c), true, indices);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testDoubleSort3Internal"})
+    void testMax3Internal(double[] values, int[] indices) {
+        final int a = indices[0];
+        final int b = indices[1];
+        final int c = indices[2];
+        assertDoubleMinMax(values, x -> Sorting.max3(x, a, b, c), false, indices);
+    }
+
+    /**
+     * Assert that the median {@code function} computes the same result as
+     * {@link Arrays#sort(double[])} run on the provided {@code indices}. Ignores signed
+     * zeros.
+     *
+     * @param values Data.
+     * @param function Min/Max function.
+     * @param min Compute min; else max.
+     * @param indices Indices.
+     */
+    private static void assertDoubleMinMax(double[] values, Consumer<double[]> function,
+        boolean min, int... indices) {
+        Assertions.assertFalse(containsDuplicates(indices), () -> "Duplicate indices: " + Arrays.toString(indices));
+        // Pick out the data to sort
+        final double[] expected = extractIndices(values, indices);
+        Arrays.sort(expected);
+        final double[] data = values.clone();
+        function.accept(data);
+        final int m = min ? indices[0] : indices[indices.length - 1];
+        // Only the magnitude matters so use a delta of 0 to allow -0.0 == 0.0
+        Assertions.assertEquals(expected[min ? 0 : indices.length - 1], data[m], 0.0);
+        // Check outside the sorted indices
+        OUTSIDE: for (int i = 0; i < values.length; i++) {
+            for (final int ignore : indices) {
+                if (i == ignore) {
+                    continue OUTSIDE;
+                }
+            }
+            Assertions.assertEquals(values[i], data[i]);
+        }
+    }
+
     /**
      * Assert that the median {@code function} computes the same result as
      * {@link Arrays#sort(double[])} run on the provided {@code indices}. Ignores signed

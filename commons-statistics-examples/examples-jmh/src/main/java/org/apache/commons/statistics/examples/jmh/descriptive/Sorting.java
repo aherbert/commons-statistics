@@ -341,6 +341,50 @@ final class Sorting {
     }
 
     /**
+     * Place the minimum of 3 elements in {@code a}; and the larger
+     * two elements in {@code b, c}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     */
+    static void min3(double[] x, int a, int b, int c) {
+        if (x[b] < x[a]) {
+            final double v = x[b];
+            x[b] = x[a];
+            x[a] = v;
+        }
+        if (x[c] < x[a]) {
+            final double v = x[c];
+            x[c] = x[a];
+            x[a] = v;
+        }
+    }
+
+    /**
+     * Place the maximum of 3 elements in {@code c}; and the smaller
+     * two elements in {@code a, b}.
+     *
+     * @param x Values
+     * @param a Index.
+     * @param b Index.
+     * @param c Index.
+     */
+    static void max3(double[] x, int a, int b, int c) {
+        if (x[c] < x[b]) {
+            final double u = x[c];
+            x[c] = x[b];
+            x[b] = u;
+        }
+        if (x[c] < x[a]) {
+            final double v = x[c];
+            x[c] = x[a];
+            x[a] = v;
+        }
+    }
+
+    /**
      * Sorts the given indices in an array.
      *
      * <p>Note: Requires that the range contains no NaN values. It does not respect the
@@ -993,8 +1037,8 @@ final class Sorting {
     }
 
     /**
-     * Place the lower median of 4 elements in {@code b}; the smaller element in
-     * {@code a}; and the larger two elements in {@code c, d}.
+     * Place the upper median of 4 elements in {@code c}; the smaller two elements in
+     * {@code a,b}; and the larger element in {@code d}.
      *
      * @param x Values
      * @param a Index.
@@ -1035,7 +1079,7 @@ final class Sorting {
 
     /**
      * Place the upper median of 4 elements in {@code c}; the smaller two elements in
-     * {@code a,b}; and the larger two element in {@code d}.
+     * {@code a,b}; and the larger element in {@code d}.
      *
      * @param x Values
      * @param a Index.
