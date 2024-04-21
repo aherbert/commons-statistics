@@ -8454,8 +8454,8 @@ final class Partition {
         // Finish loop for a[j] <= v replaces j with p1+1, moves value to p0
         // for < or p1+1 for == and updates the pivot range:
         //                                             j->
-        // |l |                     |p0  p1|           |         | r|
-        // |>=|      <              |  ==  |       >   |   ???   |<=|
+        // |l                       |p0  p1|           |         | r|
+        // |         <              |  ==  |       >   |   ???   |<=|
 
         // Positioned for pre-in/decrement to write to pivot region
         int p0 = pivot0;
@@ -8589,8 +8589,8 @@ final class Partition {
         // Finish loop for a[j] <= v replaces j with p1+1, moves value to p
         // and moves the pivot up:
         //                                            j->
-        // |l |                       | p|            |         | r|
-        // |>=|      <                |==|        >   |   ???   |<=|
+        // |l                         | p|            |         | r|
+        // |         <                |==|        >   |   ???   |<=|
 
         // Pivot may be moved to use as a sentinel
         int p = pivot0;
@@ -8732,8 +8732,8 @@ final class Partition {
         // Finish loop for a[j] <= v replaces j with p1+1, moves value to p0
         // for < or p1+1 for == and updates the pivot range:
         //                                             j->
-        // |l |                     |p0  p1|           |         | r|
-        // |>=|      <              |  ==  |       >   |   ???   |<=|
+        // |l                       |p0  p1|           |         | r|
+        // |         <              |  ==  |       >   |   ???   |<=|
 
         final double v = a[pivot0];
         // Use start/end as sentinels.
@@ -8786,11 +8786,12 @@ final class Partition {
                     // Move upper bound of pivot region
                     a[j] = a[++p1];
                     a[p1] = v;
-                    if (w < v) {
-                        // Move lower bound of pivot region
-                        a[p0] = w;
-                        p0++;
-                    }
+                    a[p0] = w;
+                    // Move lower bound of pivot region
+                    p0 += w != v ? 1 : 0;
+                    //if (w != v) {
+                    //    p0++;
+                    //}
                 }
                 break;
             }
@@ -8803,11 +8804,12 @@ final class Partition {
                     // Move lower bound of pivot region
                     a[i] = a[--p0];
                     a[p0] = v;
-                    if (w > v) {
-                        // Move upper bound of pivot region
-                        a[p1] = w;
-                        p1--;
-                    }
+                    a[p1] = w;
+                    // Move upper bound of pivot region
+                    p1 -= w != v ? 1 : 0;
+                    //if (w != v) {
+                    //    p1--;
+                    //}
                 }
                 break;
             }
@@ -8861,8 +8863,8 @@ final class Partition {
         // Finish loop for a[j] <= v replaces j with p1+1, moves value to p
         // and moves the pivot up:
         //                                            j->
-        // |l |                       | p|            |         | r|
-        // |>=|      <                |==|        >   |   ???   |<=|
+        // |l                         | p|            |         | r|
+        // |         <                |==|        >   |   ???   |<=|
 
         // Pivot
         int p = pivot0;
