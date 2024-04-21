@@ -190,15 +190,15 @@ final class Partition {
     static final int COMPRESSION_LEVEL = 1;
     /** Default control flags. */
     static final int CONTROL_FLAGS = 0;
-    /** Default single-pivot strategy. */
+    /** Default single-pivot partition strategy. */
     static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
-    /** Default single-pivot strategy. */
+    /** Default expand partition strategy. */
     static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T2;
-    /** Default single-pivot strategy. */
-    static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.RS_IM;
-    /** Default single-pivot strategy. */
+    /** Default single-pivot linear select strategy. */
+    static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.RSA;
+    /** Default edge select strategy. */
     static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
-    /** Default single-pivot strategy. */
+    /** Default single-pivot stopper strategy. */
     static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SQA;
 
     /** Control flag for Floyd-Rivest pivoting strategy when below the sampling size. */
@@ -299,6 +299,9 @@ final class Partition {
     private static final double STEP_FAR_LEFT = 0.08333333333333333;
     /** Threshold to use repeated step far-right: 11 / 12. */
     private static final double STEP_FAR_RIGHT = 0.9166666666666666;
+
+    /** Default instance. */
+    private static final Partition DEFAULT = new Partition();
 
     // Use final for settings/objects used within partitioning functions
 
@@ -1303,7 +1306,7 @@ final class Partition {
             // Linear select does not match the interface as it:
             // - uses a bounds array to allow minimising the partition region size after pivot selection
             // - uses control flags to set sampling mode on/off
-            stopperSelection = (a, l, r, ka, kb) -> quickSelectAdaptive(a, l, r, ka, kb, new int[1], 
+            stopperSelection = (a, l, r, ka, kb) -> quickSelectAdaptive(a, l, r, ka, kb, new int[1],
                 (controlFlags & FLAG_QA_NO_SAMPLING) != 0 ? -1 : 0);
             break;
         default:
@@ -6031,6 +6034,8 @@ final class Partition {
                 // This strategy is not faster unless there are a large number of duplicates
                 // (e.g. less than 10 unique values).
                 // On random data with no duplicates this is slower.
+                // Note: The methods based on quickselect adaptive create the sample in
+                // a region corresponding to expected k and expand the partition (much faster).
                 //
                 // |l  |lp p0| rr|                              r|
                 // | < |  == | > |        ???                    |
@@ -6698,8 +6703,8 @@ final class Partition {
             if (--maxDepth < 0) {
             //limit -= (r - l) >> 1;
             //if (limit < 0) {
-                // quickselect convergence is poor, switch to heap select
-                heapSelectRange2(a, l, r, ka, kb);
+                // quickselect convergence is poor, switch to stopper function
+                DEFAULT.stopperSelection.partition(a, l, r, ka, kb);
                 return;
             }
 
