@@ -169,8 +169,12 @@ final class Partition {
     static final int MIN_SORTSELECT_SIZE = 4;
     /** Default selection constant for edgeselect. */
     static final int EDGESELECT_CONSTANT = 20;
-    /** Default sort selection constant for linearselect. */
-    static final int LINEAR_SORTSELECT_SIZE = 80;
+    /** Default sort selection constant for linearselect. Note that linear select variants
+     * recursively call quickselect so very small lengths are included with an initial
+     * small length. Using lengths of 1023-5 and 2043-53 indicate optimum performance around
+     * 80 for median-of-medians when palcing the sample on the left. Adaptive linear methods
+     * are faster and so this value is reduced. Quickselect adaptive has a value around 20-30. */
+    static final int LINEAR_SORTSELECT_SIZE = 26;
     /** Default sub-sampling size to identify a single pivot. Off by default.
      * The SELECT algorithm of Floyd-Rivest uses 600. */
     static final int SUBSAMPLING_SIZE = Integer.MAX_VALUE;
