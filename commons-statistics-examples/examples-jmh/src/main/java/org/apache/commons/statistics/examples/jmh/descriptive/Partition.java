@@ -571,6 +571,10 @@ final class Partition {
      * @see ExpandPartition
      */
     enum ExpandStrategy {
+        /** Use the current {@link SPStrategy} parition method. This will not expand
+         * the partition but will Partition the Entire Range (PER). This can be used
+         * to test if the implementation of expand are efficient. */
+        PER,
         /** Ternary partition method 1. Sweeps outwards and uses sentinels at the ends
          * to avoid pointer range checks. Equal values are move directly into the
          * central pivot range. */
@@ -1206,6 +1210,11 @@ final class Partition {
      */
     Partition setExpandStrategy(ExpandStrategy v) {
         switch (v) {
+        case PER:
+            // Partition the entire range
+            expandFunction = (a, left, right, start, end, pivot0, pivot1, upper) ->
+                spFunction.partition(a, left, right, (pivot0 + pivot1) >>> 1, upper);
+            break;
         case T1:
             expandFunction = Partition::expandPartitionT1;
             break;
