@@ -199,7 +199,7 @@ final class Partition {
     /** Default single-pivot strategy. */
     static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
     /** Default single-pivot strategy. */
-    static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SLS;
+    static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SQA;
 
     /** Control flag for Floyd-Rivest pivoting strategy when below the sampling size. */
     static final int FLAG_PIVOTING_STRATGEY = 0x1;
@@ -657,8 +657,11 @@ final class Partition {
          * final unwinding of the heap to sort the range {@code [ka, kb]};
          * the heap construction is identical. */
         SSH2,
-        /** Use a linear selection algorithm with Order(n) worst-case performance. */
-        SLS;
+        /** Use a linear selection algorithm with Order(n) worst-case performance.
+         * This is a median-of-medians using medians of size 5 */
+        SLS,
+        /** Use the quickselect adaptive algorithm with Order(n) worst-case performance. */
+        SQA;
     }
 
     /**
@@ -1295,6 +1298,13 @@ final class Partition {
             // - uses a bounds array to allow minimising the partition region size after pivot selection
             stopperSelection = (a, l, r, ka, kb) -> linearSelect(getSPFunction(),
                 a, l, r, ka, kb, new int[2]);
+            break;
+        case SQA:
+            // Linear select does not match the interface as it:
+            // - uses a bounds array to allow minimising the partition region size after pivot selection
+            // - uses control flags to set sampling mode on/off
+            stopperSelection = (a, l, r, ka, kb) -> quickSelectAdaptive(a, l, r, ka, kb, new int[1], 
+                (controlFlags & FLAG_QA_NO_SAMPLING) != 0 ? -1 : 0);
             break;
         default:
             throw new IllegalArgumentException("Unknown stopper: " + v);
