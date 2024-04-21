@@ -120,7 +120,7 @@ final class PartitionFactory {
      * @param name Name.
      * @param prefix Method prefix.
      * @param qs Minimum quickselect size (if non-zero).
-     * @param ec Minimum edgeselect constant (if non-zero).
+     * @param ec Minimum edgeselect constant (if non-zero); also used for linear sort select size.
      * @return the {@link Partition} instance
      */
     static Partition createPartition(String name, String prefix, int qs, int ec) {
@@ -129,7 +129,7 @@ final class PartitionFactory {
         final DualPivotingStrategy dp = getEnumOrElse(s, DualPivotingStrategy.class, Partition.DUAL_PIVOTING_STRATEGY);
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
         final int edgeSelectConstant = ec != 0 ? ec : getEdgeSelectConstant(s);
-        final int linearSortSelectConstant = getLinearSortSelectConstant(s);
+        final int linearSortSelectConstant = ec != 0 ? ec : getLinearSortSelectConstant(s);
         final int subSamplingSize = getSubSamplingSize(s);
         final KeyStrategy keyStartegy = getEnumOrElse(s, KeyStrategy.class, Partition.KEY_STRATEGY);
         final PairedKeyStrategy pairedKeyStartegy =
