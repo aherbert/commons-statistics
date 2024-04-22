@@ -670,7 +670,7 @@ class PartitionTest {
     void testPartitionISBMIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
-            .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
@@ -681,7 +681,7 @@ class PartitionTest {
     void testPartitionISBMKeyUpdating(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.KEY_UPDATING_INTERVAL)
-            .setPairedKeyStrategy(PairedKeyStrategy.UPDATING_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -702,6 +702,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(1)
+            .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }

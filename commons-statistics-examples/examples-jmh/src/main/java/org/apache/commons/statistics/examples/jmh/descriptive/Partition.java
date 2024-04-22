@@ -457,8 +457,11 @@ final class Partition {
         /** Use a dedicated single key method that returns information about (k+1).
          * Use a multiple of the sum of the length of all partitions to trigger the stopper select. */
         PAIRED_KEYS_LEN,
-        /** Use a method that accepts two keys. */
+        /** Use a method that accepts two separate keys. */
         TWO_KEYS,
+        /** Use a method that accepts two keys to define a range.
+         * Use division of the length by 2 every k iterations to trigger the stopper select. */
+        KEY_RANGE,
         /** Use an {@link SearchableInterval} covering the keys. This will reuse a multi-key
          * strategy with keys that are a very small range. */
         SEARCHABLE_INTERVAL,
@@ -2975,8 +2978,11 @@ final class Partition {
             } else if (pairedKeyStrategy == PairedKeyStrategy.PAIRED_KEYS_LEN) {
                 introselect(part, a, 0, right, k[0]);
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
-                // Dedicated method for two keys using the same key
+                // Dedicated method for two separate keys using the same key
                 introselect(part, a, 0, right, k[0], k[0], maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.KEY_RANGE) {
+                // Dedicated method for a range of keys using the same key
+                introselect2(part, a, 0, right, k[0], k[0]);
             } else if (pairedKeyStrategy == PairedKeyStrategy.SEARCHABLE_INTERVAL) {
                 // Reuse the IndexInterval method using the same key
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[0], maxDepth);
@@ -3009,12 +3015,17 @@ final class Partition {
                     selectMinIgnoreZeros(a, k[1], p);
                 }
             } else if (pairedKeyStrategy == PairedKeyStrategy.TWO_KEYS) {
-                // Dedicated method for two keys
+                // Dedicated method for two separate keys
                 // Note: This can handle keys that are not adjacent
                 // e.g. keys near opposite ends without a partition step.
                 final int ka = Math.min(k[0], k[1]);
                 final int kb = Math.max(k[0], k[1]);
                 introselect(part, a, 0, right, ka, kb, maxDepth);
+            } else if (pairedKeyStrategy == PairedKeyStrategy.KEY_RANGE) {
+                // Dedicated method for a range of keys using the same key
+                final int ka = Math.min(k[0], k[1]);
+                final int kb = Math.max(k[0], k[1]);
+                introselect2(part, a, 0, right, ka, kb);
             } else if (pairedKeyStrategy == PairedKeyStrategy.SEARCHABLE_INTERVAL) {
                 // Reuse the IndexInterval method using a range of two keys
                 introselect(part, a, 0, right, IndexIntervals.anyIndex(), k[0], k[1], maxDepth);
@@ -3576,6 +3587,163 @@ final class Partition {
             // Continue on the right side
             l = p1 + 1;
             ka1 = ka1 < l ? kb1 : ka1;
+        }
+    }
+
+    /**
+     * Partition the array such that index {@code k} corresponds to its
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code [ka, kb]} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < ka] <= data[ka] <= data[kb] <= data[kb < i]
+     * }</pre>
+     *
+     * <p>This function accepts indices {@code [ka, kb]} that define the
+     * range of indices to partition. It is expected that the range is small.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * <p>Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> every
+     * {@code c} iterations where {@code x} is the
+     * {@link #setRecursionConstant(int) recursion constant} and {@code c} is the
+     * {@link #setRecursionMultiple(double) recursion multiple} (variables reused for convenience).
+     * Confidence bounds for dividing a length by 2<sup>-x</sup> are provided in Valois (2000)
+     * as {@code floor((6/5)x) + b}:
+     * <pre>
+     * b  confidence (%)
+     * 2  76.56
+     * 3  92.92
+     * 4  97.83
+     * 5  99.33
+     * 6  99.79
+     * </pre>
+     * <p>Ideally {@code c >= 3} using {@code x = 1}. E.g. We can use 3 iterations to be 76%
+     * confident the sequence will divide in half; or 7 iterations to be 99% confident the
+     * sequence will divide into a quarter. A larger factor {@code b} reduces the sensitivity
+     * of introspection.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param ka First key of interest.
+     * @param kb Last key of interest.
+     */
+    private void introselect2(SPEPartition part, double[] a, int left, int right, int ka, int kb) {
+        int l = left;
+        int r = right;
+        final int[] upper = {0};
+        int counter = (int) recursionMultiple;
+        int threshold = (right - left) >>> recursionConstant;
+        int depth = singlePivotMaxDepth(right - left);
+        while (true) {
+            // length - 1
+            int n = r - l;
+
+            // It is possible to use edgeselect when k is close to the end
+            // |l|-----|ka|kkkkkkkk|kb|------|r|
+            if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
+                edgeSelection.partition(a, l, r, ka, kb);
+                return;
+            }
+
+            depth--;
+            if (--counter < 0) {
+                if (n > threshold) {
+                    // Did not reduce the length after set number of iterations.
+                    // Here riselect (Valois (2000)) would use random points to choose the pivot
+                    // to inject entropy and restart. This continues until the sum of the partition
+                    // lengths is too high (twice the original length). Here we just switch.
+
+                    // Note: For testing we trigger the recursion consumer
+                    recursionConsumer.accept(depth);
+                    stopperSelection.partition(a, l, r, ka, kb);
+                    return;
+                }
+                // Once the confidence has been achieved we use (6/5)x with x=1.
+                // So check every 5/6 iterations that the length is halving.
+                if (counter == -5) {
+                    counter = 1;
+                }
+                threshold >>>= 1;
+            }
+
+            // Pick a pivot and partition
+            int pivot;
+            if (n > subSamplingSize) {
+                // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+                // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+                // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+                ++n;
+                final int ith = ka - l + 1;
+                final double z = Math.log(n);
+                final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+                final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+                final int ll = Math.max(l, (int) (ka - ith * s / n + sd));
+                final int rr = Math.min(r, (int) (ka + (n - ith) * s / n + sd));
+                // Optional random sampling
+                if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+                    final IntUnaryOperator rng = createRNG(n, ka);
+                    // Shuffle [ll, k) from [l, k)
+                    if (ll > l) {
+                        for (int i = ka; i > ll;) {
+                            // l + rand [0, i - l + 1) : i is currently i+1
+                            final int j = l + rng.applyAsInt(i - l);
+                            final double t = a[--i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                    // Shuffle (k, rr] from (k, r]
+                    if (rr < r) {
+                        for (int i = ka; i < rr;) {
+                            // r - rand [0, r - i + 1) : i is currently i-1
+                            final int j = r - rng.applyAsInt(r - i);
+                            final double t = a[++i];
+                            a[i] = a[j];
+                            a[j] = t;
+                        }
+                    }
+                }
+                // Sample recursion restarts from [ll, rr]
+                introselect2(part, a, ll, rr, ka, ka);
+                pivot = ka;
+            } else {
+                // default pivot strategy
+                pivot = pivotingStrategy.pivotIndex(a, l, r);
+            }
+
+            final int p0 = part.partition(a, l, r, pivot, upper);
+            final int p1 = upper[0];
+
+            // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
+            //                   p0 p1
+            // |l|--|ka|kkkk|kb|--|P|-------------------|r|
+            // |l|----------------|P|--|ka|kkk|kb|------|r|
+            // |l|-----------|ka|k|P|k|kb|--------------|r|
+            if (kb < p0) {
+                // The element is in the left partition
+                r = p0 - 1;
+            } else if (ka > p1) {
+                // The element is in the right partition
+                l = p1 + 1;
+            } else {
+                // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
+                if (ka < p0) {
+                    sortSelectRight(a, l, p0 - 1, ka);
+                }
+                if (kb > p1) {
+                    sortSelectLeft(a, p1 + 1, r, kb);
+                }
+                return;
+            }
         }
     }
 
@@ -6090,11 +6258,11 @@ final class Partition {
                 bounds[0] = p0;
                 bounds[1] = p1;
                 if (ka < p0) {
-                    sortSelectRight(a, l, p0, ka);
+                    sortSelectRight(a, l, p0 - 1, ka);
                     bounds[0] = ka;
                 }
                 if (kb > p1) {
-                    sortSelectLeft(a, p1, r, kb);
+                    sortSelectLeft(a, p1 + 1, r, kb);
                     bounds[1] = kb;
                 }
                 return;
@@ -6322,11 +6490,11 @@ final class Partition {
                 bounds[0] = p0;
                 bounds[1] = p1;
                 if (ka < p0) {
-                    sortSelectRight(a, l, p0, ka);
+                    sortSelectRight(a, l, p0 - 1, ka);
                     bounds[0] = ka;
                 }
                 if (kb > p1) {
-                    sortSelectLeft(a, p1, r, kb);
+                    sortSelectLeft(a, p1 + 1, r, kb);
                     bounds[1] = kb;
                 }
                 return;
@@ -6545,11 +6713,11 @@ final class Partition {
                 // In the event there are many equal values this allows collecting those
                 // known to be equal together when moving around the medians sample.
                 if (kb > p1) {
-                    sortSelectLeft(a, p1, r, kb);
+                    sortSelectLeft(a, p1 + 1, r, kb);
                     bounds[0] = kb;
                 }
                 if (ka < p0) {
-                    sortSelectRight(a, l, p0, ka);
+                    sortSelectRight(a, l, p0 - 1, ka);
                     p0 = ka;
                 }
                 return p0;
@@ -6806,10 +6974,10 @@ final class Partition {
             } else {
                 // Pivot splits [ka, kb]. Expect ends to be close to the pivot and finish.
                 if (ka < p0) {
-                    sortSelectRight(a, l, p0, ka);
+                    sortSelectRight(a, l, p0 - 1, ka);
                 }
                 if (kb > p1) {
-                    sortSelectLeft(a, p1, r, kb);
+                    sortSelectLeft(a, p1 + 1, r, kb);
                 }
                 return;
             }
