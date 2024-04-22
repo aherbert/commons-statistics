@@ -6463,10 +6463,31 @@ final class Partition {
             // k << n; otherwise worst case is Order(n^2 / 2) when k=n/2.
             if (Math.min(kb - l, r - ka) < linearSortSelectSize) {
                 sortSelectRange(a, l, r, ka, kb);
-                // We could scan left/right to extend the bounds here after the sort.
-                // TODO - update sortSelectRange to sortSelectRange2 and return the
-                // known equal value below/above the target left/right k.
                 bounds[0] = kb;
+//                // Extending the equal value range here is slower
+//                if (kb - l < r - ka) {
+//                    // Check left
+//                    int lo = ka;
+//                    if (lo > l && a[ka] == a[--lo]) {
+//                        while (--lo >= r) {
+//                            if (a[ka] != a[lo]) {
+//                                break;
+//                            }
+//                        }
+//                        return lo + 1;
+//                    }
+//                } else {
+//                    // Check right
+//                    int hi = kb;
+//                    if (hi < r && a[kb] == a[++hi]) {
+//                        while (++hi <= r) {
+//                            if (a[kb] != a[hi]) {
+//                                break;
+//                            }
+//                        }
+//                        bounds[0] = hi - 1;
+//                    }
+//                }
                 return ka;
             }
 
