@@ -9168,6 +9168,7 @@ final class Partition {
     private static int mapK(int k, int l, int r, int n) {
         // If k==r this returns n-1
         return (int) ((double) (k - l) * n / (r - l + 1.0));
+        //return (int) Math.round((double) (k - l) * (n - 1.0) / (r - l));
     }
 
     /**
@@ -9244,7 +9245,7 @@ final class Partition {
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
         if (flags < 0) {
-            // i in quartile [f:2f)
+            // i in 2nd quartile
             final int f2 = f + f;
             for (int i = l + f, e = l + f2; i < e; i++) {
                 Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
@@ -9293,7 +9294,7 @@ final class Partition {
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
         if (flags < 0) {
-            // i in quartile [f:2f)
+            // i in 2nd quartile
             final int f2 = f + f;
             for (int i = l + f, e = l + f2; i < e; i++) {
                 Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
@@ -9350,16 +9351,16 @@ final class Partition {
         // Mirror image repeatedStepLeft using upper median into 3rd quartile
         final int f = (r - l + 1) >> 2;
         if (flags < 0) {
-            // i in quartile [f:2f)
+            // i in 3rd quartile
             final int f2 = f + f;
-            for (int i = l + f, e = l + f2; i < e; i++) {
-                Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
+            for (int i = r - f, e = r - f2; i > e; i--) {
+                Sorting.upperMedian4(a, i - f2, i - f, i, i + f);
             }
         }
         final int fp = f / 3;
         // i in 8th 12-th tile
-        final int s = l + f + f + fp;
-        final int e = s + fp - 1;
+        final int e = r - f - fp;
+        final int s = e - fp + 1;
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
@@ -9395,17 +9396,17 @@ final class Partition {
         // Mirror image repeatedStepFarLeft using upper median into 3rd quartile
         final int f = (r - l + 1) >> 2;
         if (flags < 0) {
-            // i in quartile [f:2f)
+            // i in 3rd quartile
             final int f2 = f + f;
-            for (int i = l + f, e = l + f2; i < e; i++) {
-                Sorting.upperMedian4(a, i - f, i, i + f, i + f2);
+            for (int i = r - f, e = r - f2; i > e; i--) {
+                Sorting.upperMedian4(a, i - f2, i - f, i, i + f);
             }
         }
         final int fp = f / 3;
         final int fp2 = fp << 1;
         // i in 9th 12th-tile
-        final int s = l + f + f + fp2;
-        final int e = s + fp - 1;
+        final int e = r - f;
+        final int s = e - fp + 1;
         for (int i = s; i <= e; i++) {
             // max into i
             if (a[i] < a[i - fp]) {
