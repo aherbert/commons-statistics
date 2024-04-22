@@ -105,7 +105,8 @@ class KthSelector {
         int end = data.length;
         while (end - begin > minSelectSize) {
             // Select a pivot and partition data array around it
-            final int pivot = partitionSP(data, begin, end, pivotingStrategy.pivotIndex(data, begin, end - 1));
+            final int pivot = partitionSP(data, begin, end,
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k));
             if (k == pivot) {
                 // The pivot was exactly the element we wanted
                 return finalSelection(data, k, kp1, end);
@@ -153,7 +154,8 @@ class KthSelector {
         int end = length;
         while (end - begin > minSelectSize) {
             // Select a pivot and partition data array around it
-            final int pivot = partitionSPN(data, begin, end, pivotingStrategy.pivotIndex(data, begin, end - 1));
+            final int pivot = partitionSPN(data, begin, end,
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k));
             if (k == pivot) {
                 // The pivot was exactly the element we wanted
                 if (data[k] == 0) {
@@ -215,7 +217,8 @@ class KthSelector {
                 pivot = pivotsHeap[node];
             } else {
                 // Select a pivot and partition data array around it
-                pivot = partitionSP(data, begin, end, pivotingStrategy.pivotIndex(data, begin, end - 1));
+                pivot = partitionSP(data, begin, end,
+                    pivotingStrategy.pivotIndex(data, begin, end - 1, k));
                 if (node < heapLength) {
                     pivotsHeap[node] = pivot;
                 }
@@ -348,7 +351,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int pivot = partitionSP(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1));
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k));
             pivots.set(pivot);
             if (k == pivot) {
                 // The pivot was exactly the element we wanted
@@ -491,7 +494,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int pivot = partitionSPN(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1));
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k));
             pivots.set(pivot);
             if (k == pivot) {
                 // The pivot was exactly the element we wanted
@@ -910,7 +913,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int from = partitionSBM(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1), upper);
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k), upper);
             final int to = upper[0];
             setPivots(from, to, pivots);
             if (k >= to) {
@@ -1120,7 +1123,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int from = partitionSBM(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1), upper);
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k), upper);
             final int to = upper[0];
             if (k >= to) {
                 // The element is in the right partition
@@ -1228,7 +1231,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int from = partitionBM(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1), upper);
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k), upper);
             final int to = upper[0];
             setPivots(from, to, pivots);
             if (k >= to) {
@@ -1385,7 +1388,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int from = partitionBM(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1), upper);
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k), upper);
             final int to = upper[0];
             if (k >= to) {
                 // The element is in the right partition
@@ -2364,7 +2367,7 @@ class KthSelector {
         while (end - begin > minSelectSize) {
             // Select a value and partition data array around it
             final int from = partitionDNF(data, begin, end,
-                pivotingStrategy.pivotIndex(data, begin, end - 1), upper);
+                pivotingStrategy.pivotIndex(data, begin, end - 1, k), upper);
             final int to = upper[0];
             setPivots(from, to, pivots);
             if (k >= to) {
@@ -2542,7 +2545,7 @@ class KthSelector {
             return;
         }
         final int i = partitionSP(data, begin, end,
-            pivotingStrategy.pivotIndex(data, begin, end - 1));
+            pivotingStrategy.pivotIndex(data, begin, end - 1, begin));
         sortSP(data, begin, i);
         sortSP(data, i + 1, end);
     }
@@ -2608,7 +2611,7 @@ class KthSelector {
         }
         final int[] to = {0};
         final int from = partitionSBM(data, begin, end,
-            pivotingStrategy.pivotIndex(data, begin, end - 1), to);
+            pivotingStrategy.pivotIndex(data, begin, end - 1, begin), to);
         sortSBM(data, begin, from);
         sortSBM(data, to[0], end);
     }
@@ -2641,7 +2644,7 @@ class KthSelector {
         }
         final int[] to = {0};
         final int from = partitionBM(data, begin, end,
-            pivotingStrategy.pivotIndex(data, begin, end - 1), to);
+            pivotingStrategy.pivotIndex(data, begin, end - 1, begin), to);
         sortBM(data, begin, from);
         sortBM(data, to[0], end);
     }
@@ -2746,7 +2749,7 @@ class KthSelector {
         }
         final int[] to = {0};
         final int from = partitionDNF(data, begin, end,
-            pivotingStrategy.pivotIndex(data, begin, end - 1), to);
+            pivotingStrategy.pivotIndex(data, begin, end - 1, begin), to);
         sortDNF(data, begin, from);
         sortDNF(data, to[0], end);
     }

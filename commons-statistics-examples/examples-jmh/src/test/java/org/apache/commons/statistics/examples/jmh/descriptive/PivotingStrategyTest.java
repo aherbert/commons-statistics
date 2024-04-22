@@ -34,56 +34,63 @@ class PivotingStrategyTest {
     @ParameterizedTest
     @MethodSource(value = {"testPivot"})
     void testCentral(double[] a) {
-        assertPivot(a, PivotingStrategy.CENTRAL);
+        assertPivot(a, 0, PivotingStrategy.CENTRAL);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPivot"})
     void testMedianOf3(double[] a) {
-        assertPivot(a, PivotingStrategy.MEDIAN_OF_3);
+        assertPivot(a, 0, PivotingStrategy.MEDIAN_OF_3);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPivot"})
     void testMedianOf9(double[] a) {
         // Sometimes this is off by an index of 1
-        assertPivot(a, PivotingStrategy.MEDIAN_OF_9, -1, 1);
+        assertPivot(a, 0, PivotingStrategy.MEDIAN_OF_9, -1, 1);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPivot", "testMedianOf5"})
     void testMedianOf5(double[] a) {
-        assertPivot(a, PivotingStrategy.MEDIAN_OF_5);
+        assertPivot(a, 0, PivotingStrategy.MEDIAN_OF_5);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPivot", "testMedianOf5"})
     void testMedianOf5B(double[] a) {
-        assertPivot(a, PivotingStrategy.MEDIAN_OF_5B);
+        assertPivot(a, 0, PivotingStrategy.MEDIAN_OF_5B);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPivot"})
     void testDynamic(double[] a) {
-        final int index = PivotingStrategy.DYNAMIC.pivotIndex(a, 0, a.length - 1);
+        final int index = PivotingStrategy.DYNAMIC.pivotIndex(a, 0, a.length - 1, 0);
         PivotingStrategy s;
-        if (PivotingStrategy.DYNAMIC.getSampledIndices(0, a.length - 1).length == 3) {
+        if (PivotingStrategy.DYNAMIC.getSampledIndices(0, a.length - 1, 0).length == 3) {
             s = PivotingStrategy.MEDIAN_OF_3;
         } else {
             s = PivotingStrategy.MEDIAN_OF_9;
         }
-        Assertions.assertEquals(s.pivotIndex(a, 0, a.length - 1), index);
+        Assertions.assertEquals(s.pivotIndex(a, 0, a.length - 1, 0), index);
     }
 
-    private static void assertPivot(double[] a, PivotingStrategy s, int... offset) {
+    @ParameterizedTest
+    @MethodSource(value = {"testPivot"})
+    void testTarget(double[] a) {
+        assertPivot(a, 0, PivotingStrategy.TARGET);
+        assertPivot(a, 13, PivotingStrategy.TARGET);
+    }
+
+    private static void assertPivot(double[] a, int target, PivotingStrategy s, int... offset) {
         final double[] copy = a.clone();
-        final int[] k = s.getSampledIndices(0, a.length - 1);
+        final int[] k = s.getSampledIndices(0, a.length - 1, target);
         // Extract data
         final double[] x = new double[k.length];
         for (int i = 0; i < k.length; i++) {
             x[i] = a[k[i]];
         }
-        final int p1 = s.pivotIndex(a, 0, a.length - 1);
+        final int p1 = s.pivotIndex(a, 0, a.length - 1, target);
         // Extract data after
         final double[] y = new double[k.length];
         for (int i = 0; i < k.length; i++) {
@@ -124,28 +131,29 @@ class PivotingStrategyTest {
             copy[k[i]] = copy[k[j]];
             copy[k[j]] = v;
         }
-        final int p1a = s.pivotIndex(copy, 0, a.length - 1);
+        final int p1a = s.pivotIndex(copy, 0, a.length - 1, target);
         Assertions.assertEquals(a[p1], copy[p1a], "Pivot changed");
     }
 
     @Test
     void testMedianOf5Indexing() {
-        assertIndexing(PivotingStrategy.MEDIAN_OF_5, 5);
+        assertIndexing(PivotingStrategy.MEDIAN_OF_5, 5, 0);
     }
 
     @Test
     void testMedianOf5BIndexing() {
-        assertIndexing(PivotingStrategy.MEDIAN_OF_5B, 5);
+        assertIndexing(PivotingStrategy.MEDIAN_OF_5B, 5, 0);
     }
 
-    private static void assertIndexing(PivotingStrategy s, int safeLength) {
+    private static void assertIndexing(PivotingStrategy s, int safeLength, int target) {
         final double[] a = new double[safeLength - 1];
-        Assertions.assertThrows(ArrayIndexOutOfBoundsException.class, () -> s.pivotIndex(a, 0, a.length - 1),
+        Assertions.assertThrows(ArrayIndexOutOfBoundsException.class,
+            () -> s.pivotIndex(a, 0, a.length - 1, target),
             () -> "Length: " + (safeLength - 1));
         for (int i = safeLength; i < 50; i++) {
             final int n = i;
             final double[] b = new double[i];
-            Assertions.assertDoesNotThrow(() -> s.pivotIndex(b, 0, b.length - 1), () -> "Length: " + n);
+            Assertions.assertDoesNotThrow(() -> s.pivotIndex(b, 0, b.length - 1, target), () -> "Length: " + n);
         }
     }
 

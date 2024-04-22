@@ -28,12 +28,12 @@ enum PivotingStrategy {
      */
     CENTRAL {
         @Override
-        int pivotIndex(double[] data, int left, int right) {
+        int pivotIndex(double[] data, int left, int right, int ignored) {
             return med(left, right);
         }
 
         @Override
-        int[] getSampledIndices(int left, int right) {
+        int[] getSampledIndices(int left, int right, int ignored) {
             return new int[] {med(left, right)};
         }
 
@@ -47,12 +47,12 @@ enum PivotingStrategy {
      */
     MEDIAN_OF_3 {
         @Override
-        int pivotIndex(double[] data, int left, int right) {
+        int pivotIndex(double[] data, int left, int right, int ignored) {
             return med3(data, left, med(left, right), right);
         }
 
         @Override
-        int[] getSampledIndices(int left, int right) {
+        int[] getSampledIndices(int left, int right, int ignored) {
             return new int[] {left, med(left, right), right};
         }
 
@@ -69,7 +69,7 @@ enum PivotingStrategy {
      */
     MEDIAN_OF_9 {
         @Override
-        int pivotIndex(double[] data, int left, int right) {
+        int pivotIndex(double[] data, int left, int right, int ignored) {
             final int s = (right - left) >>> 3;
             final int m = med(left, right);
             final int x = med3(data, left, left + s, left + (s << 1));
@@ -81,7 +81,7 @@ enum PivotingStrategy {
         }
 
         @Override
-        int[] getSampledIndices(int left, int right) {
+        int[] getSampledIndices(int left, int right, int ignored) {
             final int s = (right - left) >>> 3;
             final int m = med(left, right);
             return new int[] {
@@ -105,19 +105,19 @@ enum PivotingStrategy {
      */
     DYNAMIC {
         @Override
-        int pivotIndex(double[] data, int left, int right) {
+        int pivotIndex(double[] data, int left, int right, int ignored) {
             if (right - left >= MED_9) {
-                return MEDIAN_OF_9.pivotIndex(data, left, right);
+                return MEDIAN_OF_9.pivotIndex(data, left, right, ignored);
             }
-            return MEDIAN_OF_3.pivotIndex(data, left, right);
+            return MEDIAN_OF_3.pivotIndex(data, left, right, ignored);
         }
 
         @Override
-        int[] getSampledIndices(int left, int right) {
+        int[] getSampledIndices(int left, int right, int ignored) {
             if (right - left >= MED_9) {
-                return MEDIAN_OF_9.getSampledIndices(left, right);
+                return MEDIAN_OF_9.getSampledIndices(left, right, ignored);
             }
-            return MEDIAN_OF_3.getSampledIndices(left, right);
+            return MEDIAN_OF_3.getSampledIndices(left, right, ignored);
         }
 
         @Override
@@ -135,7 +135,7 @@ enum PivotingStrategy {
      */
     MEDIAN_OF_5 {
         @Override
-        int pivotIndex(double[] data, int left, int right) {
+        int pivotIndex(double[] data, int left, int right, int ignored) {
             // 1/6 = 5/30 ~ 1/8 + 1/32 + 1/64 : 0.1666 ~ 0.1719
             // Ensure the value is above zero to choose different points!
             // This is safe if len >= 4.
@@ -152,7 +152,7 @@ enum PivotingStrategy {
         }
 
         @Override
-        int[] getSampledIndices(int left, int right) {
+        int[] getSampledIndices(int left, int right, int ignored) {
             final int len = right - left;
             final int sixth = 1 + (len >>> 3) + (len >>> 5) + (len >>> 6);
             final int p3 = left + (len >>> 1);
@@ -178,7 +178,7 @@ enum PivotingStrategy {
      */
     MEDIAN_OF_5B {
         @Override
-        int pivotIndex(double[] data, int left, int right) {
+        int pivotIndex(double[] data, int left, int right, int ignored) {
             // 1/7 = 5/35 ~ 1/8 + 1/64 : 0.1429 ~ 0.1406
             // Ensure the value is above zero to choose different points!
             // This is safe if len >= 4.
@@ -198,7 +198,7 @@ enum PivotingStrategy {
         }
 
         @Override
-        int[] getSampledIndices(int left, int right) {
+        int[] getSampledIndices(int left, int right, int ignored) {
             final int len = right - left;
             final int seventh = 1 + (len >>> 3) + (len >>> 6);
             final int p3 = left + (len >>> 1);
@@ -212,6 +212,25 @@ enum PivotingStrategy {
         @Override
         int samplingEffect() {
             return PARTIAL_SORT;
+        }
+    },
+    /**
+     * Pivot around the target index.
+     */
+    TARGET {
+        @Override
+        int pivotIndex(double[] data, int left, int right, int k) {
+            return k;
+        }
+
+        @Override
+        int[] getSampledIndices(int left, int right, int k) {
+            return new int[] {k};
+        }
+
+        @Override
+        int samplingEffect() {
+            return UNCHANGED;
         }
     };
 
@@ -286,12 +305,17 @@ enum PivotingStrategy {
      * left <= p <= right
      * }</pre>
      *
+     * <p>The argument {@code k} is the target index in {@code [left, right]}. Strategies
+     * may use this to help select the pivot index. If not available (e.g. selecting a pivot
+     * for quicksort) then choose a value in {@code [left, right]} to be safe.
+     *
      * @param data Array.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
+     * @param k Target index.
      * @return pivot
      */
-    abstract int pivotIndex(double[] data, int left, int right);
+    abstract int pivotIndex(double[] data, int left, int right, int k);
 
     // The following methods allow the strategy and side effects to be tested
 
@@ -300,9 +324,10 @@ enum PivotingStrategy {
      *
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
+     * @param k Target index.
      * @return the indices
      */
-    abstract int[] getSampledIndices(int left, int right);
+    abstract int[] getSampledIndices(int left, int right, int k);
 
     /**
      * Get the effect on the sampled points.

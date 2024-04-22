@@ -201,8 +201,6 @@ final class Partition {
     /** Default single-pivot stopper strategy. */
     static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SQA;
 
-    /** Control flag for Floyd-Rivest pivoting strategy when below the sampling size. */
-    static final int FLAG_PIVOTING_STRATGEY = 0x1;
     /** Control flag for random sampling. */
     static final int FLAG_RANDOM_SAMPLING = 0x2;
     /** Control flag for vector swap of the sample. */
@@ -2744,7 +2742,7 @@ final class Partition {
 
             // Pick a pivot and partition
             final int p0 = part.partition(a, l, r,
-                pivotingStrategy.pivotIndex(a, l, r),
+                pivotingStrategy.pivotIndex(a, l, r, l),
                 upper);
             final int p1 = upper[0];
 
@@ -3193,7 +3191,7 @@ final class Partition {
                 pivot = k;
             } else {
                 // default pivot strategy
-                pivot = pivotingStrategy.pivotIndex(a, l, r);
+                pivot = pivotingStrategy.pivotIndex(a, l, r, k);
             }
 
             final int p0 = part.partition(a, l, r, pivot, upper);
@@ -3347,7 +3345,7 @@ final class Partition {
                 pivot = k;
             } else {
                 // default pivot strategy
-                pivot = pivotingStrategy.pivotIndex(a, l, r);
+                pivot = pivotingStrategy.pivotIndex(a, l, r, k);
             }
 
             final int p0 = part.partition(a, l, r, pivot, upper);
@@ -3477,7 +3475,7 @@ final class Partition {
                 pivot = k;
             } else {
                 // default pivot strategy
-                pivot = pivotingStrategy.pivotIndex(a, l, r);
+                pivot = pivotingStrategy.pivotIndex(a, l, r, k);
             }
 
             final int p0 = part.partition(a, l, r, pivot, upper);
@@ -3566,7 +3564,7 @@ final class Partition {
 
             // Pick a pivot and partition
             final int p0 = part.partition(a, l, r,
-                pivotingStrategy.pivotIndex(a, l, r),
+                pivotingStrategy.pivotIndex(a, l, r, ka),
                 upper);
             final int p1 = upper[0];
 
@@ -3723,7 +3721,7 @@ final class Partition {
                 pivot = ka;
             } else {
                 // default pivot strategy
-                pivot = pivotingStrategy.pivotIndex(a, l, r);
+                pivot = pivotingStrategy.pivotIndex(a, l, r, ka);
             }
 
             final int p0 = part.partition(a, l, r, pivot, upper);
@@ -3838,7 +3836,7 @@ final class Partition {
 
             // Pick a pivot and partition
             final int p0 = part.partition(a, l, r,
-                pivotingStrategy.pivotIndex(a, l, r),
+                pivotingStrategy.pivotIndex(a, l, r, ka),
                 upper);
             final int p1 = upper[0];
 
@@ -3994,7 +3992,7 @@ final class Partition {
                 pivot = ka1;
             } else {
                 // default pivot strategy
-                pivot = pivotingStrategy.pivotIndex(a, l, r);
+                pivot = pivotingStrategy.pivotIndex(a, l, r, ka1);
             }
 
             final int p0 = part.partition(a, l, r, pivot, upper);
@@ -4103,7 +4101,7 @@ final class Partition {
 
             // Pick a pivot and partition
             final int p0 = part.partition(a, l, r,
-                pivotingStrategy.pivotIndex(a, l, r),
+                pivotingStrategy.pivotIndex(a, l, r, ka),
                 upper);
             final int p1 = upper[0];
 
@@ -4260,7 +4258,7 @@ final class Partition {
             // Here: l <= lo <= hi <= right
             // Pick a pivot and partition
             final int p0 = part.partition(a, l, right,
-                pivotingStrategy.pivotIndex(a, l, right),
+                pivotingStrategy.pivotIndex(a, l, right, ka),
                 upper);
             final int p1 = upper[0];
 
@@ -5431,9 +5429,9 @@ final class Partition {
                         q -= rr - k;
                     }
                 }
-            } else if ((flags & FLAG_PIVOTING_STRATGEY) != 0) {
+            } else {
                 // Optional: use pivot strategy
-                pivot = pivotingStrategy.pivotIndex(a, l, r);
+                pivot = pivotingStrategy.pivotIndex(a, l, r, k);
             }
 
             // Partition a[p : q] about t.
@@ -5583,7 +5581,8 @@ final class Partition {
             int n = r - l;
             if (n < 600) {
                 // Switch to quickselect
-                final int p0 = partitionKBM(x, l, r, pivotingStrategy.pivotIndex(x, l, r), bounds);
+                final int p0 = partitionKBM(x, l, r,
+                    pivotingStrategy.pivotIndex(x, l, r, k), bounds);
                 final int p1 = bounds[0];
                 if (k < p0) {
                     // The element is in the left partition
@@ -7296,7 +7295,7 @@ final class Partition {
         int q = r;
 
         // Use the pivot index to set the upper sentinel value
-        final int pivot = pivotingStrategy.pivotIndex(data, left, right);
+        final int pivot = pivotingStrategy.pivotIndex(data, left, right, left);
         final double v = data[pivot];
         data[pivot] = data[r];
         data[r] = v;

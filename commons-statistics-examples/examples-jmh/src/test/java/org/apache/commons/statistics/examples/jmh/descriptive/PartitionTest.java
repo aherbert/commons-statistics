@@ -848,16 +848,15 @@ class PartitionTest {
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setControlFlags(0)::partitionFR);
+        assertPartition(values, indices,
+            new Partition(PivotingStrategy.TARGET, QS, EC, SU)::partitionFR);
     }
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
     void testPartitionFRPivotingStrategy(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setControlFlags(Partition.FLAG_PIVOTING_STRATGEY)::partitionFR);
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)::partitionFR);
     }
 
     @ParameterizedTest
@@ -1963,7 +1962,7 @@ class PartitionTest {
         final int[] bounds = new int[3];
         if (partition == 1) {
             for (final double[] d : data) {
-                int p = Partition.PIVOTING_STRATEGY.pivotIndex(d, left, right);
+                int p = Partition.PIVOTING_STRATEGY.pivotIndex(d, left, right, (left + right) >>> 1);
                 p = Partition.partitionSBM(d, left, right, p, bounds);
                 pivots.add(formatPivotRange(p, bounds[0]));
             }
