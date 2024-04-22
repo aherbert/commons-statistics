@@ -124,7 +124,10 @@ final class PartitionFactory {
      * @return the {@link Partition} instance
      */
     static Partition createPartition(String name, String prefix, int qs, int ec) {
-        final String[] s = {name};
+        if (!name.startsWith(prefix)) {
+            throw new IllegalArgumentException("Invalid prefix: " + prefix + " for " + name);
+        }
+        final String[] s = {name.substring(prefix.length())};
         final PivotingStrategy sp = getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY);
         final DualPivotingStrategy dp = getEnumOrElse(s, DualPivotingStrategy.class, Partition.DUAL_PIVOTING_STRATEGY);
         final int minQuickSelectSize = qs != 0 ? qs : getMinQuickSelectSize(s);
@@ -144,10 +147,10 @@ final class PartitionFactory {
         final EdgeSelectStrategy esStrategy = getEnumOrElse(s, EdgeSelectStrategy.class, Partition.EDGE_STRATEGY);
         final StopperStrategy stopStrategy = getEnumOrElse(s, StopperStrategy.class, Partition.STOPPER_STRATEGY);
         // Check for unharvested parameters
-        for (int i = prefix.length(); i < s[0].length(); i++) {
+        for (int i = s[0].length(); --i >= 0;) {
             if (s[0].charAt(i) != '_') {
                 throw new IllegalStateException(
-                    String.format("Unharvested Partition parameters: %s -> %s", name, s[0]));
+                    String.format("Unharvested Partition parameters: %s -> %s", name, prefix + s[0]));
             }
         }
         final Partition p = new Partition(sp, dp, minQuickSelectSize,

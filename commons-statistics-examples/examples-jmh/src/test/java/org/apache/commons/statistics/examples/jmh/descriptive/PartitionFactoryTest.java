@@ -101,6 +101,12 @@ class PartitionFactoryTest {
             s -> PartitionFactory.getEnumOrElse(s, SPStrategy.class, Partition.SP_STRATEGY));
     }
 
+    @Test
+    void testInvalidPrefix() {
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+            PartitionFactory.createPartition("IDP", "ISP", 0, 0));
+    }
+
     private static void assertIntParameter(int defaultValue, String pattern, ToIntFunction<String[]> fun) {
         final String[] s = {"nothing"};
         Assertions.assertEquals(defaultValue, fun.applyAsInt(s));
