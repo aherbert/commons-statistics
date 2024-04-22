@@ -6492,12 +6492,12 @@ final class Partition {
                 }
             } else if (f >= STEP_RIGHT) {
                 if (f >= STEP_FAR_RIGHT) {
-                    // 1/4 : 1/6
-                    n -= n >> 2;
-                    p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
-                } else {
                     // 3/8 : 1/12
                     n -= (n >> 2) + (n >> 3);
+                    p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
+                } else {
+                    // 1/4 : 1/6
+                    n -= n >> 2;
                     p0 = repeatedStepRight(a, l, r, ka, bounds, cf);
                 }
             } else {
