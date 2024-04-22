@@ -452,7 +452,10 @@ final class Partition {
          * Use recursion depth to trigger the stopper select. */
         PAIRED_KEYS,
         /** Use a dedicated single key method that returns information about (k+1).
-         * Use division of the length by 2 every k iterations to trigger the stopper select. */
+         * Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> after
+         * {@code c} iterations where {@code x} is the
+         * {@link #setRecursionConstant(int) recursion constant} and {@code c} is the
+         * {@link #setRecursionMultiple(double) recursion multiple} */
         PAIRED_KEYS_2,
         /** Use a dedicated single key method that returns information about (k+1).
          * Use a multiple of the sum of the length of all partitions to trigger the stopper select. */
@@ -460,7 +463,10 @@ final class Partition {
         /** Use a method that accepts two separate keys. */
         TWO_KEYS,
         /** Use a method that accepts two keys to define a range.
-         * Use division of the length by 2 every k iterations to trigger the stopper select. */
+         * Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> after
+         * {@code c} iterations where {@code x} is the
+         * {@link #setRecursionConstant(int) recursion constant} and {@code c} is the
+         * {@link #setRecursionMultiple(double) recursion multiple} */
         KEY_RANGE,
         /** Use an {@link SearchableInterval} covering the keys. This will reuse a multi-key
          * strategy with keys that are a very small range. */
@@ -3228,12 +3234,12 @@ final class Partition {
      * If {@code p <= k} then {@code k+1} is sorted.
      * If {@code p > k} then {@code p+1} is a pivot.
      *
-     * <p>Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> every
+     * <p>Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> after
      * {@code c} iterations where {@code x} is the
      * {@link #setRecursionConstant(int) recursion constant} and {@code c} is the
      * {@link #setRecursionMultiple(double) recursion multiple} (variables reused for convenience).
      * Confidence bounds for dividing a length by 2<sup>-x</sup> are provided in Valois (2000)
-     * as {@code floor((6/5)x) + b}:
+     * as {@code c = floor((6/5)x) + b}:
      * <pre>
      * b  confidence (%)
      * 2  76.56
@@ -3610,12 +3616,12 @@ final class Partition {
      * destroyed (the mixture updated during partitioning). The caller is responsible for
      * counting a mixture of signed zeros and restoring them if required.
      *
-     * <p>Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> every
+     * <p>Recursion is monitored by checking the partition is reduced by 2<sup>-x</sup> after
      * {@code c} iterations where {@code x} is the
      * {@link #setRecursionConstant(int) recursion constant} and {@code c} is the
      * {@link #setRecursionMultiple(double) recursion multiple} (variables reused for convenience).
      * Confidence bounds for dividing a length by 2<sup>-x</sup> are provided in Valois (2000)
-     * as {@code floor((6/5)x) + b}:
+     * as {@code c = floor((6/5)x) + b}:
      * <pre>
      * b  confidence (%)
      * 2  76.56

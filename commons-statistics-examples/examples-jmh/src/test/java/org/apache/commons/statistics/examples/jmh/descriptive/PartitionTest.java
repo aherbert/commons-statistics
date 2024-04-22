@@ -671,6 +671,8 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
             .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
+            .setRecursionMultiple(5)
+            .setRecursionConstant(1)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
@@ -703,6 +705,8 @@ class PartitionTest {
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(1)
             .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
+            .setRecursionMultiple(5)
+            .setRecursionConstant(1)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
