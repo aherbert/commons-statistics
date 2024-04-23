@@ -3125,9 +3125,6 @@ final class Partition {
         int r = right;
         final int[] upper = {0};
         while (true) {
-            // length - 1
-            int n = r - l;
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
@@ -3152,6 +3149,8 @@ final class Partition {
 
             // Pick a pivot and partition
             int pivot;
+            // length - 1
+            int n = r - l;
             if (n > subSamplingSize) {
                 // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
                 // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
@@ -3266,9 +3265,6 @@ final class Partition {
         int threshold = (right - left) >>> recursionConstant;
         int depth = singlePivotMaxDepth(right - left);
         while (true) {
-            // length - 1
-            int n = r - l;
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
@@ -3281,6 +3277,8 @@ final class Partition {
                 return r;
             }
 
+            // length - 1
+            int n = r - l;
             depth--;
             if (--counter < 0) {
                 if (n > threshold) {
@@ -3406,9 +3404,6 @@ final class Partition {
         long limit = (long) ((1 + recursionMultiple) * (right - left));
         int depth = singlePivotMaxDepth(right - left);
         while (true) {
-            // length - 1
-            int n = r - l;
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|k|---------|k|--------|r|
             //  ---d1----
@@ -3421,6 +3416,8 @@ final class Partition {
                 return r;
             }
 
+            // length - 1
+            int n = r - l;
             limit -= n;
             depth--;
 
@@ -3647,9 +3644,6 @@ final class Partition {
         int counter = (int) recursionMultiple;
         int threshold = (right - left) >>> recursionConstant;
         while (true) {
-            // length - 1
-            int n = r - l;
-
             // It is possible to use edgeselect when k is close to the end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
             if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
@@ -3657,6 +3651,8 @@ final class Partition {
                 return;
             }
 
+            // length - 1
+            int n = r - l;
             if (--counter < 0) {
                 if (n > threshold) {
                     // Did not reduce the length after set number of iterations.
@@ -7035,7 +7031,6 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-            final int n = r - l;
             if (kb - ka < SORTSELECT_SIZE) {
                 // Switch to single-pivot mode with Floyd-Rivest sub-sampling
                 select(a, l, r, ka, kb);
@@ -7044,6 +7039,7 @@ final class Partition {
             // Select when ka and kb are close to the same end,
             // or the entire range is small
             // |l|-----|ka|--------|kb|------|r|
+            final int n = r - l;
             if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE ||
                 n < (flags & SORTSELECT_MASK)) {
                 sortSelectRange(a, l, r, ka, kb);
