@@ -7801,8 +7801,10 @@ final class Partition {
         int p = l + 1;
         while (x[p] == v) {
             if (++p == r) {
-                // Edge-case: constant value up to rr
-                upper[0] = rr;
+                // Edge-case: constant value in [ll, rr]
+                // Return the full range [l, r] as a single edge element
+                // will also be partitioned.
+                upper[0] = r;
                 return l;
             }
         }

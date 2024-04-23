@@ -1205,6 +1205,15 @@ class PartitionTest {
         for (int i = 0; i < 5; i++) {
             builder.add(Arguments.of(TestUtils.shuffle(rng, x.clone()), new int[] {50}));
         }
+        // A single value smaller/greater than the pivot at the left/right/both ends
+        Arrays.fill(x, 1);
+        for (int i = 0; i <= 2; i++) {
+            for (int j = 0; j <= 2; j++) {
+                x[n - 1] = i;
+                x[0] = j;
+                builder.add(Arguments.of(x.clone(), new int[] {50}));
+            }
+        }
         return builder.build();
     }
 
