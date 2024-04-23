@@ -9366,8 +9366,9 @@ final class Partition {
      */
     private static int mapK(int k, int l, int r, int n) {
         // If k==r this returns n-1
-        return (int) ((double) (k - l) * n / (r - l + 1.0));
-        //return (int) Math.round((double) (k - l) * (n - 1.0) / (r - l));
+        //return (int) ((double) (k - l) * n / (r - l + 1.0));
+        return (int) Math.round((k - l) * (n - 1.0) / (r - l));
+        //return n >>> 1;
     }
 
     /**
