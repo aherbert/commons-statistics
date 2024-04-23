@@ -3646,7 +3646,6 @@ final class Partition {
         final int[] upper = {0};
         int counter = (int) recursionMultiple;
         int threshold = (right - left) >>> recursionConstant;
-        int depth = singlePivotMaxDepth(right - left);
         while (true) {
             // length - 1
             int n = r - l;
@@ -3658,7 +3657,6 @@ final class Partition {
                 return;
             }
 
-            depth--;
             if (--counter < 0) {
                 if (n > threshold) {
                     // Did not reduce the length after set number of iterations.
@@ -3666,8 +3664,8 @@ final class Partition {
                     // to inject entropy and restart. This continues until the sum of the partition
                     // lengths is too high (twice the original length). Here we just switch.
 
-                    // Note: For testing we trigger the recursion consumer
-                    recursionConsumer.accept(depth);
+                    // Note: For testing we trigger the recursion consumer with the remaining length
+                    recursionConsumer.accept(r - l);
                     stopperSelection.partition(a, l, r, ka, kb);
                     return;
                 }

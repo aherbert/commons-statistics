@@ -2237,7 +2237,8 @@ class PartitionTest {
         final AbstractDataSource source = new AbstractDataSource() {
             @Override
             protected int getLength() {
-                return 65536;
+                //return 1 << 16;
+                return 1 << 20;
             }
         };
         source.setRange(0);
@@ -2258,12 +2259,24 @@ class PartitionTest {
         source.setup();
         // Target the "median"
         final int[] k = {source.getLength() >> 1};
-        final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_3, QS, EC, Integer.MAX_VALUE)
-            .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
-            .setRecursionMultiple(2);
+
+        // Stop based on recursion depth
+        //final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_3, QS, EC, Integer.MAX_VALUE)
+        //    .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+        //    .setRecursionMultiple(2);
+
+        // Stop based on steps to half the initial length
+        final int su = 1200;
+        final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_5, QS, EC, su)
+            .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
+            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
+            // 92.9% confidence
+            .setRecursionMultiple(4)
+            .setRecursionConstant(1);
+
         for (int i = 0; i < source.size(); i++) {
             final int index = i;
-            p.setRecursionConsumer(v -> TestUtils.printf("%d: %s%n", index, source.getDataSampleInfo(index)));
+            p.setRecursionConsumer(v -> TestUtils.printf("%d: %s (%d)%n", index, source.getDataSampleInfo(index), v));
             //p.setSPStrategy(SPStrategy.SP);
             p.partitionISP(source.getDataSample(i), k, 1);
         }
