@@ -9289,11 +9289,11 @@ final class Partition {
         // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
         final int f = (r - l + 1) / 9;
         final int f3 = 3 * f;
-        // i in tertile [3f:6f)
+        // i in middle tertile [3f:6f)
         for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
             Sorting.sort3(a, i - f3, i, i + f3);
         }
-        // i in 9th-tile: [4f:5f)
+        // i in middle 9th-tile: [4f:5f)
         final int s = l + (f << 2);
         final int e = s + f - 1;
         for (int i = s; i <= e; i++) {
@@ -9333,11 +9333,11 @@ final class Partition {
         // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
         final int f = (r - l + 1) / 9;
         final int f3 = 3 * f;
-        // i in tertile [3f:6f)
+        // i in middle tertile [3f:6f)
         for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
             Sorting.sort3(a, i - f3, i, i + f3);
         }
-        // i in 9th-tile: [4f:5f)
+        // i in middle 9th-tile: [4f:5f)
         final int s = l + (f << 2);
         final int e = s + f - 1;
         for (int i = s; i <= e; i++) {
