@@ -7797,10 +7797,11 @@ final class Partition {
             ++ll;
         }
 
+        // Position p and q for pre-in/decrement to write into edge pivot regions
         // Fast-forward over equal regions to reduce swaps
-        int p = l + 1;
-        while (x[p] == v) {
-            if (++p == r) {
+        int p = l;
+        while (x[p + 1] == v) {
+            if (++p == rr) {
                 // Edge-case: constant value in [ll, rr]
                 // Return the full range [l, r] as a single edge element
                 // will also be partitioned.
@@ -7810,13 +7811,21 @@ final class Partition {
         }
         // Cannot overrun as the prior scan using p stopped before the end
         int q = r;
-        do {
+        while (x[q - 1] == v) {
             --q;
-        } while (x[q] == v);
+        }
 
-        // Position p and q for pre-in/decrement
-        int i = --p;
-        int j = ++q;
+        // Check set-up: [ll, p] and [q, rr] are pivot
+        for (int i = ll; i <= p; i++) {
+            assert x[i] == v;
+        }
+        for (int i = q; i <= rr; i++) {
+            assert x[i] == v;
+        }
+
+        // Position for pre-in/decrement
+        int i = p;
+        int j = q;
 
         for (;;) {
             do {
@@ -7828,7 +7837,7 @@ final class Partition {
             // Here x[j] <= v <= x[i]
             if (i >= j) {
                 if (i == j) {
-                    // x[i]=x[j]=v; update to leave the pivot in between [j, i]
+                    // x[i]=x[j]=v; update to leave the pivot in between (j, i)
                     ++i;
                     --j;
                 }
