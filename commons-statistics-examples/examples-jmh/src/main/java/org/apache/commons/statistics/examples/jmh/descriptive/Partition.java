@@ -218,6 +218,15 @@ final class Partition {
     static final int FLAG_QA_NO_SAMPLING = 0x1;
     /** Control flag for quickselect adaptive to propagate the no sampling mode recursively. */
     static final int FLAG_QA_PROPAGATE = 0x2;
+    /** Control flag for quickselect adaptive to map k to the median of the sample.
+     * This turns repeated step adaptive into repeated step improved. */
+    static final int FLAG_QA_NO_ADAPT_K = 0x4;
+    /** Control flag for quickselect adaptive to use a different far left/right mapping
+     * using min of 4; then median of 3 into the 2nd 12th-tile. The default (original) uses
+     * lower median of 4; then min of 3 into 4th 12th-tile). The default has a larger
+     * upper margin of 3/8 vs 1/3 for the new method. The new method benchmarks as faster
+     * when sampling is on but slower when sampling is off, or when adapting k is off. */
+    static final int FLAG_QA_FAR_STEP = 0x8;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -297,10 +306,6 @@ final class Partition {
     private static final double STEP_FAR_LEFT = 0.08333333333333333;
     /** Threshold to use repeated step far-right: 11 / 12. */
     private static final double STEP_FAR_RIGHT = 0.9166666666666666;
-    /** Threshold to use repeated step far-left in the second quickselect adaptive method: 3 / 24. */
-    private static final double STEP_FAR_LEFT2 = 0.125;
-    /** Threshold to use repeated step far-right in the second quickselect adaptive method: 21 / 24. */
-    private static final double STEP_FAR_RIGHT2 = 0.875;
 
     /** Default instance. */
     private static final Partition DEFAULT = new Partition();
@@ -632,6 +637,11 @@ final class Partition {
          * with medians of 3. This is the improved version that creates the median sample
          * in the centre and expands the partition around the pivot sample. */
         RS_IM,
+        /** Uses the Blum, Floyd, Pratt, Rivest, and Tarjan (BFPRT) median-of-medians algorithm
+         * with medians of 5. This is the improved version that creates the median sample
+         * in the centre and expands the partition around the pivot sample; the adaption
+         * is to use k to define the pivot in the sample instead of using the median. */
+        BFPRTA,
         /** Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
          * with medians of 3. This is the adaptive version that creates the median sample
          * in the centre and expands the partition around the pivot sample; the adaption
@@ -1264,13 +1274,18 @@ final class Partition {
             linearSpFunction = this::linearRepeatedStepBaseline;
             break;
         case BFPRT_IM:
+            // Here we re-use the same method as the only difference is adaption of k
+            controlFlags |= FLAG_QA_NO_ADAPT_K;
+            // fall-through
+        case BFPRTA:
             linearSpFunction = this::linearBFPRTImproved;
             break;
         case RS_IM:
-            linearSpFunction = this::linearRepeatedStepImproved;
-            break;
+            // Here we re-use the same method as the only difference is adaption of k
+            controlFlags |= FLAG_QA_NO_ADAPT_K;
+            // fall-through
         case RSA:
-            linearSpFunction = this::linearRepeatedStepAdaptive;
+            linearSpFunction = this::linearRepeatedStepImproved;
             break;
         default:
             throw new IllegalArgumentException("Unknown linear strategy: " + v);
@@ -6664,7 +6679,7 @@ final class Partition {
 
             // Only target ka; kb is assumed to be close
             int p0;
-            int n = r - l + 1;
+            int n = r - l; // + 1;
             final double f = (double) (ka - l) / n;
             // Note: Margins for fraction left/right of pivot L : R.
             // Subtract the larger margin to create the estimated size
@@ -6674,10 +6689,15 @@ final class Partition {
             // control flags sign bit.
             if (f <= STEP_LEFT) {
                 if (f <= STEP_FAR_LEFT) {
-                    // 1/12 : 3/8
-                    n -= (n >> 2) + (n >> 3);
-                    //p0 = repeatedStepLeft(a, l, r, ka, bounds, cf, true);
-                    p0 = repeatedStepFarLeft(a, l, r, ka, bounds, cf);
+                    if ((controlFlags & FLAG_QA_FAR_STEP) != 0) {
+                        // 1/12 : 1/3 (use 1/4 + 1/32 + 1/64 ~ 0.328)
+                        n -= (n >> 2) + (n >> 5) + (n >> 6);
+                        p0 = repeatedStepFarLeft(a, l, r, ka, bounds, cf);
+                    } else {
+                        // 1/12 : 3/8
+                        n -= (n >> 2) + (n >> 3);
+                        p0 = repeatedStepLeft(a, l, r, ka, bounds, cf, true);
+                    }
                 } else {
                     // 1/6 : 1/4
                     n -= n >> 2;
@@ -6685,10 +6705,15 @@ final class Partition {
                 }
             } else if (f >= STEP_RIGHT) {
                 if (f >= STEP_FAR_RIGHT) {
-                    // 3/8 : 1/12
-                    n -= (n >> 2) + (n >> 3);
-                    //p0 = repeatedStepRight(a, l, r, ka, bounds, cf, true);
-                    p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
+                    if ((controlFlags & FLAG_QA_FAR_STEP) != 0) {
+                        // 1/12 : 1/3 (use 1/4 + 1/32 + 1/64 ~ 0.328)
+                        n -= (n >> 2) + (n >> 5) + (n >> 6);
+                        p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
+                    } else {
+                        // 3/8 : 1/12
+                        n -= (n >> 2) + (n >> 3);
+                        p0 = repeatedStepRight(a, l, r, ka, bounds, cf, true);
+                    }
                 } else {
                     // 1/4 : 1/6
                     n -= n >> 2;
@@ -9263,11 +9288,10 @@ final class Partition {
         for (int i = l, j = s; i < s; i += 2, j++) {
             Sorting.median5d(a, i, i + 1, j, f3 + i, f3 + i + 1);
         }
-        final int m = (s + e + 1) >>> 1;
+        // Adaption to target kf/|A|
+        final int p = s + mapDistance(k - l, l, r, f);
         // mutual recursion
-        quickSelect(this::linearBFPRTImproved, a, s, e, m, m, upper);
-        //return spFunction.partition(a, l, r, m, upper);
-        // broken
+        quickSelect(this::linearBFPRTImproved, a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
     }
 
@@ -9310,57 +9334,57 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - f, i, i + f);
         }
-        // TODO - control flag for adaptive k
-        final int m = (s + e + 1) >>> 1;
-        // mutual recursion
-        quickSelect(this::linearRepeatedStepImproved, a, s, e, m, m, upper);
-        return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
-    }
-
-    /**
-     * Partition an array slice around a pivot. Partitioning exchanges array elements such
-     * that all elements smaller than pivot are before it and all elements larger than
-     * pivot are after it.
-     *
-     * <p>Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
-     * range.
-     *
-     * <p>Note: Requires that the range contains no NaN values.
-     * This does not respect the ordering of signed zeros.
-     *
-     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-     * with medians of 3 with the samples computed in the middle tertile and 9th-tile.
-     * The pivot chosen from the sample is adaptive using the input {@code k}.
-     *
-     * @param a Data array.
-     * @param l Lower bound (inclusive).
-     * @param r Upper bound (inclusive).
-     * @param k Target index.
-     * @param upper Upper bound (inclusive) of the pivot range.
-     * @return Lower bound (inclusive) of the pivot range.
-     */
-    private int linearRepeatedStepAdaptive(double[] a, int l, int r, int k, int[] upper) {
-        // Adapted from Alexandrescu (2016), algorithm 8.
-        // Moves the responsibility for selection when r-l <= 8 to the caller.
-        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
-        final int f = (r - l + 1) / 9;
-        final int f3 = 3 * f;
-        // i in middle tertile [3f:6f)
-        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
-            Sorting.sort3(a, i - f3, i, i + f3);
-        }
-        // i in middle 9th-tile: [4f:5f)
-        final int s = l + (f << 2);
-        final int e = s + f - 1;
-        for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - f, i, i + f);
-        }
         // Adaption to target kf/|A|
         final int p = s + mapDistance(k - l, l, r, f);
         // mutual recursion
-        quickSelect(this::linearRepeatedStepAdaptive, a, s, e, p, p, upper);
+        quickSelect(this::linearRepeatedStepImproved, a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
     }
+//
+//    /**
+//     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+//     * that all elements smaller than pivot are before it and all elements larger than
+//     * pivot are after it.
+//     *
+//     * <p>Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
+//     * range.
+//     *
+//     * <p>Note: Requires that the range contains no NaN values.
+//     * This does not respect the ordering of signed zeros.
+//     *
+//     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
+//     * with medians of 3 with the samples computed in the middle tertile and 9th-tile.
+//     * The pivot chosen from the sample is adaptive using the input {@code k}.
+//     *
+//     * @param a Data array.
+//     * @param l Lower bound (inclusive).
+//     * @param r Upper bound (inclusive).
+//     * @param k Target index.
+//     * @param upper Upper bound (inclusive) of the pivot range.
+//     * @return Lower bound (inclusive) of the pivot range.
+//     */
+//    private int linearRepeatedStepAdaptive(double[] a, int l, int r, int k, int[] upper) {
+//        // Adapted from Alexandrescu (2016), algorithm 8.
+//        // Moves the responsibility for selection when r-l <= 8 to the caller.
+//        // Compute the median of each non-contiguous set of 3 to the middle tertile, and repeat.
+//        final int f = (r - l + 1) / 9;
+//        final int f3 = 3 * f;
+//        // i in middle tertile [3f:6f)
+//        for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+//            Sorting.sort3(a, i - f3, i, i + f3);
+//        }
+//        // i in middle 9th-tile: [4f:5f)
+//        final int s = l + (f << 2);
+//        final int e = s + f - 1;
+//        for (int i = s; i <= e; i++) {
+//            Sorting.sort3(a, i - f, i, i + f);
+//        }
+//        // Adaption to target kf/|A|
+//        final int p = s + mapDistance(k - l, l, r, f);
+//        // mutual recursion
+//        quickSelect(this::linearRepeatedStepAdaptive, a, s, e, p, p, upper);
+//        return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
+//    }
 
     /**
      * Map the distance from the edge of {@code [l, r]} to a new distance in {@code [0, n)}.
@@ -9371,7 +9395,10 @@ final class Partition {
      * @param n New upper bound (exclusive).
      * @return the mapped distance in [0, n)
      */
-    private static int mapDistance(int d, int l, int r, int n) {
+    private int mapDistance(int d, int l, int r, int n) {
+        if ((controlFlags & FLAG_QA_NO_ADAPT_K) != 0) {
+            return n >>> 1;
+        }
         // If distance==r-l this returns n-1
         //return (int) ((double) (k - l) * n / (r - l + 1.0));
         return (int) Math.round(d * (n - 1.0) / (r - l));
@@ -9626,7 +9653,6 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // TODO - allow dynamic adaption
         // Adaption to target kf'/|A|
         int p = s + mapDistance(k - l, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
@@ -9649,7 +9675,7 @@ final class Partition {
      * 11th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
      *
      * <p>Given a pivot in the middle of the sample this has margins of 1/3 and 1/12. The
-     * larger margin is smaller than 
+     * larger margin is smaller than
      *
      * @param a Data array.
      * @param l Lower bound (inclusive).
@@ -9690,7 +9716,6 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // TODO - allow dynamic adaption
         // Adaption to target kf'/|A|
         int p = e - mapDistance(r - k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
