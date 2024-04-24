@@ -6672,21 +6672,21 @@ final class Partition {
                 if (f <= STEP_FAR_LEFT) {
                     // 1/12 : 3/8
                     n -= (n >> 2) + (n >> 3);
-                    p0 = repeatedStepFarLeft(a, l, r, ka, bounds, cf);
+                    p0 = repeatedStepLeft(a, l, r, ka, bounds, cf, true);
                 } else {
                     // 1/6 : 1/4
                     n -= n >> 2;
-                    p0 = repeatedStepLeft(a, l, r, ka, bounds, cf);
+                    p0 = repeatedStepLeft(a, l, r, ka, bounds, cf, false);
                 }
             } else if (f >= STEP_RIGHT) {
                 if (f >= STEP_FAR_RIGHT) {
                     // 3/8 : 1/12
                     n -= (n >> 2) + (n >> 3);
-                    p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
+                    p0 = repeatedStepRight(a, l, r, ka, bounds, cf, true);
                 } else {
                     // 1/4 : 1/6
                     n -= n >> 2;
-                    p0 = repeatedStepRight(a, l, r, ka, bounds, cf);
+                    p0 = repeatedStepRight(a, l, r, ka, bounds, cf, false);
                 }
             } else {
                 // 2/9 : 2/9 (use 1/4 - 1/32 ~ 0.219)
@@ -9444,8 +9444,9 @@ final class Partition {
      * This does not respect the ordering of signed zeros.
      *
      * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-     * with the lower median of 4 then median of 3; the final sample is placed in the
-     * 4-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     * with the lower median of 4 then either median of 3 with the final sample placed in the
+     * 5-th 12th-tile, or min of 3 with the final sample in the 4th 12-th tile;
+     * the pivot chosen from the sample is adaptive using the input {@code k}.
      *
      * @param a Data array.
      * @param l Lower bound (inclusive).
@@ -9453,10 +9454,12 @@ final class Partition {
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
      * @param flags Control flags.
+     * @param far Set to {@code true} to perform repeatedStepFarLeft.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper, int flags) {
-        // Adapted from Alexandrescu (2016), algorithm 9.
+    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper, int flags,
+        boolean far) {
+        // Adapted from Alexandrescu (2016), algorithm 9 and 10.
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
         if (flags < 0) {
@@ -9467,70 +9470,35 @@ final class Partition {
             }
         }
         final int fp = f / 3;
-        // Modification from Alexandrescu: i in 5th 12-th tile rather than 4th 12-th tile.
-        // Otherwise this is identical to repeatedStepFarLeft. This matches the text
-        // stating |A|/6 are on the left (1/4 * 1/3 * 2).
-        final int s = l + f + fp;
-        final int e = s + fp - 1;
-        for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - fp, i, i + fp);
-        }
-        // Adaption to target kf'/|A|
-        int p = s + mapDistance(k - l, l, r, fp);
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
-        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
-    }
-
-    /**
-     * Partition an array slice around a pivot. Partitioning exchanges array elements such
-     * that all elements smaller than pivot are before it and all elements larger than
-     * pivot are after it.
-     *
-     * <p>Assumes the range {@code r - l >= 11}; the caller is responsible for selection on a smaller
-     * range.
-     *
-     * <p>Note: Requires that the range contains no NaN values.
-     * This does not respect the ordering of signed zeros.
-     *
-     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-     * with the lower median of 4 then minimum of 3; the final sample is placed in the
-     * 4-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
-     *
-     * @param a Data array.
-     * @param l Lower bound (inclusive).
-     * @param r Upper bound (inclusive).
-     * @param k Target index.
-     * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
-     * @return Lower bound (inclusive) of the pivot range.
-     */
-    private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper, int flags) {
-        // Adapted from Alexandrescu (2016), algorithm 10.
-        // Moves the responsibility for selection when r-l <= 11 to the caller.
-        final int f = (r - l + 1) >> 2;
-        if (flags < 0) {
-            // i in 2nd quartile
-            final int f2 = f + f;
-            for (int i = l + f, e = l + f2; i < e; i++) {
-                Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
+        int s;
+        int e;
+        if (far) {
+            final int fp2 = fp << 1;
+            // i in 4th 12th-tile
+            s = l + f;
+            e = s + fp - 1;
+            for (int i = s; i <= e; i++) {
+                // min into i
+                if (a[i] > a[i + fp]) {
+                    final double u = a[i];
+                    a[i] = a[i + fp];
+                    a[i + fp] = u;
+                }
+                if (a[i] > a[i + fp2]) {
+                    final double v = a[i];
+                    a[i] = a[i + fp2];
+                    a[i + fp2] = v;
+                }
             }
-        }
-        final int fp = f / 3;
-        final int fp2 = fp << 1;
-        // i in 4th 12th-tile
-        final int s = l + f;
-        final int e = s + fp - 1;
-        for (int i = s; i <= e; i++) {
-            // min into i
-            if (a[i] > a[i + fp]) {
-                final double u = a[i];
-                a[i] = a[i + fp];
-                a[i + fp] = u;
-            }
-            if (a[i] > a[i + fp2]) {
-                final double v = a[i];
-                a[i] = a[i + fp2];
-                a[i + fp2] = v;
+        } else {
+            // i in 5th 12-th tile
+            // This is a modification from Alexandrescu rather than 4th 12-th tile.
+            // Otherwise this is identical to repeatedStepFarLeft. This matches the text
+            // stating |A|/6 are on the left (1/4 * 1/3 * 2).
+            s = l + f + fp;
+            e = s + fp - 1;
+            for (int i = s; i <= e; i++) {
+                Sorting.sort3(a, i - fp, i, i + fp);
             }
         }
         // Adaption to target kf'/|A|
@@ -9551,8 +9519,9 @@ final class Partition {
      * This does not respect the ordering of signed zeros.
      *
      * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-     * with the upper median of 4 then median of 3; the final sample is placed in the
-     * 9-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
+     * with the upper median of 4 then either median of 3 with the final sample placed in the
+     * 8-th 12th-tile, or max of 3 with the final sample in the 9th 12-th tile;
+     * the pivot chosen from the sample is adaptive using the input {@code k}.
      *
      * @param a Data array.
      * @param l Lower bound (inclusive).
@@ -9560,9 +9529,11 @@ final class Partition {
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
      * @param flags Control flags.
+     * @param far Set to {@code true} to perform repeatedStepFarRight.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper, int flags) {
+    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper, int flags,
+        boolean far) {
         // Mirror image repeatedStepLeft using upper median into 3rd quartile
         final int f = (r - l + 1) >> 2;
         if (flags < 0) {
@@ -9573,66 +9544,32 @@ final class Partition {
             }
         }
         final int fp = f / 3;
-        // i in 8th 12-th tile
-        final int e = r - f - fp;
-        final int s = e - fp + 1;
-        for (int i = s; i <= e; i++) {
-            Sorting.sort3(a, i - fp, i, i + fp);
-        }
-        // Adaption to target kf'/|A|
-        int p = e - mapDistance(r - k, l, r, fp);
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
-        return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
-    }
-    /**
-     * Partition an array slice around a pivot. Partitioning exchanges array elements such
-     * that all elements smaller than pivot are before it and all elements larger than
-     * pivot are after it.
-     *
-     * <p>Assumes the range {@code r - l >= 11}; the caller is responsible for selection on a smaller
-     * range.
-     *
-     * <p>Note: Requires that the range contains no NaN values.
-     * This does not respect the ordering of signed zeros.
-     *
-     * <p>Uses the Chen and Dumitrescu repeated step median-of-medians-of-medians algorithm
-     * with the upper median of 4 then maximum of 3; the final sample is placed in the
-     * 9-th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
-     *
-     * @param a Data array.
-     * @param l Lower bound (inclusive).
-     * @param r Upper bound (inclusive).
-     * @param k Target index.
-     * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
-     * @return Lower bound (inclusive) of the pivot range.
-     */
-    private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper, int flags) {
-        // Mirror image repeatedStepFarLeft using upper median into 3rd quartile
-        final int f = (r - l + 1) >> 2;
-        if (flags < 0) {
-            // i in 3rd quartile
-            final int f2 = f + f;
-            for (int i = r - f, e = r - f2; i > e; i--) {
-                Sorting.upperMedian4(a, i - f2, i - f, i, i + f);
+        int s;
+        int e;
+        if (far) {
+            // i in 9th 12th-tile
+            e = r - f;
+            s = e - fp + 1;
+            final int fp2 = fp << 1;
+            for (int i = s; i <= e; i++) {
+                // max into i
+                if (a[i] < a[i - fp]) {
+                    final double u = a[i];
+                    a[i] = a[i - fp];
+                    a[i - fp] = u;
+                }
+                if (a[i] < a[i - fp2]) {
+                    final double v = a[i];
+                    a[i] = a[i - fp2];
+                    a[i - fp2] = v;
+                }
             }
-        }
-        final int fp = f / 3;
-        final int fp2 = fp << 1;
-        // i in 9th 12th-tile
-        final int e = r - f;
-        final int s = e - fp + 1;
-        for (int i = s; i <= e; i++) {
-            // max into i
-            if (a[i] < a[i - fp]) {
-                final double u = a[i];
-                a[i] = a[i - fp];
-                a[i - fp] = u;
-            }
-            if (a[i] < a[i - fp2]) {
-                final double v = a[i];
-                a[i] = a[i - fp2];
-                a[i - fp2] = v;
+        } else {
+            // i in 8th 12-th tile
+            e = r - f - fp;
+            s = e - fp + 1;
+            for (int i = s; i <= e; i++) {
+                Sorting.sort3(a, i - fp, i, i + fp);
             }
         }
         // Adaption to target kf'/|A|
