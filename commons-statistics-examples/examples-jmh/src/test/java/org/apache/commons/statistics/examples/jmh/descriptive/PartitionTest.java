@@ -1069,6 +1069,32 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionQANoAdapt(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
+            .setExpandStrategy(ExpandStrategy.T1)
+            .setControlFlags(Partition.FLAG_QA_NO_ADAPT_K)
+            ::partitionQA);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionQAFarStepAdaptOriginal(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
+            .setExpandStrategy(ExpandStrategy.T1)
+            .setControlFlags(Partition.FLAG_QA_FAR_STEP_ADAPT_ORIGINAL)
+            ::partitionQA);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);

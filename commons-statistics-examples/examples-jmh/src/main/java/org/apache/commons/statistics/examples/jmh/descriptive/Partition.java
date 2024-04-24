@@ -219,14 +219,33 @@ final class Partition {
     /** Control flag for quickselect adaptive to propagate the no sampling mode recursively. */
     static final int FLAG_QA_PROPAGATE = 0x2;
     /** Control flag for quickselect adaptive to map k to the median of the sample.
-     * This turns repeated step adaptive into repeated step improved. */
+     * This turns repeated step adaptive into repeated step improved. This applies
+     * to all quickselect adaptive repeated step methods. */
     static final int FLAG_QA_NO_ADAPT_K = 0x4;
-    /** Control flag for quickselect adaptive to use a different far left/right mapping
+    /** Control flag for quickselect adaptive to use a different far left/right step
      * using min of 4; then median of 3 into the 2nd 12th-tile. The default (original) uses
      * lower median of 4; then min of 3 into 4th 12th-tile). The default has a larger
-     * upper margin of 3/8 vs 1/3 for the new method. The new method benchmarks as faster
-     * when sampling is on but slower when sampling is off, or when adapting k is off. */
+     * upper margin of 3/8 vs 1/3 for the new method. The new method is better
+     * with the original k mapping for far left/right and similar speed to the original
+     * far left/right step using the new k mapping. When sampling is off it is marginally
+     * faster, may be due to improved layout of the sample closer to the strict 1/12 lower margin.
+     * There is no compelling evidence to indicate is it better so the default uses
+     * the original far step method. */
     static final int FLAG_QA_FAR_STEP = 0x8;
+    /** Control flag for quickselect adaptive to map k using the same k mapping for all
+     * repeated steps. This enabled the original algorithm behaviour.
+     *
+     * <p>Note that the original mapping can create a lower margin that
+     * does not contain k. This makes it possible to put k into the larger partition.
+     * For the middle and step left methods this heuristic is acceptable as the bias in
+     * margins is shifted but the smaller margin is at least 1/12 of the data and a choice
+     * of this side is not a severe penalty. For the far step left the original mapping
+     * will always create a smaller margin that does not contain k. Removing this
+     * adaptive k and using the median of the 12th-tile shows a measurable speed-up
+     * as the smaller margin always contains k. This result has been extended to change
+     * the mapping for the far step to ensure the smaller
+     * margin always contains at least k elements. This is faster and so enabled by default. */
+    static final int FLAG_QA_FAR_STEP_ADAPT_ORIGINAL = 0x10;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -9491,6 +9510,7 @@ final class Partition {
         final int fp = f / 3;
         int s;
         int e;
+        int p;
         if (far) {
             final int fp2 = fp << 1;
             // i in 4th 12th-tile
@@ -9509,6 +9529,17 @@ final class Partition {
                     a[i + fp2] = v;
                 }
             }
+            // Variable adaption
+            // Lower margin count = 2 * (k'+1); with k' = p - s
+            if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
+                // This mapping will create a lower margin that cannot contain k
+                p = s + mapDistance(k - l, l, r, fp);
+            } else {
+                // Method only called with (k-l) / (r-l) <= 1/12.
+                // f' = 1/12 * (r-l) => (k-l) <= f'
+                // => k'/2 will ensure k is in the lower margin and is at most the median of f'
+                p = s + ((k - l) >>> 1);
+            }
         } else {
             // i in 5th 12th-tile
             // This is a modification from Alexandrescu rather than 4th 12-th tile.
@@ -9519,9 +9550,9 @@ final class Partition {
             for (int i = s; i <= e; i++) {
                 Sorting.sort3(a, i - fp, i, i + fp);
             }
+            // Adaption to target kf'/|A|
+            p = s + mapDistance(k - l, l, r, fp);
         }
-        // Adaption to target kf'/|A|
-        int p = s + mapDistance(k - l, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9565,6 +9596,7 @@ final class Partition {
         final int fp = f / 3;
         int s;
         int e;
+        int p;
         if (far) {
             // i in 9th 12th-tile
             e = r - f;
@@ -9583,6 +9615,12 @@ final class Partition {
                     a[i - fp2] = v;
                 }
             }
+            // Reflection of step far left
+            if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
+                p = e - mapDistance(r - k, l, r, fp);
+            } else {
+                p = e - ((r - k) >>> 1);
+            }
         } else {
             // i in 8th 12th-tile
             e = r - f - fp;
@@ -9590,9 +9628,9 @@ final class Partition {
             for (int i = s; i <= e; i++) {
                 Sorting.sort3(a, i - fp, i, i + fp);
             }
+            // Adaption to target kf'/|A|
+            p = e - mapDistance(r - k, l, r, fp);
         }
-        // Adaption to target kf'/|A|
-        int p = e - mapDistance(r - k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9653,8 +9691,18 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // Adaption to target kf'/|A|
-        int p = s + mapDistance(k - l, l, r, fp);
+        // Variable adaption
+        int p;
+        // Lower margin count = 2 * (k'+1); with k' = p - s
+        if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
+            // This mapping will create a lower margin that cannot contain k
+            p = s + mapDistance(k - l, l, r, fp);
+        } else {
+            // Method only called with (k-l) / (r-l) <= 1/12.
+            // f' = 1/12 * (r-l) => (k-l) <= f'
+            // => k'/2 will ensure k is in the lower margin and is at most the median of f'
+            p = s + ((k - l) >>> 1);
+        }
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9716,8 +9764,13 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // Adaption to target kf'/|A|
-        int p = e - mapDistance(r - k, l, r, fp);
+        // Reflection of step far left
+        int p;
+        if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
+            p = e - mapDistance(r - k, l, r, fp);
+        } else {
+            p = e - ((r - k) >>> 1);
+        }
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
