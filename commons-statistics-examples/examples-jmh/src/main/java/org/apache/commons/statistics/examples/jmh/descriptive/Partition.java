@@ -9350,24 +9350,10 @@ final class Partition {
             Sorting.sort3(a, i - f, i, i + f);
         }
         // Adaption to target kf/|A|
-        final int p = s + mapK(k, l, r, f);
+        final int p = s + mapDistance(k - l, l, r, f);
         // mutual recursion
         quickSelect(this::linearRepeatedStepAdaptive, a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
-    }
-
-    /**
-     * Map the index {@code [l <= k <= r]} to a new index in {@code [0, n)}.
-     *
-     * @param k Index.
-     * @param l Lower bound (inclusive).
-     * @param r Upper bound (inclusive).
-     * @param n New upper bound (exclusive).
-     * @return the mapped index in [0, n)
-     */
-    private static int mapK(int k, int l, int r, int n) {
-        // If k==r this returns n-1
-        return mapDistance(k - l, l, r, n);
     }
 
     /**
@@ -9377,7 +9363,7 @@ final class Partition {
      * @param l Lower bound (inclusive).
      * @param r Upper bound (inclusive).
      * @param n New upper bound (exclusive).
-     * @return the mapped index in [0, n)
+     * @return the mapped distance in [0, n)
      */
     private static int mapDistance(int d, int l, int r, int n) {
         // If distance==r-l this returns n-1
@@ -9427,7 +9413,7 @@ final class Partition {
             Sorting.sort3(a, i - f, i, i + f);
         }
         // Adaption to target kf/|A|
-        int p = s + mapK(k, l, r, f);
+        int p = s + mapDistance(k - l, l, r, f);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
