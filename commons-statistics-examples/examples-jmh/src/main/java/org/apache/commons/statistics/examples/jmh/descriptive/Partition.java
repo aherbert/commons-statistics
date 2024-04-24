@@ -9257,7 +9257,7 @@ final class Partition {
         for (int i = l, j = s; i < s; i += 2, j++) {
             Sorting.median5d(a, i, i + 1, j, f3 + i, f3 + i + 1);
         }
-        final int m = (s + e + 1) >> 1;
+        final int m = (s + e + 1) >>> 1;
         // mutual recursion
         quickSelect(this::linearBFPRTImproved, a, s, e, m, m, upper);
         //return spFunction.partition(a, l, r, m, upper);
@@ -9304,6 +9304,7 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - f, i, i + f);
         }
+        // TODO - control flag for adaptive k
         final int m = (s + e + 1) >>> 1;
         // mutual recursion
         quickSelect(this::linearRepeatedStepImproved, a, s, e, m, m, upper);
@@ -9351,7 +9352,7 @@ final class Partition {
         // Adaption to target kf/|A|
         final int p = s + mapK(k, l, r, f);
         // mutual recursion
-        quickSelect(this::linearRepeatedStepImproved, a, s, e, p, p, upper);
+        quickSelect(this::linearRepeatedStepAdaptive, a, s, e, p, p, upper);
         return expandFunction.partition(a, l, r, s, e, upper[0], upper[1], upper);
     }
 
@@ -9366,8 +9367,22 @@ final class Partition {
      */
     private static int mapK(int k, int l, int r, int n) {
         // If k==r this returns n-1
+        return mapDistance(k - l, l, r, n);
+    }
+
+    /**
+     * Map the distance from the edge of {@code [l, r]} to a new distance in {@code [0, n)}.
+     *
+     * @param d Distance from the edge in {@code [0, r - l]}.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param n New upper bound (exclusive).
+     * @return the mapped index in [0, n)
+     */
+    private static int mapDistance(int d, int l, int r, int n) {
+        // If distance==r-l this returns n-1
         //return (int) ((double) (k - l) * n / (r - l + 1.0));
-        return (int) Math.round((k - l) * (n - 1.0) / (r - l));
+        return (int) Math.round(d * (n - 1.0) / (r - l));
         //return n >>> 1;
     }
 
@@ -9461,7 +9476,7 @@ final class Partition {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
         // Adaption to target kf'/|A|
-        int p = s + mapK(k, l, r, fp);
+        int p = s + mapDistance(k - l, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9519,7 +9534,7 @@ final class Partition {
             }
         }
         // Adaption to target kf'/|A|
-        int p = s + mapK(k, l, r, fp);
+        int p = s + mapDistance(k - l, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9565,7 +9580,7 @@ final class Partition {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
         // Adaption to target kf'/|A|
-        int p = s + mapK(k, l, r, fp);
+        int p = e - mapDistance(r - k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9621,7 +9636,7 @@ final class Partition {
             }
         }
         // Adaption to target kf'/|A|
-        int p = s + mapK(k, l, r, fp);
+        int p = e - mapDistance(r - k, l, r, fp);
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
