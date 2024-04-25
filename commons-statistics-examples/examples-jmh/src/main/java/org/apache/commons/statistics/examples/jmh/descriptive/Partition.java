@@ -6699,7 +6699,8 @@ final class Partition {
 
             // Only target ka; kb is assumed to be close
             int p0;
-            int n = r - l; // + 1;
+            int n = r - l;
+            // f in [0, 1]
             final double f = (double) (ka - l) / n;
             // Note: Margins for fraction left/right of pivot L : R.
             // Subtract the larger margin to create the estimated size
