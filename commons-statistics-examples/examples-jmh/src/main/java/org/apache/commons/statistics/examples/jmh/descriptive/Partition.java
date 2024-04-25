@@ -173,7 +173,9 @@ final class Partition {
      * recursively call quickselect so very small lengths are included with an initial
      * medium length. Using lengths of 1023-5 and 2043-53 indicate optimum performance around
      * 80 for median-of-medians when placing the sample on the left. Adaptive linear methods
-     * are faster and so this value is reduced. Quickselect adaptive has a value around 20-30. */
+     * are faster and so this value is reduced. Quickselect adaptive has a value around 20-30.
+     * Note: When using {@link ExpandStrategy#T2} the input length must create a sample of at
+     * least length 2 as each end of the sample is used as a sentinel. */
     static final int LINEAR_SORTSELECT_SIZE = 24;
     /** Default sub-sampling size to identify a single pivot. Off by default.
      * The SELECT algorithm of Floyd-Rivest uses 600. */
@@ -192,8 +194,9 @@ final class Partition {
     static final int CONTROL_FLAGS = 0;
     /** Default single-pivot partition strategy. */
     static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
-    /** Default expand partition strategy. */
-    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T2;
+    /** Default expand partition strategy. A ternary method is faster on equal elements and no
+     * slower on unique elements. */
+    static final ExpandStrategy EXPAND_STRATEGY = ExpandStrategy.T1;
     /** Default single-pivot linear select strategy. */
     static final LinearStrategy LINEAR_STRATEGY = LinearStrategy.RSA;
     /** Default edge select strategy. */
@@ -611,19 +614,17 @@ final class Partition {
          * to test if the implementation of expand are efficient. */
         PER,
         /** Ternary partition method 1. Sweeps outwards and uses sentinels at the ends
-         * to avoid pointer range checks. Equal values are move directly into the
+         * to avoid pointer range checks. Equal values are moved directly into the
          * central pivot range. */
         T1,
-        /** Ternary partition method 2. Sweeps inwards and uses sentinels at the ends
-         * to avoid pointer range checks. Equal values are move to the outer edges;
-         * these are swapped to the pivot region in the final step using minimum moves.
-         * In the event of no equal values this requires no additional swaps. */
+        /** Ternary partition method 1. Similar to {@link #T1} with different method
+         * to set the sentinels. */
         T2,
         /** Binary partition method 1. Sweeps outwards and uses sentinels at the ends
          * to avoid pointer range checks. */
         B1,
-        /** Binary partition method 2. Sweeps inwards and uses sentinels at the ends
-         * to avoid pointer range checks. */
+        /** Binary partition method 2. Similar to {@link #B1} with different method
+         * to set the sentinels. */
         B2,
     }
 
@@ -8765,7 +8766,7 @@ final class Partition {
                     // Move upper bound of pivot region
                     a[j] = a[++p1];
                     a[p1] = v;
-                    if (w < v) {
+                    if (w != v) {
                         // Move lower bound of pivot region
                         a[p0] = w;
                         p0++;
@@ -8782,7 +8783,7 @@ final class Partition {
                     // Move lower bound of pivot region
                     a[i] = a[--p0];
                     a[p0] = v;
-                    if (w > v) {
+                    if (w != v) {
                         // Move upper bound of pivot region
                         a[p1] = w;
                         p1--;
@@ -9035,12 +9036,12 @@ final class Partition {
                     // Move upper bound of pivot region
                     a[j] = a[++p1];
                     a[p1] = v;
-                    a[p0] = w;
                     // Move lower bound of pivot region
-                    p0 += w != v ? 1 : 0;
-                    //if (w != v) {
-                    //    p0++;
-                    //}
+                    //p0 += w != v ? 1 : 0;
+                    if (w != v) {
+                        a[p0] = w;
+                        p0++;
+                    }
                 }
                 break;
             }
@@ -9053,12 +9054,12 @@ final class Partition {
                     // Move lower bound of pivot region
                     a[i] = a[--p0];
                     a[p0] = v;
-                    a[p1] = w;
                     // Move upper bound of pivot region
-                    p1 -= w != v ? 1 : 0;
-                    //if (w != v) {
-                    //    p1--;
-                    //}
+                    //p1 -= w != v ? 1 : 0;
+                    if (w != v) {
+                        a[p1] = w;
+                        p1--;
+                    }
                 }
                 break;
             }
