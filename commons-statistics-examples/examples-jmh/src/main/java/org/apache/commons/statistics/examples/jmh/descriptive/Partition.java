@@ -1144,9 +1144,16 @@ final class Partition {
             @Override
             int mapDistance(int d, int l, int r, int n) {
                 // If distance==r-l this returns n-1
-                // Is rounding required?
                 return (int) (d * (n - 1.0) / (r - l));
+                // Is rounding required?
                 //return (int) Math.round(d * (n - 1.0) / (r - l));
+
+                //// Half-adaption: compute the full adaption
+                //final int x = (int) (d * (n - 1.0) / (r - l));
+                //// Compute the median between the x and the middle
+                //// (benchmarks as slower)
+                //final int m = n >>> 1;
+                //return (m + x) >>> 1;
             }
         },
         /**
