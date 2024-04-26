@@ -249,6 +249,10 @@ final class Partition {
      * the mapping for the far step to ensure the smaller
      * margin always contains at least k elements. This is faster and so enabled by default. */
     static final int FLAG_QA_FAR_STEP_ADAPT_ORIGINAL = 0x10;
+    /** Use a 12th-tile for the sampling mode in the middle repeated step method.
+     * The default uses a 9th-tile which is a larger sample than the 12th-tile used in
+     * the step left/far left methods. */
+    static final int FLAG_QA_MIDDLE_12 = 0x20;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -9476,7 +9480,7 @@ final class Partition {
      * pivot are after it.
      *
      * <p>Assumes the range {@code r - l >= 8}; the caller is responsible for selection on a smaller
-     * range.
+     * range. If using a 12th-tile for sampling then assumes {@code r - l >= 11}.
      *
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
@@ -9496,16 +9500,22 @@ final class Partition {
     private int repeatedStep(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Adapted from Alexandrescu (2016), algorithm 8.
         // Moves the responsibility for selection when r-l <= 8 to the caller.
-        final int f = (r - l + 1) / 9;
+        // 5th 9th-tile: [4f:5f)
+        int f = (r - l + 1) / 9;
+        int s = l + (f << 2);
         if (flags < 0) {
             // i in tertile [3f:6f)
             final int f3 = 3 * f;
-            for (int i = l + f3, e = l + (f3 << 1); i < e; i++) {
+            for (int i = l + f3, end = l + (f3 << 1); i < end; i++) {
                 Sorting.sort3(a, i - f3, i, i + f3);
             }
+        } else if ((controlFlags & FLAG_QA_MIDDLE_12) != 0) {
+            // There is no reason to maintain a 9th-tile for sampling.
+            // Switch to a 12th-tile as used in the other methods.
+            f = (r - l + 1) / 12;
+            // middle - f/2
+            s = ((r + l) >>> 1) - (f >> 1);
         }
-        // i in 9th-tile: [4f:5f)
-        final int s = l + (f << 2);
         final int e = s + f - 1;
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - f, i, i + f);

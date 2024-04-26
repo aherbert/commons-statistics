@@ -1057,14 +1057,14 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
-    void testPartitionQAFarStep(double[] values, int[] indices) {
+    void testPartitionQAFarStepAndMiddle12(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
-            .setControlFlags(Partition.FLAG_QA_FAR_STEP)
+            .setControlFlags(Partition.FLAG_QA_FAR_STEP | Partition.FLAG_QA_MIDDLE_12)
             ::partitionQA);
     }
 
