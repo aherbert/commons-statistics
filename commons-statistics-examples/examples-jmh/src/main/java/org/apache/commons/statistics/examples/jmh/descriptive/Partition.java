@@ -1145,8 +1145,8 @@ final class Partition {
             int mapDistance(int d, int l, int r, int n) {
                 // If distance==r-l this returns n-1
                 // Is rounding required?
-                //return (int) (d * (n - 1.0) / (r - l));
-                return (int) Math.round(d * (n - 1.0) / (r - l));
+                return (int) (d * (n - 1.0) / (r - l));
+                //return (int) Math.round(d * (n - 1.0) / (r - l));
             }
         },
         /**
