@@ -1147,13 +1147,17 @@ final class Partition {
                 return (int) (d * (n - 1.0) / (r - l));
                 // Is rounding required?
                 //return (int) Math.round(d * (n - 1.0) / (r - l));
-
-                //// Half-adaption: compute the full adaption
-                //final int x = (int) (d * (n - 1.0) / (r - l));
-                //// Compute the median between the x and the middle
-                //// (benchmarks as slower)
-                //final int m = n >>> 1;
-                //return (m + x) >>> 1;
+            }
+        },
+        /** Use the midpoint between the adaption computed by the {@link #MEDIAN} and {@link #ADAPT} methods. */
+        HALF_ADAPT {
+            @Override
+            int mapDistance(int d, int l, int r, int n) {
+                // Half-adaption: compute the full adaption
+                final int x = ADAPT.mapDistance(d, l, r, n);
+                // Compute the median between the x and the middle
+                final int m = n >>> 1;
+                return (m + x) >>> 1;
             }
         },
         /**
