@@ -253,6 +253,10 @@ final class Partition {
      * The default uses a 9th-tile which is a larger sample than the 12th-tile used in
      * the step left/far left methods. */
     static final int FLAG_QA_MIDDLE_12 = 0x20;
+    /** Position the sample for quickselect adaptive to place the mapped k' at the target index k.
+     * This is not possible for the far step methods as it can generated a bounds error as
+     * k approaches the edge. */
+    static final int FLAG_QA_SAMPLE_K = 0x40;
 
     /**
      * Sort select size for the the distance of a single k from the edge of the range
@@ -9511,31 +9515,41 @@ final class Partition {
     private int repeatedStep(double[] a, int l, int r, int k, int[] upper, int flags) {
         // Adapted from Alexandrescu (2016), algorithm 8.
         // Moves the responsibility for selection when r-l <= 8 to the caller.
-        // 5th 9th-tile: [4f:5f)
-        int f = (r - l + 1) / 9;
-        int s = l + (f << 2);
+        int f;
+        int s;
+        int p;
         if (flags < 0) {
             // i in tertile [3f:6f)
+            f = (r - l + 1) / 9;
             final int f3 = 3 * f;
             for (int i = l + f3, end = l + (f3 << 1); i < end; i++) {
                 Sorting.sort3(a, i - f3, i, i + f3);
             }
-        } else if ((controlFlags & FLAG_QA_MIDDLE_12) != 0) {
-            // There is no reason to maintain a 9th-tile for sampling.
-            // Switch to a 12th-tile as used in the other methods.
-            f = (r - l + 1) / 12;
-            // middle - f/2
-            s = ((r + l) >>> 1) - (f >> 1);
+            // 5th 9th-tile: [4f:5f)
+            s = l + (f << 2);
+            p = s + noSamplingAdapt.mapDistance(k - l, l, r, f);
+        } else {
+            if ((controlFlags & FLAG_QA_MIDDLE_12) != 0) {
+                // Switch to a 12th-tile as used in the other methods.
+                f = (r - l + 1) / 12;
+                // middle - f/2
+                s = ((r + l) >>> 1) - (f >> 1);
+            } else {
+                f = (r - l + 1) / 9;
+                s = l + (f << 2);
+            }
+            // Adaption to target kf'/|A|
+            int kp = samplingAdapt.mapDistance(k - l, l, r, f);
+            // Centre the sample at k
+            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+                s = k - kp;
+            }
+            p = s + kp;
         }
         final int e = s + f - 1;
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - f, i, i + f);
         }
-        // Adaption to target kf/|A|
-        //int p = s + mapDistance(k - l, l, r, f);
-        int p = s + (flags < 0 ?
-            noSamplingAdapt.mapDistance(k - l, l, r, f) :
-            samplingAdapt.mapDistance(k - l, l, r, f));
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9582,10 +9596,19 @@ final class Partition {
         int e;
         int p;
         if (far) {
-            final int fp2 = fp << 1;
             // i in 4th 12th-tile
             s = l + f;
+            // Variable adaption
+            int kp;
+            if (flags < 0) {
+                kp = noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp);
+            } else {
+                kp = samplingEdgeAdapt.mapDistance(k - l, l, r, fp);
+                // Note: Not possible to centre the sample at k on the far step
+            }
             e = s + fp - 1;
+            p = s + kp;
+            final int fp2 = fp << 1;
             for (int i = s; i <= e; i++) {
                 // min into i
                 if (a[i] > a[i + fp]) {
@@ -9599,35 +9622,26 @@ final class Partition {
                     a[i + fp2] = v;
                 }
             }
-            // Variable adaption
-//            // Lower margin count = 2 * (k'+1); with k' = p - s
-//            if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
-//                // This mapping will create a lower margin that cannot contain k
-//                p = s + mapDistance(k - l, l, r, fp);
-//            } else {
-//                // Method only called with (k-l) / (r-l) <= 1/12.
-//                // f' = 1/12 * (r-l) => (k-l) <= f'
-//                // => k'/2 will ensure k is in the lower margin and is at most the median of f'
-//                p = s + ((k - l) >>> 1);
-//            }
-            p = s + (flags < 0 ?
-                noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp) :
-                samplingEdgeAdapt.mapDistance(k - l, l, r, fp));
         } else {
             // i in 5th 12th-tile
-            // This is a modification from Alexandrescu rather than 4th 12-th tile.
-            // Otherwise this is identical to repeatedStepFarLeft. This matches the text
-            // stating |A|/6 are on the left (1/4 * 1/3 * 2).
             s = l + f + fp;
+            // Variable adaption
+            int kp;
+            if (flags < 0) {
+                kp = noSamplingAdapt.mapDistance(k - l, l, r, fp);
+            } else {
+                kp = samplingAdapt.mapDistance(k - l, l, r, fp);
+                // Centre the sample at k
+                if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+                    // Avoid bounds error due to rounding as (k-l)/(r-l) -> 1/12
+                    s = Math.max(k - kp, l + fp);
+                }
+            }
             e = s + fp - 1;
+            p = s + kp;
             for (int i = s; i <= e; i++) {
                 Sorting.sort3(a, i - fp, i, i + fp);
             }
-            // Adaption to target kf'/|A|
-            //p = s + mapDistance(k - l, l, r, fp);
-            p = s + (flags < 0 ?
-                noSamplingAdapt.mapDistance(k - l, l, r, fp) :
-                samplingAdapt.mapDistance(k - l, l, r, fp));
         }
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
@@ -9676,7 +9690,16 @@ final class Partition {
         if (far) {
             // i in 9th 12th-tile
             e = r - f;
+            // Variable adaption
+            int kp;
+            if (flags < 0) {
+                kp = noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp);
+            } else {
+                kp = samplingEdgeAdapt.mapDistance(r - k, l, r, fp);
+                // Note: Not possible to centre the sample at k on the far step
+            }
             s = e - fp + 1;
+            p = e - kp;
             final int fp2 = fp << 1;
             for (int i = s; i <= e; i++) {
                 // max into i
@@ -9691,27 +9714,26 @@ final class Partition {
                     a[i - fp2] = v;
                 }
             }
-            // Reflection of step far left
-//            if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
-//                p = e - mapDistance(r - k, l, r, fp);
-//            } else {
-//                p = e - ((r - k) >>> 1);
-//            }
-            p = e - (flags < 0 ?
-                noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp) :
-                samplingEdgeAdapt.mapDistance(r - k, l, r, fp));
         } else {
             // i in 8th 12th-tile
             e = r - f - fp;
+            // Variable adaption
+            int kp;
+            if (flags < 0) {
+                kp = noSamplingAdapt.mapDistance(r - k, l, r, fp);
+            } else {
+                kp = samplingAdapt.mapDistance(r - k, l, r, fp);
+                // Centre the sample at k
+                if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+                    // Avoid bounds error due to rounding as (r-k)/(r-l) -> 11/12
+                    e = Math.min(k + kp, r - fp);
+                }
+            }
             s = e - fp + 1;
+            p = e - kp;
             for (int i = s; i <= e; i++) {
                 Sorting.sort3(a, i - fp, i, i + fp);
             }
-            // Adaption to target kf'/|A|
-            //p = e - mapDistance(r - k, l, r, fp);
-            p = e - (flags < 0 ?
-                noSamplingAdapt.mapDistance(r - k, l, r, fp) :
-                samplingAdapt.mapDistance(r - k, l, r, fp));
         }
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
@@ -9777,21 +9799,6 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // Variable adaption
-//        int p;
-//        // Lower margin count = 2 * (k'+1); with k' = p - s
-//        if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
-//            // This mapping will create a lower margin that cannot contain k
-//            p = s + mapDistance(k - l, l, r, fp);
-//        } else {
-//            // Method only called with (k-l) / (r-l) <= 1/12.
-//            // f' = 1/12 * (r-l) => (k-l) <= f'
-//            // => k'/2 will ensure k is in the lower margin and is at most the median of f'
-//            p = s + ((k - l) >>> 1);
-//        }
-//        int p = s + (flags < 0 ?
-//             noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp) :
-//             samplingEdgeAdapt.mapDistance(k - l, l, r, fp));
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
@@ -9823,7 +9830,7 @@ final class Partition {
      * @return Lower bound (inclusive) of the pivot range.
      */
     private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper, int flags) {
-        // Mirror image repeatedStepFarLeft using max into 4th quartile
+        // Mirror image repeatedStepFarLeft
         final int f = (r - l + 1) >> 2;
         final int fp = f / 3;
         // 11th 12th-tile
@@ -9857,16 +9864,6 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        // Reflection of step far left
-//        int p;
-//        if ((controlFlags & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
-//            p = e - mapDistance(r - k, l, r, fp);
-//        } else {
-//            p = e - ((r - k) >>> 1);
-//        }
-//        int p = e - (flags < 0 ?
-//            noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp) :
-//            samplingEdgeAdapt.mapDistance(r - k, l, r, fp));
         p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
