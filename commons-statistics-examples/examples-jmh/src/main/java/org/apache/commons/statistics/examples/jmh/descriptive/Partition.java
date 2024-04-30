@@ -203,6 +203,8 @@ final class Partition {
     static final EdgeSelectStrategy EDGE_STRATEGY = EdgeSelectStrategy.ESS;
     /** Default single-pivot stopper strategy. */
     static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SQA;
+    /** Default quickselect adaptive mode. */
+    static final AdaptMode ADAPT_MODE = AdaptMode.ADAPT3;
 
     /** Control flag for random sampling. */
     static final int FLAG_RANDOM_SAMPLING = 0x2;
@@ -217,14 +219,14 @@ final class Partition {
     static final int FLAG_SPLITTABLE_RANDOM = 0x20;
     /** Control flag for MSWS RNG. */
     static final int FLAG_MSWS = 0x40;
-    /** Control flag for quickselect adaptive to not use sampling mode. */
-    static final int FLAG_QA_NO_SAMPLING = 0x1;
+//    /** Control flag for quickselect adaptive to not use sampling mode. */
+//    static final int FLAG_QA_NO_SAMPLING = 0x1;
     /** Control flag for quickselect adaptive to propagate the no sampling mode recursively. */
     static final int FLAG_QA_PROPAGATE = 0x2;
-    /** Control flag for quickselect adaptive to map k to the median of the sample.
-     * This turns repeated step adaptive into repeated step improved. This applies
-     * to all quickselect adaptive repeated step methods. */
-    static final int FLAG_QA_NO_ADAPT_K = 0x4;
+//    /** Control flag for quickselect adaptive to map k to the median of the sample.
+//     * This turns repeated step adaptive into repeated step improved. This applies
+//     * to all quickselect adaptive repeated step methods. */
+//    static final int FLAG_QA_NO_ADAPT_K = 0x4;
     /** Control flag for quickselect adaptive to use a different far left/right step
      * using min of 4; then median of 3 into the 2nd 12th-tile. The default (original) uses
      * lower median of 4; then min of 3 into 4th 12th-tile). The default has a larger
@@ -445,10 +447,8 @@ final class Partition {
     private SelectFunction edgeSelection;
     /** Selection function used when quickselect progress is poor. */
     private SelectFunction stopperSelection;
-    /** Mask applied to the quickselect adaptive flags before mutual recursion.
-     * If the sign-bit is not masked out then no sampling mode is enabled through
-     * the call stack. */
-    private int qaFlagMask;
+    /** Quickselect adaptive mode. */
+    private AdaptMode adaptMode = ADAPT_MODE;
 
     /** Quickselect adaptive mapping function applied when sampling-mode is on. */
     private MapDistance samplingAdapt;
@@ -1198,6 +1198,189 @@ final class Partition {
     }
 
     /**
+     * Encapsulate the state of adaption in the quickselect adaptive algorithm.
+     *
+     * <p>To ensure linear runtime performance a fixed size of data must be eliminated at each
+     * step. This requires a median-of-median-of-medians pivot sample generated from all the data
+     * with the target {@code k} mapped to the middle of the sample so that the margins of the
+     * possible partitions are a minimum size.
+     * Note that random selection of a pivot will achieve the same margins with some probability
+     * and is less expensive to compute; runtime performance may be better or worse due to average
+     * quality of the pivot. The adaption in quickselect adaptive is two-fold:
+     * <ul>
+     * <li>Sample mode: Do not use all the data to create the pivot sample. This is less expensive
+     * to compute but invalidates strict margins. The margin quality is better than a random pivot
+     * due to sampling a reasonable range of the data and using medians to create the sample.
+     * <li>Adaption mode: Map the target {@code k} from the current range to the size of the pivot
+     * sample. This adapts the larger margin to the position of {@code k} thus increasing the chance
+     * of eliminating a large amount of data. However data randomness can create a larger margin so
+     * large it includes {@code k} and partitioning must eliminate a possibly very small other side.
+     * </ul>
+     *
+     * <p>The quickselect adaptive paper suggests sampling mode is turned off when margins are not
+     * achieved. That is the size after partitioning is not as small as expected.
+     * However there is no detail on whether to turn off adaption, and the margins that are
+     * targeted. This provides the following possible state transitions:
+     * <pre>{@code
+     * 1: sampling + adaption    --> no-sampling + adaption
+     * 2: sampling + adaption    --> no-sampling + no-adaption
+     * 3: sampling + adaption    --> no-sampling + adaption     --> no-sampling + no-adaption
+     * 4: sampling + no-adaption --> no-sampling + no-adaption
+     * }</pre>
+     *
+     * <p>The behaviour is captured in this enum as a state-machine. The finite state
+     * is dependent on the start state. The transition from one state to the next may require a
+     * count of failures to achieve; this is not captured in this state machine.
+     *
+     * <p>Note that use of no-adaption when sampling is unlikely to work unless the sample median
+     * is representative of the location of the pivot sample. This is true for
+     * median-of-median-of-medians but not the offset pivot samples used in quickselect adaptive;
+     * this is supported for completeness and can be used to demonstrate its inefficiency.
+     */
+    enum AdaptMode {
+        /** No sampling and no adaption (fixed margins) for worst-case linear runtime performance.
+         * This is a terminal state. */
+        FIXED {
+            @Override
+            boolean isSampleMode() {
+                return false;
+            }
+            @Override
+            boolean isAdapt() {
+                return false;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                // No further states
+                return this;
+            }
+        },
+        /** No sampling and use adaption. This is a terminal state. */
+        ADAPT1B {
+            @Override
+            boolean isSampleMode() {
+                return false;
+            }
+            @Override
+            boolean isAdapt() {
+                return true;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                // No further states
+                return this;
+            }
+        },
+        /** Sampling and adaption. Failure to achieve the expected partition size
+         * will revert to no sampling but retain adaption. */
+        ADAPT1 {
+            @Override
+            boolean isSampleMode() {
+                return true;
+            }
+            @Override
+            boolean isAdapt() {
+                return true;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                return r - l <= size ? this : ADAPT1B;
+            }
+        },
+        /** Sampling and adaption. Failure to achieve the expected partition size
+         * will revert to no sampling and no adaption. */
+        ADAPT2 {
+            @Override
+            boolean isSampleMode() {
+                return true;
+            }
+            @Override
+            boolean isAdapt() {
+                return true;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                return r - l <= size ? this : FIXED;
+            }
+        },
+        /** No sampling and use adaption. Failure to achieve the expected partition size
+         * will disable adaption (revert to fixed margins). */
+        ADAPT3B {
+            @Override
+            boolean isSampleMode() {
+                return false;
+            }
+            @Override
+            boolean isAdapt() {
+                return true;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                return r - l <= size ? this : FIXED;
+            }
+        },
+        /** Sampling and adaption. Failure to achieve the expected partition size
+         * will revert to no sampling but retain adaption. */
+        ADAPT3 {
+            @Override
+            boolean isSampleMode() {
+                return true;
+            }
+            @Override
+            boolean isAdapt() {
+                return true;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                return r - l <= size ? this : ADAPT3B;
+            }
+        },
+        /** Sampling and no adaption. Failure to achieve the expected partition size
+         * will disabled sampling (revert to fixed margins). */
+        ADAPT4 {
+            @Override
+            boolean isSampleMode() {
+                return true;
+            }
+            @Override
+            boolean isAdapt() {
+                return false;
+            }
+            @Override
+            AdaptMode update(int size, int l, int r) {
+                return r - l <= size ? this : FIXED;
+            }
+        };
+
+        /**
+         * Checks if sample-mode is enabled.
+         *
+         * @return true if sample mode is enabled
+         */
+        abstract boolean isSampleMode();
+
+        /**
+         * Checks if adaption is enabled.
+         *
+         * @return true if adaption is enabled
+         */
+        abstract boolean isAdapt();
+
+        /**
+         * Update the state using the expected {@code size} of the partition and the actual size.
+         *
+         * <p>For convenience this accepts the range {@code [l, r]} instead of the actual size.
+         * The implementation may use the range or ignore it.
+         *
+         * @param size Expected size of the partition.
+         * @param l Lower bound (inclusive).
+         * @param r Upper bound (inclusive).
+         * @return the new state
+         */
+        abstract AdaptMode update(int size, int l, int r);
+    }
+
+    /**
      * Constructor with defaults.
      */
     Partition() {
@@ -1455,7 +1638,7 @@ final class Partition {
             // - uses a bounds array to allow minimising the partition region size after pivot selection
             // - uses control flags to set sampling mode on/off
             stopperSelection = (a, l, r, ka, kb) -> quickSelectAdaptive(a, l, r, ka, kb, new int[1],
-                (controlFlags & FLAG_QA_NO_SAMPLING) != 0 ? -1 : 0);
+                adaptMode);
             break;
         default:
             throw new IllegalArgumentException("Unknown stopper: " + v);
@@ -1529,18 +1712,11 @@ final class Partition {
      */
     Partition setControlFlags(int v) {
         this.controlFlags = v;
-        // Set the QA mask
-        qaFlagMask = 0;
-        if ((v & FLAG_QA_NO_SAMPLING | FLAG_QA_PROPAGATE) != 0) {
-            qaFlagMask = Integer.MIN_VALUE;
-        }
         // Quickselect adaptive requires functions to map k to the sample.
         // These functions must be set based on the margins in the repeated step method.
         // These will differ due to the implementation and whether the first step is
         // skipped (sampling mode on).
-        if ((v & FLAG_QA_NO_ADAPT_K) != 0) {
-            samplingAdapt = samplingEdgeAdapt = noSamplingAdapt = noSamplingEdgeAdapt = MapDistance.MEDIAN;
-        } else if ((v & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
+        if ((v & FLAG_QA_FAR_STEP_ADAPT_ORIGINAL) != 0) {
             // Use the same mapping for all repeated step functions.
             // This is the original behaviour from Alexandrescu (2016).
             samplingAdapt = samplingEdgeAdapt = noSamplingAdapt = noSamplingEdgeAdapt = MapDistance.ADAPT;
@@ -1570,16 +1746,6 @@ final class Partition {
     }
 
     /**
-     * Sets the recursion consumer. This is called with the value of the recursion
-     * counter immediately before the introselect routine returns.
-     *
-     * @param v Value.
-     */
-    void setRecursionConsumer(IntConsumer v) {
-        this.recursionConsumer = Objects.requireNonNull(v);
-    }
-
-    /**
      * Sets the size for sortselect for the linearselect algorithm.
      * Must be above 0 for the algorithm to return (else an infinite loop occurs).
      *
@@ -1592,6 +1758,27 @@ final class Partition {
         }
         this.linearSortSelectSize = v;
         return this;
+    }
+
+    /**
+     * Sets the quickselect adaptive mode.
+     *
+     * @param v Value.
+     * @return {@code this} for chaining
+     */
+    Partition setAdaptMode(AdaptMode v) {
+        this.adaptMode = v;
+        return this;
+    }
+
+    /**
+     * Sets the recursion consumer. This is called with the value of the recursion
+     * counter immediately before the introselect routine returns.
+     *
+     * @param v Value.
+     */
+    void setRecursionConsumer(IntConsumer v) {
+        this.recursionConsumer = Objects.requireNonNull(v);
     }
 
     /**
@@ -6731,8 +6918,7 @@ final class Partition {
             if (n != 0) {
                 final int ka = Math.min(k[0], k[n - 1]);
                 final int kb = Math.max(k[0], k[n - 1]);
-                quickSelectAdaptive(a, 0, end - 1, ka, kb, new int[1],
-                    (controlFlags & FLAG_QA_NO_SAMPLING) != 0 ? -1 : 0);
+                quickSelectAdaptive(a, 0, end - 1, ka, kb, new int[1], adaptMode);
             }
         }
         // Restore signed zeros
@@ -6774,14 +6960,14 @@ final class Partition {
      * @param ka First key of interest.
      * @param kb Last key of interest.
      * @param bounds Upper bound of the range containing {@code [ka, kb]} (inclusive).
-     * @param flags Control flags.
+     * @param mode Adaption mode.
      * @return Lower bound of the range containing {@code [ka, kb]} (inclusive).
      */
     private int quickSelectAdaptive(double[] a, int left, int right, int ka, int kb,
-            int[] bounds, int flags) {
+            int[] bounds, AdaptMode mode) {
         int l = left;
         int r = right;
-        int cf = flags;
+        AdaptMode m = mode;
         while (true) {
             // Select when ka and kb are close to the same end
             // |l|-----|ka|kkkkkkkk|kb|------|r|
@@ -6838,37 +7024,37 @@ final class Partition {
                     if ((controlFlags & FLAG_QA_FAR_STEP) != 0) {
                         // 1/12 : 1/3 (use 1/4 + 1/32 + 1/64 ~ 0.328)
                         n -= (n >> 2) + (n >> 5) + (n >> 6);
-                        p0 = repeatedStepFarLeft(a, l, r, ka, bounds, cf);
+                        p0 = repeatedStepFarLeft(a, l, r, ka, bounds, m);
                     } else {
                         // 1/12 : 3/8
                         n -= (n >> 2) + (n >> 3);
-                        p0 = repeatedStepLeft(a, l, r, ka, bounds, cf, true);
+                        p0 = repeatedStepLeft(a, l, r, ka, bounds, m, true);
                     }
                 } else {
                     // 1/6 : 1/4
                     n -= n >> 2;
-                    p0 = repeatedStepLeft(a, l, r, ka, bounds, cf, false);
+                    p0 = repeatedStepLeft(a, l, r, ka, bounds, m, false);
                 }
             } else if (f >= STEP_RIGHT) {
                 if (f >= STEP_FAR_RIGHT) {
                     if ((controlFlags & FLAG_QA_FAR_STEP) != 0) {
                         // 1/12 : 1/3 (use 1/4 + 1/32 + 1/64 ~ 0.328)
                         n -= (n >> 2) + (n >> 5) + (n >> 6);
-                        p0 = repeatedStepFarRight(a, l, r, ka, bounds, cf);
+                        p0 = repeatedStepFarRight(a, l, r, ka, bounds, m);
                     } else {
                         // 3/8 : 1/12
                         n -= (n >> 2) + (n >> 3);
-                        p0 = repeatedStepRight(a, l, r, ka, bounds, cf, true);
+                        p0 = repeatedStepRight(a, l, r, ka, bounds, m, true);
                     }
                 } else {
                     // 1/4 : 1/6
                     n -= n >> 2;
-                    p0 = repeatedStepRight(a, l, r, ka, bounds, cf, false);
+                    p0 = repeatedStepRight(a, l, r, ka, bounds, m, false);
                 }
             } else {
                 // 2/9 : 2/9 (use 1/4 - 1/32 ~ 0.219)
                 n -= (n >> 2) - (n >> 5);
-                p0 = repeatedStep(a, l, r, ka, bounds, cf);
+                p0 = repeatedStep(a, l, r, ka, bounds, m);
             }
 
             // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
@@ -6899,7 +7085,7 @@ final class Partition {
                 return p0;
             }
             // Update sampling mode: set sign bit if did not reach expected size n
-            cf |= n - r + l;
+            m = m.update(n, l, r);
         }
     }
 
@@ -9509,16 +9695,16 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
+     * @param mode Adaption mode.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStep(double[] a, int l, int r, int k, int[] upper, int flags) {
+    private int repeatedStep(double[] a, int l, int r, int k, int[] upper, AdaptMode mode) {
         // Adapted from Alexandrescu (2016), algorithm 8.
         // Moves the responsibility for selection when r-l <= 8 to the caller.
         int f;
         int s;
         int p;
-        if (flags < 0) {
+        if (!mode.isSampleMode()) {
             // i in tertile [3f:6f)
             f = (r - l + 1) / 9;
             final int f3 = 3 * f;
@@ -9527,7 +9713,7 @@ final class Partition {
             }
             // 5th 9th-tile: [4f:5f)
             s = l + (f << 2);
-            p = s + noSamplingAdapt.mapDistance(k - l, l, r, f);
+            p = s + (mode.isAdapt() ? noSamplingAdapt.mapDistance(k - l, l, r, f) : (f >>> 1));
         } else {
             if ((controlFlags & FLAG_QA_MIDDLE_12) != 0) {
                 // Switch to a 12th-tile as used in the other methods.
@@ -9539,7 +9725,7 @@ final class Partition {
                 s = l + (f << 2);
             }
             // Adaption to target kf'/|A|
-            int kp = samplingAdapt.mapDistance(k - l, l, r, f);
+            int kp = mode.isAdapt() ? samplingAdapt.mapDistance(k - l, l, r, f) : (f >>> 1);
             // Centre the sample at k
             if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
                 s = k - kp;
@@ -9550,7 +9736,8 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - f, i, i + f);
         }
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
+        p = quickSelectAdaptive(a, s, e, p, p, upper,
+            (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9575,16 +9762,16 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
+     * @param mode Adaption mode.
      * @param far Set to {@code true} to perform repeatedStepFarLeft.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper, int flags,
+    private int repeatedStepLeft(double[] a, int l, int r, int k, int[] upper, AdaptMode mode,
         boolean far) {
         // Adapted from Alexandrescu (2016), algorithm 9 and 10.
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
-        if (flags < 0) {
+        if (!mode.isSampleMode()) {
             // i in 2nd quartile
             final int f2 = f + f;
             for (int i = l + f, e = l + f2; i < e; i++) {
@@ -9600,10 +9787,10 @@ final class Partition {
             s = l + f;
             // Variable adaption
             int kp;
-            if (flags < 0) {
-                kp = noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp);
+            if (!mode.isSampleMode()) {
+                kp = mode.isAdapt() ? noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
             } else {
-                kp = samplingEdgeAdapt.mapDistance(k - l, l, r, fp);
+                kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
                 // Note: Not possible to centre the sample at k on the far step
             }
             e = s + fp - 1;
@@ -9627,10 +9814,10 @@ final class Partition {
             s = l + f + fp;
             // Variable adaption
             int kp;
-            if (flags < 0) {
-                kp = noSamplingAdapt.mapDistance(k - l, l, r, fp);
+            if (!mode.isSampleMode()) {
+                kp = mode.isAdapt() ? noSamplingAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
             } else {
-                kp = samplingAdapt.mapDistance(k - l, l, r, fp);
+                kp = mode.isAdapt() ? samplingAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
                 // Centre the sample at k
                 if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
                     // Avoid bounds error due to rounding as (k-l)/(r-l) -> 1/12
@@ -9643,7 +9830,8 @@ final class Partition {
                 Sorting.sort3(a, i - fp, i, i + fp);
             }
         }
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
+        p = quickSelectAdaptive(a, s, e, p, p, upper,
+            (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9668,15 +9856,15 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
+     * @param mode Adaption mode.
      * @param far Set to {@code true} to perform repeatedStepFarRight.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper, int flags,
+    private int repeatedStepRight(double[] a, int l, int r, int k, int[] upper, AdaptMode mode,
         boolean far) {
         // Mirror image repeatedStepLeft using upper median into 3rd quartile
         final int f = (r - l + 1) >> 2;
-        if (flags < 0) {
+        if (!mode.isSampleMode()) {
             // i in 3rd quartile
             final int f2 = f + f;
             for (int i = r - f, e = r - f2; i > e; i--) {
@@ -9692,10 +9880,10 @@ final class Partition {
             e = r - f;
             // Variable adaption
             int kp;
-            if (flags < 0) {
-                kp = noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp);
+            if (!mode.isSampleMode()) {
+                kp = mode.isAdapt() ? noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
             } else {
-                kp = samplingEdgeAdapt.mapDistance(r - k, l, r, fp);
+                kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
                 // Note: Not possible to centre the sample at k on the far step
             }
             s = e - fp + 1;
@@ -9719,10 +9907,10 @@ final class Partition {
             e = r - f - fp;
             // Variable adaption
             int kp;
-            if (flags < 0) {
-                kp = noSamplingAdapt.mapDistance(r - k, l, r, fp);
+            if (!mode.isSampleMode()) {
+                kp = mode.isAdapt() ? noSamplingAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
             } else {
-                kp = samplingAdapt.mapDistance(r - k, l, r, fp);
+                kp = mode.isAdapt() ? samplingAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
                 // Centre the sample at k
                 if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
                     // Avoid bounds error due to rounding as (r-k)/(r-l) -> 11/12
@@ -9735,7 +9923,8 @@ final class Partition {
                 Sorting.sort3(a, i - fp, i, i + fp);
             }
         }
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
+        p = quickSelectAdaptive(a, s, e, p, p, upper,
+            (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9761,10 +9950,10 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
+     * @param mode Adaption mode.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper, int flags) {
+    private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper, AdaptMode mode) {
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
         final int fp = f / 3;
@@ -9772,8 +9961,8 @@ final class Partition {
         final int s = l + fp;
         final int e = s + fp - 1;
         int p;
-        if (flags < 0) {
-            p = s + noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp);
+        if (!mode.isSampleMode()) {
+            p = s + (mode.isAdapt() ? noSamplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1);
             // i in 2nd quartile; min into i-f (1st quartile)
             final int f2 = f + f;
             for (int i = l + f, end = l + f2; i < end; i++) {
@@ -9794,12 +9983,13 @@ final class Partition {
                 }
             }
         } else {
-            p = s + samplingEdgeAdapt.mapDistance(k - l, l, r, fp);
+            p = s + (mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1);
         }
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
+        p = quickSelectAdaptive(a, s, e, p, p, upper,
+            (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -9826,10 +10016,10 @@ final class Partition {
      * @param r Upper bound (inclusive).
      * @param k Target index.
      * @param upper Upper bound (inclusive) of the pivot range.
-     * @param flags Control flags.
+     * @param mode Adaption mode.
      * @return Lower bound (inclusive) of the pivot range.
      */
-    private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper, int flags) {
+    private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper, AdaptMode mode) {
         // Mirror image repeatedStepFarLeft
         final int f = (r - l + 1) >> 2;
         final int fp = f / 3;
@@ -9837,8 +10027,8 @@ final class Partition {
         final int e = r - fp;
         final int s = e - fp + 1;
         int p;
-        if (flags < 0) {
-            p = e - noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp);
+        if (!mode.isSampleMode()) {
+            p = e - (mode.isAdapt() ? noSamplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1);
             // i in 3rd quartile; max into i+f (4th quartile)
             final int f2 = f + f;
             for (int i = r - f, end = r - f2; i > end; i--) {
@@ -9859,12 +10049,13 @@ final class Partition {
                 }
             }
         } else {
-            p = e - samplingEdgeAdapt.mapDistance(r - k, l, r, fp);
+            p = e - (mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1);
         }
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive(a, s, e, p, p, upper, flags & qaFlagMask);
+        p = quickSelectAdaptive(a, s, e, p, p, upper,
+            (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
     }
 

@@ -33,6 +33,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.AdaptMode;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.ExpandStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.LinearStrategy;
@@ -1044,6 +1045,19 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionQAAlwaysAdapt(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
+            .setExpandStrategy(ExpandStrategy.T1)
+            .setAdaptMode(AdaptMode.ADAPT1)
+            ::partitionQA);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionQANoSampling(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
@@ -1051,7 +1065,8 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
-            .setControlFlags(Partition.FLAG_QA_NO_SAMPLING)
+            // No sampling but always use variable margins
+            .setAdaptMode(AdaptMode.ADAPT1B)
             ::partitionQA);
     }
 
@@ -1065,19 +1080,6 @@ class PartitionTest {
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             .setControlFlags(Partition.FLAG_QA_FAR_STEP | Partition.FLAG_QA_MIDDLE_12)
-            ::partitionQA);
-    }
-
-    @ParameterizedTest
-    @MethodSource(value = {"testPartition"})
-    void testPartitionQANoAdapt(double[] values, int[] indices) {
-        Assumptions.assumeTrue(indices.length == 1 ||
-            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
-            .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
-            .setExpandStrategy(ExpandStrategy.T1)
-            .setControlFlags(Partition.FLAG_QA_NO_ADAPT_K)
             ::partitionQA);
     }
 

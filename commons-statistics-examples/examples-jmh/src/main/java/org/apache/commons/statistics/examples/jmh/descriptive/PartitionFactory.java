@@ -19,6 +19,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.AdaptMode;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.EdgeSelectStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.ExpandStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
@@ -146,6 +147,7 @@ final class PartitionFactory {
         final LinearStrategy linearStrategy = getEnumOrElse(s, LinearStrategy.class, Partition.LINEAR_STRATEGY);
         final EdgeSelectStrategy esStrategy = getEnumOrElse(s, EdgeSelectStrategy.class, Partition.EDGE_STRATEGY);
         final StopperStrategy stopStrategy = getEnumOrElse(s, StopperStrategy.class, Partition.STOPPER_STRATEGY);
+        final AdaptMode adaptMode = getEnumOrElse(s, AdaptMode.class, Partition.ADAPT_MODE);
         // Check for unharvested parameters
         for (int i = s[0].length(); --i >= 0;) {
             if (s[0].charAt(i) != '_') {
@@ -169,6 +171,7 @@ final class PartitionFactory {
         p.setEdgeSelectStrategy(esStrategy);
         p.setStopperStrategy(stopStrategy);
         p.setLinearSortSelectSize(linearSortSelectConstant);
+        p.setAdaptMode(adaptMode);
 
         return p;
     }
@@ -305,25 +308,31 @@ final class PartitionFactory {
     }
 
     /**
-     * Gets the pivot strategy for the recursive partition algorithm.
+     * Gets the enum from the name. The enum name must be prefixed with an underscore.
      *
      * @param <E> Enum type.
      * @param name Algorithm name (updated in-place to remove the parameter).
      * @param cls Class of the enum.
      * @param defaultValue Default value.
-     * @return the pivot strategy
+     * @return the enum value
      */
     static <E extends Enum<E>> E getEnumOrElse(String[] name, Class<E> cls, E defaultValue) {
         // Names can have partial matches. Match the longest name
+        int index = -1;
         int len = 0;
         E result = defaultValue;
         for (final E s : cls.getEnumConstants()) {
-            if (name[0].contains(s.name()) && s.name().length() > len) {
-                result = s;
+            // Use the index so we can mandate that the enum is prefixed by underscore
+            final int i = name[0].indexOf(s.name());
+            if ((i > 0 && name[0].charAt(i - 1) == '_' || i == 0) && s.name().length() > len) {
+                index = i;
                 len = s.name().length();
+                result = s;
             }
         }
-        name[0] = name[0].replace(result.toString(), "");
+        if (index >= 0) {
+            name[0] = name[0].substring(0, index) + name[0].substring(index + len);
+        }
         return result;
     }
 }

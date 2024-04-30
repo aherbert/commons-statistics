@@ -21,6 +21,7 @@ import java.util.EnumSet;
 import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.AdaptMode;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.PairedKeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.SPStrategy;
@@ -102,6 +103,12 @@ class PartitionFactoryTest {
     }
 
     @Test
+    void testGetAdaptMode() {
+        assertEnumParameter(Partition.ADAPT_MODE,
+            s -> PartitionFactory.getEnumOrElse(s, AdaptMode.class, Partition.ADAPT_MODE));
+    }
+
+    @Test
     void testInvalidPrefix() {
         Assertions.assertThrows(IllegalArgumentException.class, () ->
             PartitionFactory.createPartition("IDP", "ISP", 0, 0));
@@ -155,15 +162,15 @@ class PartitionFactoryTest {
             s[0] = e.toString();
             Assertions.assertEquals(e, fun.apply(s));
             Assertions.assertEquals("", s[0]);
-            s[0] = "before" + e;
+            s[0] = "before_" + e;
             Assertions.assertEquals(e, fun.apply(s));
-            Assertions.assertEquals("before", s[0]);
+            Assertions.assertEquals("before_", s[0]);
             s[0] = e + "after";
             Assertions.assertEquals(e, fun.apply(s));
             Assertions.assertEquals("after", s[0]);
-            s[0] = "before" + e + "after";
+            s[0] = "before_" + e + "after";
             Assertions.assertEquals(e, fun.apply(s));
-            Assertions.assertEquals("beforeafter", s[0]);
+            Assertions.assertEquals("before_after", s[0]);
         });
     }
 }
