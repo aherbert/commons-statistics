@@ -301,12 +301,12 @@ final class Partition {
      * destroy sorted data. On data that is structured with repeat patterns, the
      * shuffle removes side-effects of patterns and stabilises performance where the
      * standard Floyd-Rivest algorithm (with a non-random local sample) will recurse excessively
-     * and trigger a switch to heapselect. The threshold has been chosen at a level
+     * and trigger a switch to the stopper function. The threshold has been chosen at a level
      * where average performance over a variety of data distributions shows no performance loss.
      * Individual distributions may be better or worse at different thresholds. On random
      * data the impact is minimal; on sorted data the impact is approximately 10%. On data with
      * patterns that trigger excess recursion this can increase performance by an order of
-     * magnitude. Note that heapselect will still be used to avoid worst-case quickselect
+     * magnitude. Note that the stopper will still be used to avoid worst-case quickselect
      * performance if this threshold is not appropriate for the input data. */
     static final int RANDOM_SUB_SAMPLING_SIZE = 25000;
     /** Increment used for the recursion counter. The counter will overflow to negative when
@@ -7108,7 +7108,7 @@ final class Partition {
                 }
                 return p0;
             }
-            // Update sampling mode: set sign bit if did not reach expected size n
+            // Update sampling mode
             m = m.update(n, l, r);
         }
     }
@@ -7330,7 +7330,6 @@ final class Partition {
                         }
                     }
                 }
-                // Convert ln(n) to 2 * log2(n) for recursion depth
                 select(a, ll, rr, ka, ka);
                 pivot = ka;
             } else {
