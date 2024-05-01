@@ -230,6 +230,8 @@ final class Partition {
 
     /** Control flag for quickselect adaptive to propagate the no sampling mode recursively. */
     static final int FLAG_QA_PROPAGATE = 0x1;
+    /** Control flag for quickselect adaptive variant of Floyd-Rivest random sampling. */
+    static final int FLAG_QA_RANDOM_SAMPLING = 0x4;
     /** Control flag for quickselect adaptive to use a different far left/right step
      * using min of 4; then median of 3 into the 2nd 12th-tile. The default (original) uses
      * lower median of 4; then min of 3 into 4th 12th-tile). The default has a larger
@@ -10175,8 +10177,48 @@ final class Partition {
         final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
         final int ll = Math.max(l, (int) (k - ith * s / n + sd));
         final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
-        // Optional random sampling
-        if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+        // Optional random sampling.
+        // Support two variants.
+        if ((controlFlags & FLAG_QA_RANDOM_SAMPLING) != 0) {
+            final IntUnaryOperator rng = createRNG(n, k);
+            if (ll == l) {
+                // Shuffle [l, rr] from [l, r]
+                for (int i = l - 1; i < rr;) {
+                    // r - rand [0, r - i] : i is currently i-1
+                    final int j = r - rng.applyAsInt(r - i);
+                    final double t = a[++i];
+                    a[i] = a[j];
+                    a[j] = t;
+                }
+            } else if (rr == r) {
+                // Shuffle [ll, r] from [l, r]
+                for (int i = r + 1; i > ll;) {
+                    // l + rand [0, i - l] : i is currently i+1
+                    final int j = l + rng.applyAsInt(i - l);
+                    final double t = a[--i];
+                    a[i] = a[j];
+                    a[j] = t;
+                }
+            } else {
+                // Sample range [ll, rr] is internal
+                // Shuffle [ll, k) from [l, k)
+                for (int i = k; i > ll;) {
+                    // l + rand [0, i - l + 1) : i is currently i+1
+                    final int j = l + rng.applyAsInt(i - l);
+                    final double t = a[--i];
+                    a[i] = a[j];
+                    a[j] = t;
+                }
+                // Shuffle (k, rr] from (k, r]
+                for (int i = k; i < rr;) {
+                    // r - rand [0, r - i + 1) : i is currently i-1
+                    final int j = r - rng.applyAsInt(r - i);
+                    final double t = a[++i];
+                    a[i] = a[j];
+                    a[j] = t;
+                }
+            }
+        } else if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
             final IntUnaryOperator rng = createRNG(n, k);
             // Shuffle [ll, k) from [l, k)
             if (ll > l) {

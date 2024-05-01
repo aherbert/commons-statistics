@@ -1122,6 +1122,32 @@ class PartitionTest {
     }
 
     @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionQASampleStepRandom1(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 2*12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, 200)
+            .setLinearSortSelectSize(indices.length == 1 ? 12 : 24)
+            .setExpandStrategy(ExpandStrategy.T2)
+            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
+            ::partitionQA);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionQASampleStepRandom2(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 2*12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, 200)
+            .setLinearSortSelectSize(indices.length == 1 ? 12 : 24)
+            .setExpandStrategy(ExpandStrategy.T2)
+            .setControlFlags(Partition.FLAG_QA_RANDOM_SAMPLING)
+            ::partitionQA);
+    }
+
+    @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
