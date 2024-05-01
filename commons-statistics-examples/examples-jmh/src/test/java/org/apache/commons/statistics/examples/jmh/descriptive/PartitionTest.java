@@ -1037,7 +1037,7 @@ class PartitionTest {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, EC, Partition.SUBSAMPLING_SIZE)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             ::partitionQA);
@@ -1049,7 +1049,7 @@ class PartitionTest {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, EC, Partition.SUBSAMPLING_SIZE)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             .setAdaptMode(AdaptMode.ADAPT1)
@@ -1062,7 +1062,7 @@ class PartitionTest {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, EC, Partition.SUBSAMPLING_SIZE)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             // No sampling but always use variable margins
@@ -1076,7 +1076,7 @@ class PartitionTest {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, EC, Partition.SUBSAMPLING_SIZE)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             .setControlFlags(Partition.FLAG_QA_FAR_STEP | Partition.FLAG_QA_MIDDLE_12)
@@ -1089,7 +1089,7 @@ class PartitionTest {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, EC, Partition.SUBSAMPLING_SIZE)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             .setControlFlags(Partition.FLAG_QA_FAR_STEP_ADAPT_ORIGINAL)
@@ -1102,10 +1102,22 @@ class PartitionTest {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
         // Require the range >= 12: uses a special sortselect size
-        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+        assertPartition(values, indices, new Partition(SP, QS, EC, Partition.SUBSAMPLING_SIZE)
             .setLinearSortSelectSize(indices.length == 1 ? 6 : 12)
             .setExpandStrategy(ExpandStrategy.T1)
             .setControlFlags(Partition.FLAG_QA_SAMPLE_K)
+            ::partitionQA);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionQASampleStep(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        // Require the range >= 2*12: uses a special sortselect size
+        assertPartition(values, indices, new Partition(SP, QS, EC, 200)
+            .setLinearSortSelectSize(indices.length == 1 ? 12 : 24)
+            .setExpandStrategy(ExpandStrategy.T2)
             ::partitionQA);
     }
 
@@ -2305,23 +2317,26 @@ class PartitionTest {
             }
         };
         source.setRange(0);
+        source.setRngSeed(0xdeadbeef);
 
         // Uncomment for Valois
-        //source.setDistribution(
-        //    Distribution.RANDOM,
+        source.setDistribution(
+            Distribution.RANDOM
         //    Distribution.SORTED,
         //    Distribution.ONEZERO,
         //    Distribution.M3KILLER,
         //    Distribution.ROTATED,
         //    Distribution.TWOFACED,
         //    Distribution.ORGANPIPE
-        //);
-        //source.setModification(Modification.COPY);
-        //source.setSeed(1);
+        );
+        source.setModification(Modification.COPY);
+        source.setSeed(Integer.MAX_VALUE);
 
         source.setup();
         // Target the "median"
-        final int[] k = {source.getLength() >> 1};
+        //final int[] k = {source.getLength() >> 1};
+        // Target the "edge"
+        final int[] k = {source.getLength() / 20};
 
         // Stop based on recursion depth
         //final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_3, QS, EC, Integer.MAX_VALUE)
@@ -2332,7 +2347,8 @@ class PartitionTest {
         final int su = 1200;
         final Partition p = new Partition(PivotingStrategy.MEDIAN_OF_5, QS, EC, su)
             .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
-            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
+            .setControlFlags(Partition.FLAG_RANDOM_SAMPLING |
+                Partition.FLAG_QA_FAR_STEP | Partition.FLAG_QA_SAMPLE_K)
             // 92.9% confidence
             .setRecursionMultiple(4)
             .setRecursionConstant(1);
@@ -2341,7 +2357,8 @@ class PartitionTest {
             final int index = i;
             p.setRecursionConsumer(v -> TestUtils.printf("%d: %s (%d)%n", index, source.getDataSampleInfo(index), v));
             //p.setSPStrategy(SPStrategy.SP);
-            p.partitionISP(source.getDataSample(i), k, 1);
+            //p.partitionISP(source.getDataSample(i), k, 1);
+            p.partitionQA(source.getDataSample(i), k, 1);
         }
     }
 }

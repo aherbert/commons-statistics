@@ -206,6 +206,8 @@ final class Partition {
     /** Default quickselect adaptive mode. */
     static final AdaptMode ADAPT_MODE = AdaptMode.ADAPT3;
 
+    // Floyd-Rivest flags
+
     /** Control flag for random sampling. */
     static final int FLAG_RANDOM_SAMPLING = 0x2;
     /** Control flag for vector swap of the sample. */
@@ -213,20 +215,21 @@ final class Partition {
     /** Control flag for random subset sampling. This creates the sample at the end
      * of the data and requires moving regions to reposition around the target k. */
     static final int FLAG_SUBSET_SAMPLING = 0x8;
+
+    // RNG flags
+
     /** Control flag for biased nextInt(n) RNG. */
-    static final int FLAG_BIASED_RANDOM = 0x10;
+    static final int FLAG_BIASED_RANDOM = 0x1000;
     /** Control flag for SplittableRandom RNG. */
-    static final int FLAG_SPLITTABLE_RANDOM = 0x20;
+    static final int FLAG_SPLITTABLE_RANDOM = 0x2000;
     /** Control flag for MSWS RNG. */
-    static final int FLAG_MSWS = 0x40;
-//    /** Control flag for quickselect adaptive to not use sampling mode. */
-//    static final int FLAG_QA_NO_SAMPLING = 0x1;
+    static final int FLAG_MSWS = 0x4000;
+
+    // Quickselect adaptive flags. Must not clash with the Floyd-Rivest/RNG flags
+    // that are supported for sample mode.
+
     /** Control flag for quickselect adaptive to propagate the no sampling mode recursively. */
-    static final int FLAG_QA_PROPAGATE = 0x2;
-//    /** Control flag for quickselect adaptive to map k to the median of the sample.
-//     * This turns repeated step adaptive into repeated step improved. This applies
-//     * to all quickselect adaptive repeated step methods. */
-//    static final int FLAG_QA_NO_ADAPT_K = 0x4;
+    static final int FLAG_QA_PROPAGATE = 0x1;
     /** Control flag for quickselect adaptive to use a different far left/right step
      * using min of 4; then median of 3 into the 2nd 12th-tile. The default (original) uses
      * lower median of 4; then min of 3 into 4th 12th-tile). The default has a larger
@@ -5698,7 +5701,7 @@ final class Partition {
                 final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
                 final int ll = Math.max(l, (int) (k - ith * s / n + sd));
                 final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
-                // Optional: sample [l, r] into [ll, rr]
+                // Optional: sample [l, r] into [l, rs]
                 if ((flags & FLAG_SUBSET_SAMPLING) != 0) {
                     // Create a random sample at the left end.
                     // This creates an unbiased random sample.
@@ -7020,7 +7023,15 @@ final class Partition {
             // the margin guarantees) then sampling is disabled by setting the
             // control flags sign bit.
             if (f <= STEP_LEFT) {
-                if (f <= STEP_FAR_LEFT) {
+                if (m.isSampleMode() && n > subSamplingSize) {
+                    // Floyd-Rivest sampling. Expect to eliminate the same as QA steps.
+                    if (f <= STEP_FAR_LEFT) {
+                        n -= (n >> 2) + (n >> 5) + (n >> 6);
+                    } else {
+                        n -= (n >> 2) + (n >> 3);
+                    }
+                    p0 = sampleStep(a, l, r, ka, bounds, m);
+                } else if (f <= STEP_FAR_LEFT) {
                     if ((controlFlags & FLAG_QA_FAR_STEP) != 0) {
                         // 1/12 : 1/3 (use 1/4 + 1/32 + 1/64 ~ 0.328)
                         n -= (n >> 2) + (n >> 5) + (n >> 6);
@@ -7036,7 +7047,15 @@ final class Partition {
                     p0 = repeatedStepLeft(a, l, r, ka, bounds, m, false);
                 }
             } else if (f >= STEP_RIGHT) {
-                if (f >= STEP_FAR_RIGHT) {
+                if (m.isSampleMode() && n > subSamplingSize) {
+                    // Floyd-Rivest sampling. Expect to eliminate the same as QA steps.
+                    if (f >= STEP_FAR_RIGHT) {
+                        n -= (n >> 2) + (n >> 5) + (n >> 6);
+                    } else {
+                        n -= (n >> 2) + (n >> 3);
+                    }
+                    p0 = sampleStep(a, l, r, ka, bounds, m);
+                } else if (f >= STEP_FAR_RIGHT) {
                     if ((controlFlags & FLAG_QA_FAR_STEP) != 0) {
                         // 1/12 : 1/3 (use 1/4 + 1/32 + 1/64 ~ 0.328)
                         n -= (n >> 2) + (n >> 5) + (n >> 6);
@@ -7052,9 +7071,14 @@ final class Partition {
                     p0 = repeatedStepRight(a, l, r, ka, bounds, m, false);
                 }
             } else {
+                if (m.isSampleMode() && n > subSamplingSize) {
+                    // Floyd-Rivest sampling. Expect to eliminate the same as QA steps.
+                    p0 = sampleStep(a, l, r, ka, bounds, m);
+                } else {
+                    p0 = repeatedStep(a, l, r, ka, bounds, m);
+                }
                 // 2/9 : 2/9 (use 1/4 - 1/32 ~ 0.219)
                 n -= (n >> 2) - (n >> 5);
-                p0 = repeatedStep(a, l, r, ka, bounds, m);
             }
 
             // Note: Here we expect [ka, kb] to be small and splitting is unlikely.
@@ -8989,6 +9013,9 @@ final class Partition {
      * <p>Note: Requires that the range contains no NaN values.
      * This does not respect the ordering of signed zeros.
      *
+     * <p>This method requires that {@code left < start && end < right}. It supports
+     * {@code start == end}.
+     *
      * @param a Data array.
      * @param left Lower bound (inclusive).
      * @param right Upper bound (inclusive).
@@ -9043,6 +9070,8 @@ final class Partition {
             a[right] = v;
         }
 
+        // Required to avoid index bound error first use of i/j
+        assert left < start && end < right;
         int i = start;
         int j = end;
         while (true) {
@@ -9124,7 +9153,8 @@ final class Partition {
      * This does not respect the ordering of signed zeros.
      *
      * <p>This is similar to {@link #expandPartitionT1(double[], int, int, int, int, int, int, int[])}
-     * with a change to binary partitioning.
+     * with a change to binary partitioning. It requires that {@code left < start && end < right}.
+     * It supports {@code start == end}.
      *
      * @param a Data array.
      * @param left Lower bound (inclusive).
@@ -9177,6 +9207,8 @@ final class Partition {
             a[right] = v;
         }
 
+        // Required to avoid index bound error first use of i/j
+        assert left < start && end < right;
         int i = start;
         int j = end;
         while (true) {
@@ -9265,7 +9297,8 @@ final class Partition {
      * <p>This is similar to {@link #expandPartitionT1(double[], int, int, int, int, int, int, int[])}
      * with a change to how the end-point sentinels are created. It does not use the pivot
      * but uses values at start and end. This increases the length of the lower/upper ranges
-     * by 1 for the main scan.
+     * by 1 for the main scan. It requires that {@code start != end}. However it handles
+     * {@code left == start} and/or {@code end == right}.
      *
      * @param a Data array.
      * @param left Lower bound (inclusive).
@@ -9398,7 +9431,8 @@ final class Partition {
      * <p>This is similar to {@link #expandPartitionT2(double[], int, int, int, int, int, int, int[])}
      * with a change to binary partitioning. It is simpler than
      * {@link #expandPartitionB1(double[], int, int, int, int, int, int, int[])} as the pivot is
-     * not moved.
+     * not moved. It requires that {@code start != end}. However it handles
+     * {@code left == start} and/or {@code end == right}.
      *
      * @param a Data array.
      * @param left Lower bound (inclusive).
@@ -9724,6 +9758,10 @@ final class Partition {
                 f = (r - l + 1) / 9;
                 s = l + (f << 2);
             }
+//          // Floyd-Rivest sample size - crossover when n/12 == 0.5*n^2/3
+//          if (r - l > 216) {
+//              f = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//          }
             // Adaption to target kf'/|A|
             int kp = mode.isAdapt() ? samplingAdapt.mapDistance(k - l, l, r, f) : (f >>> 1);
             // Centre the sample at k
@@ -9778,11 +9816,15 @@ final class Partition {
                 Sorting.lowerMedian4(a, i - f, i, i + f, i + f2);
             }
         }
-        final int fp = f / 3;
+        int fp = f / 3;
         int s;
         int e;
         int p;
         if (far) {
+//            // Floyd-Rivest sample size
+//            if (r - l > 216) {
+//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//            }
             // i in 4th 12th-tile
             s = l + f;
             // Variable adaption
@@ -9793,6 +9835,11 @@ final class Partition {
                 kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
                 // Note: Not possible to centre the sample at k on the far step
             }
+//            // Centre the sample at k
+//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+//                // Avoid bounds error due to rounding as (k-l)/(r-l) -> 1/12
+//                s = Math.max(k - kp, l + fp);
+//            }
             e = s + fp - 1;
             p = s + kp;
             final int fp2 = fp << 1;
@@ -9810,6 +9857,10 @@ final class Partition {
                 }
             }
         } else {
+//            // Floyd-Rivest sample size
+//            if (r - l > 216) {
+//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//            }
             // i in 5th 12th-tile
             s = l + f + fp;
             // Variable adaption
@@ -9871,11 +9922,15 @@ final class Partition {
                 Sorting.upperMedian4(a, i - f2, i - f, i, i + f);
             }
         }
-        final int fp = f / 3;
+        int fp = f / 3;
         int s;
         int e;
         int p;
         if (far) {
+//            // Floyd-Rivest sample size
+//            if (r - l > 216) {
+//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//            }
             // i in 9th 12th-tile
             e = r - f;
             // Variable adaption
@@ -9886,6 +9941,11 @@ final class Partition {
                 kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
                 // Note: Not possible to centre the sample at k on the far step
             }
+//            // Centre the sample at k
+//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+//                // Avoid bounds error due to rounding as (r-k)/(r-l) -> 11/12
+//                e = Math.min(k + kp, r - fp);
+//            }
             s = e - fp + 1;
             p = e - kp;
             final int fp2 = fp << 1;
@@ -9903,6 +9963,10 @@ final class Partition {
                 }
             }
         } else {
+//            // Floyd-Rivest sample size
+//            if (r - l > 216) {
+//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//            }
             // i in 8th 12th-tile
             e = r - f - fp;
             // Variable adaption
@@ -9956,9 +10020,9 @@ final class Partition {
     private int repeatedStepFarLeft(double[] a, int l, int r, int k, int[] upper, AdaptMode mode) {
         // Moves the responsibility for selection when r-l <= 11 to the caller.
         final int f = (r - l + 1) >> 2;
-        final int fp = f / 3;
+        int fp = f / 3;
         // 2nd 12th-tile
-        final int s = l + fp;
+        int s = l + fp;
         final int e = s + fp - 1;
         int p;
         if (!mode.isSampleMode()) {
@@ -9983,7 +10047,17 @@ final class Partition {
                 }
             }
         } else {
-            p = s + (mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1);
+//            // Floyd-Rivest sample size
+//            if (r - l > 216) {
+//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//            }
+            int kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
+//            // Centre the sample at k
+//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+//                // Avoid bounds error due to rounding as (k-l)/(r-l) -> 1/12
+//                s = Math.max(k - kp, l + fp);
+//            }
+            p = s + kp;
         }
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
@@ -10008,8 +10082,7 @@ final class Partition {
      * with the maximum of 4 then median of 3; the final sample is placed in the
      * 11th 12th-tile; the pivot chosen from the sample is adaptive using the input {@code k}.
      *
-     * <p>Given a pivot in the middle of the sample this has margins of 1/3 and 1/12. The
-     * larger margin is smaller than
+     * <p>Given a pivot in the middle of the sample this has margins of 1/3 and 1/12.
      *
      * @param a Data array.
      * @param l Lower bound (inclusive).
@@ -10022,9 +10095,9 @@ final class Partition {
     private int repeatedStepFarRight(double[] a, int l, int r, int k, int[] upper, AdaptMode mode) {
         // Mirror image repeatedStepFarLeft
         final int f = (r - l + 1) >> 2;
-        final int fp = f / 3;
+        int fp = f / 3;
         // 11th 12th-tile
-        final int e = r - fp;
+        int e = r - fp;
         final int s = e - fp + 1;
         int p;
         if (!mode.isSampleMode()) {
@@ -10049,7 +10122,17 @@ final class Partition {
                 }
             }
         } else {
-            p = e - (mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1);
+//            // Floyd-Rivest sample size
+//            if (r - l > 216) {
+//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
+//            }
+            int kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
+//            // Centre the sample at k
+//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
+//                // Avoid bounds error due to rounding as (r-k)/(r-l) -> 11/12
+//                e = Math.min(k + kp, r - fp);
+//            }
+            p = e - kp;
         }
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
@@ -10057,6 +10140,75 @@ final class Partition {
         p = quickSelectAdaptive(a, s, e, p, p, upper,
             (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
         return expandFunction.partition(a, l, r, s, e, p, upper[0], upper);
+    }
+
+    /**
+     * Partition an array slice around a pivot. Partitioning exchanges array elements such
+     * that all elements smaller than pivot are before it and all elements larger than
+     * pivot are after it.
+     *
+     * <p>Partitions a Floyd-Rivest sample around a pivot offset so that the input {@code k} will
+     * fall in the smaller partition when the entire range is partitioned.
+     *
+     * <p>Assumes the range {@code r - l} is large; the original Floyd-Rivest size for sampling
+     * was 600.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * This does not respect the ordering of signed zeros.
+     *
+     * @param a Data array.
+     * @param l Lower bound (inclusive).
+     * @param r Upper bound (inclusive).
+     * @param k Target index.
+     * @param upper Upper bound (inclusive) of the pivot range.
+     * @param mode Adaption mode.
+     * @return Lower bound (inclusive) of the pivot range.
+     */
+    private int sampleStep(double[] a, int l, int r, int k, int[] upper, AdaptMode mode) {
+        // Floyd-Rivest: use SELECT recursively on a sample of size S to get an estimate
+        // for the (k-l+1)-th smallest element into a[k], biased slightly so that the
+        // (k-l+1)-th element is expected to lie in the smaller set after partitioning.
+        final int n = r - l + 1;
+        final int ith = k - l + 1;
+        final double z = Math.log(n);
+        // sample size = 0.5 * n^(2/3)
+        final double s = 0.5 * Math.exp(0.6666666666666666 * z);
+        final double sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * Integer.signum(ith - (n >> 1));
+        final int ll = Math.max(l, (int) (k - ith * s / n + sd));
+        final int rr = Math.min(r, (int) (k + (n - ith) * s / n + sd));
+        // Optional random sampling
+        if ((controlFlags & FLAG_RANDOM_SAMPLING) != 0) {
+            final IntUnaryOperator rng = createRNG(n, k);
+            // Shuffle [ll, k) from [l, k)
+            if (ll > l) {
+                for (int i = k; i > ll;) {
+                    // l + rand [0, i - l + 1) : i is currently i+1
+                    final int j = l + rng.applyAsInt(i - l);
+                    final double t = a[--i];
+                    a[i] = a[j];
+                    a[j] = t;
+                }
+            }
+            // Shuffle (k, rr] from (k, r]
+            if (rr < r) {
+                for (int i = k; i < rr;) {
+                    // r - rand [0, r - i + 1) : i is currently i-1
+                    final int j = r - rng.applyAsInt(r - i);
+                    final double t = a[++i];
+                    a[i] = a[j];
+                    a[j] = t;
+                }
+            }
+        }
+        // Sample recursion restarts from [ll, rr]
+        final int p = quickSelectAdaptive(a, ll, rr, k, k, upper,
+            (controlFlags & FLAG_QA_PROPAGATE) != 0 ? mode : adaptMode);
+
+        // Expect a small sample and repartition the entire range...
+        // Does not support a pivot range so use the centre
+        //return spFunction.partition(a, l, r, (p + upper[0]) >>> 1, upper);
+
+        return expandFunction.partition(a, l, r, ll, rr, p, upper[0], upper);
     }
 
     /**
