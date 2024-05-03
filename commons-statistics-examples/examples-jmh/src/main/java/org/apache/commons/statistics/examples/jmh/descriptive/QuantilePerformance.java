@@ -120,6 +120,8 @@ public class QuantilePerformance {
     private static final String LINEAR = "Linear";
     /** Quickselect adaptive implementation. */
     private static final String QA = "QA";
+    /** Quickselect adaptive implementation. */
+    private static final String QA2 = "QA2";
     /** Commons Statistics Quantile implementation. This method is built using the best performing
      * select function across a range of input data. This algorithm currently cannot be configured. */
     private static final String SELECT = "SELECT";
@@ -2436,6 +2438,13 @@ public class QuantilePerformance {
                 final Partition part = PartitionFactory.createPartition(name, LINEAR, qs, ec);
                 function = (data, indices) -> {
                     part.partitionLinear(data, indices.clone(), indices.length);
+                    return extractIndices(data, indices);
+                };
+            } else if (name.startsWith(QA2)) {
+                // Configurable only by input control flags
+                final int cf = PartitionFactory.getControlFlags(new String[] {name}, Partition.QA_FLAGS);
+                function = (data, indices) -> {
+                    Partition.partitionQA2(data, indices.clone(), indices.length, cf);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(QA)) {

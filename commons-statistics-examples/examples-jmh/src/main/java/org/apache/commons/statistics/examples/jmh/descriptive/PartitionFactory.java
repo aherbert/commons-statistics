@@ -49,8 +49,8 @@ final class PartitionFactory {
     private static final Pattern RC_PATTERN = Pattern.compile("RC(\\d+)");
     /** Pattern for the compression level. */
     private static final Pattern CL_PATTERN = Pattern.compile("CL(\\d+)");
-    /** Pattern for the control flags. */
-    private static final Pattern CF_PATTERN = Pattern.compile("CF(\\d+)");
+    /** Pattern for the control flags. Allow negative flags. */
+    private static final Pattern CF_PATTERN = Pattern.compile("CF(-?\\d+)");
 
     /** No instances. */
     private PartitionFactory() {}
@@ -298,13 +298,25 @@ final class PartitionFactory {
      * @return the control flags
      */
     static int getControlFlags(String[] name) {
+        return getControlFlags(name, Partition.CONTROL_FLAGS);
+    }
+
+    /**
+     * Gets the control flags. These are used to enable additional features, for example
+     * random sampling in the Floyd-Rivest algorithm.
+     *
+     * @param name Algorithm name (updated in-place to remove the parameter).
+     * @param defaultValue Default value.
+     * @return the control flags
+     */
+    static int getControlFlags(String[] name, int defaultValue) {
         final Matcher m = CF_PATTERN.matcher(name[0]);
         if (m.find()) {
             final int i = Integer.parseInt(name[0], m.start(1), m.end(1), 10);
             name[0] = name[0].substring(0, m.start()) + name[0].substring(m.end(), name[0].length());
             return i;
         }
-        return Partition.CONTROL_FLAGS;
+        return defaultValue;
     }
 
     /**

@@ -1149,6 +1149,14 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionQA2(double[] values, int[] indices) {
+        Assumptions.assumeTrue(indices.length == 1 ||
+            (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
+        assertPartition(values, indices, Partition::partitionQA2);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
     }

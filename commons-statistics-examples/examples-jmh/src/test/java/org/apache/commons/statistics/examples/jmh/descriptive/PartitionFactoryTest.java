@@ -70,6 +70,10 @@ class PartitionFactoryTest {
     @Test
     void testGetControlFlags() {
         assertIntParameter(Partition.CONTROL_FLAGS, "CF", PartitionFactory::getControlFlags);
+        // Special support for negative flags
+        Assertions.assertEquals(-1, PartitionFactory.getControlFlags(new String[] {"CF-1"}));
+        Assertions.assertEquals(-2, PartitionFactory.getControlFlags(new String[] {"CF-2"}));
+        Assertions.assertEquals(-42, PartitionFactory.getControlFlags(new String[] {"none"}, -42));
     }
 
     @Test
