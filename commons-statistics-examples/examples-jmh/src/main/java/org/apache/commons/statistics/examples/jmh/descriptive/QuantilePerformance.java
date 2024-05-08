@@ -2441,10 +2441,13 @@ public class QuantilePerformance {
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(QA2)) {
-                // Configurable only by input control flags
-                final int cf = PartitionFactory.getControlFlags(new String[] {name}, Partition.QA_FLAGS);
+                // Configurable only by static properties.
+                // Default to FR sampling for the initial mode.
+                final int mode = PartitionFactory.getControlFlags(new String[] {name}, -1);
+                final int inc = PartitionFactory.getOptionFlags(new String[] {name}, 1);
+                Partition.configureQaAdaptive(mode, inc);
                 function = (data, indices) -> {
-                    Partition.partitionQA2(data, indices.clone(), indices.length, cf);
+                    Partition.partitionQA2(data, indices.clone(), indices.length);
                     return extractIndices(data, indices);
                 };
             } else if (name.startsWith(QA)) {

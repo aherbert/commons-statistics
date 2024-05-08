@@ -192,6 +192,8 @@ final class Partition {
     static final int COMPRESSION_LEVEL = 1;
     /** Default control flags. */
     static final int CONTROL_FLAGS = 0;
+    /** Default option flags. */
+    static final int OPTION_FLAGS = 0;
     /** Default single-pivot partition strategy. */
     static final SPStrategy SP_STRATEGY = SPStrategy.KBM;
     /** Default expand partition strategy. A ternary method is faster on equal elements and no
@@ -205,8 +207,15 @@ final class Partition {
     static final StopperStrategy STOPPER_STRATEGY = StopperStrategy.SQA;
     /** Default quickselect adaptive mode. */
     static final AdaptMode ADAPT_MODE = AdaptMode.ADAPT3;
-    /** Default quickselect adaptive flags. Start with FR sampling. */
-    static final int QA_FLAGS = -1;
+
+    /** Sampling mode using Floyd-Rivest sampling. */
+    static final int MODE_FR_SAMPLING = -1;
+    /** Sampling mode. */
+    static final int MODE_SAMPLING = 0;
+    /** No sampling but use adaption of the target k. */
+    static final int MODE_ADAPTION = 1;
+    /** No sampling and no adaption of target k (strict margins). */
+    static final int MODE_STRICT = 2;
 
     // Floyd-Rivest flags
 
@@ -346,15 +355,14 @@ final class Partition {
     private static final double STEP_FAR_LEFT = 0.08333333333333333;
     /** Threshold to use repeated step far-right: 11 / 12. */
     private static final double STEP_FAR_RIGHT = 0.9166666666666666;
-    /** Sampling mode using Floyd-Rivest sampling. */
-    private static final int MODE_FR_SAMPLING = -1;
-    /** Sampling mode. */
-    private static final int MODE_SAMPLING = 0;
-    /** No sampling but use adaption of the target k. */
-    private static final int MODE_ADAPTION = 1;
 
     /** Default instance. */
     private static final Partition DEFAULT = new Partition();
+
+    /** Default quickselect adaptive mode. Start with FR sampling. */
+    private static int qaMode = MODE_FR_SAMPLING;
+    /** Default quickselect adaptive mode increment. */
+    private static int qaIncrement = 1;
 
     // Use final for settings/objects used within partitioning functions
 
@@ -1802,6 +1810,18 @@ final class Partition {
      */
     SPEPartition getSPFunction() {
         return spFunction;
+    }
+
+    /**
+     * Configure the properties used by the quickselect adaptive algorithm.
+     * The increment is used to update the current mode when the margins are not achieved.
+     *
+     * @param mode Initial mode.
+     * @param increment Flag increment
+     */
+    static void configureQaAdaptive(int mode, int increment) {
+        qaMode = mode;
+        qaIncrement = increment;
     }
 
     /**
@@ -7146,24 +7166,24 @@ final class Partition {
      * @param n Count of indices.
      */
     static void partitionQA2(double[] data, int[] k, int n) {
-        partitionQA2(data, k, n, QA_FLAGS);
+        quickSelectAdaptive2(data, k, n, qaMode);
     }
 
     /**
      * Partition the array such that indices {@code k} correspond to their correctly
-     * sorted value in the equivalent fully sorted array. For all indices {@code k}
-     * and any index {@code i}:
+     * sorted value in the equivalent fully sorted array. For all indices {@code k} and
+     * any index {@code i}:
      *
      * <pre>{@code
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
-     * <p>The method assumes all {@code k} are valid indices into the data.
-     * It handles NaN and signed zeros in the data.
+     * <p>The method assumes all {@code k} are valid indices into the data. It handles NaN
+     * and signed zeros in the data.
      *
-     * <p>WARNING: Currently this only supports a single or range of {@code k}.
-     * For parity with other select methods this accepts an array {@code k} and pre/post
-     * processes the data for NaN and signed zeros.
+     * <p>WARNING: Currently this only supports a single or range of {@code k}. For parity
+     * with other select methods this accepts an array {@code k} and pre/post processes
+     * the data for NaN and signed zeros.
      *
      * <p>This function is not configurable; it is composed of the best performing
      * configuration from benchmarking.
@@ -7173,7 +7193,7 @@ final class Partition {
      * @param count Count of indices.
      * @param flags Adaption flags.
      */
-    static void partitionQA2(double[] a, int[] k, int count, int flags) {
+    static void quickSelectAdaptive2(double[] a, int[] k, int count, int flags) {
         // Handle NaN / signed zeros
         final DoubleDataTransformer t = SORT_TRANSFORMER.get();
         // Assume this is in-place
@@ -7267,7 +7287,7 @@ final class Partition {
             // left        1/6   1/4
             // middle      2/9   2/9   (use 1/4 - 1/32 ~ 0.219)
             int margin = n >> 2;
-            if (m < 0 && r - l > SELECT_SUB_SAMPLING_SIZE) {
+            if (m < MODE_SAMPLING && r - l > SELECT_SUB_SAMPLING_SIZE) {
                 // Floyd-Rivest sample step uses the same margins
                 p0 = sampleStep(a, l, r, ka, bounds, flags);
                 if (f <= STEP_FAR_LEFT || f >= STEP_FAR_RIGHT) {
@@ -7322,7 +7342,7 @@ final class Partition {
                 return p0;
             }
             // Update mode based on target partition size
-            m += r - l > n - margin ? 1 : 0;
+            m += r - l > n - margin ? qaIncrement : 0;
         }
     }
 
@@ -10533,7 +10553,7 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive2(a, s, e, p, p, upper, MODE_SAMPLING);
+        p = quickSelectAdaptive2(a, s, e, p, p, upper, qaMode);
         return expandPartitionT2(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -10592,7 +10612,7 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive2(a, s, e, p, p, upper, MODE_SAMPLING);
+        p = quickSelectAdaptive2(a, s, e, p, p, upper, qaMode);
         return expandPartitionT2(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -10651,7 +10671,7 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive2(a, s, e, p, p, upper, MODE_SAMPLING);
+        p = quickSelectAdaptive2(a, s, e, p, p, upper, qaMode);
         return expandPartitionT2(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -10731,7 +10751,7 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive2(a, s, e, p, p, upper, MODE_SAMPLING);
+        p = quickSelectAdaptive2(a, s, e, p, p, upper, qaMode);
         return expandPartitionT2(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -10803,7 +10823,7 @@ final class Partition {
         for (int i = s; i <= e; i++) {
             Sorting.sort3(a, i - fp, i, i + fp);
         }
-        p = quickSelectAdaptive2(a, s, e, p, p, upper, MODE_SAMPLING);
+        p = quickSelectAdaptive2(a, s, e, p, p, upper, qaMode);
         return expandPartitionT2(a, l, r, s, e, p, upper[0], upper);
     }
 
@@ -10863,7 +10883,7 @@ final class Partition {
 //            }
 //        }
         // Sample recursion restarts from [ll, rr]
-        final int p = quickSelectAdaptive2(a, ll, rr, k, k, upper, MODE_SAMPLING);
+        final int p = quickSelectAdaptive2(a, ll, rr, k, k, upper, qaMode);
         return expandPartitionT2(a, l, r, ll, rr, p, upper[0], upper);
     }
 

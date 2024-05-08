@@ -77,6 +77,15 @@ class PartitionFactoryTest {
     }
 
     @Test
+    void testGetOptionFlags() {
+        assertIntParameter(Partition.OPTION_FLAGS, "OF", PartitionFactory::getOptionFlags);
+        // Special support for negative flags
+        Assertions.assertEquals(-1, PartitionFactory.getOptionFlags(new String[] {"OF-1"}));
+        Assertions.assertEquals(-2, PartitionFactory.getOptionFlags(new String[] {"OF-2"}));
+        Assertions.assertEquals(-42, PartitionFactory.getOptionFlags(new String[] {"none"}, -42));
+    }
+
+    @Test
     void testGetPivotingStrategy() {
         assertEnumParameter(Partition.PIVOTING_STRATEGY,
             s -> PartitionFactory.getEnumOrElse(s, PivotingStrategy.class, Partition.PIVOTING_STRATEGY));

@@ -1149,10 +1149,37 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition", "testFR"})
-    void testPartitionQA2(double[] values, int[] indices) {
+    void testPartitionQA2FRSampling(double[] values, int[] indices) {
+        assertPartitionQA2(values, indices, Partition.MODE_FR_SAMPLING);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionQA2Sampling(double[] values, int[] indices) {
+        assertPartitionQA2(values, indices, Partition.MODE_SAMPLING);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionQA2Adaption(double[] values, int[] indices) {
+        assertPartitionQA2(values, indices, Partition.MODE_ADAPTION);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition", "testFR"})
+    void testPartitionQA2Strict(double[] values, int[] indices) {
+        assertPartitionQA2(values, indices, Partition.MODE_STRICT);
+    }
+
+    private static void assertPartitionQA2(double[] values, int[] indices, int mode) {
         Assumptions.assumeTrue(indices.length == 1 ||
             (indices.length == 2 && Math.abs(indices[1] - indices[0]) < 10));
-        assertPartition(values, indices, Partition::partitionQA2);
+        Partition.configureQaAdaptive(mode, 1);
+        try {
+            assertPartition(values, indices, Partition::partitionQA2);
+        } finally {
+            Partition.configureQaAdaptive(Partition.MODE_FR_SAMPLING, 1);
+        }
     }
 
     @ParameterizedTest
