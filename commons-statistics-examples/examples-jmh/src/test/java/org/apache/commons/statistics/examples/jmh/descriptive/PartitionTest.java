@@ -846,7 +846,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices,
@@ -854,14 +854,14 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionFRPivotingStrategy(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)::partitionFR);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionFRRandomSampling(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
@@ -869,7 +869,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionFRMoveSample(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
@@ -877,7 +877,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionFRSubsetSampling(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
@@ -885,7 +885,7 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionKFR(double[] values, int[] indices) {
         Assumptions.assumeTrue(indices.length == 1);
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)::partitionKFR);
@@ -1148,25 +1148,25 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionQA2FRSampling(double[] values, int[] indices) {
         assertPartitionQA2(values, indices, Partition.MODE_FR_SAMPLING);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionQA2Sampling(double[] values, int[] indices) {
         assertPartitionQA2(values, indices, Partition.MODE_SAMPLING);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionQA2Adaption(double[] values, int[] indices) {
         assertPartitionQA2(values, indices, Partition.MODE_ADAPTION);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testPartitionQA2Strict(double[] values, int[] indices) {
         assertPartitionQA2(values, indices, Partition.MODE_STRICT);
     }
@@ -1183,13 +1183,13 @@ class PartitionTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testSelect(double[] values, int[] indices) {
         assertPartition(values, indices, Partition::select);
     }
 
     @ParameterizedTest
-    @MethodSource(value = {"testPartition", "testFR"})
+    @MethodSource(value = {"testPartition", "testPartitionBigData"})
     void testSelection(double[] values, int[] indices) {
         assertPartition(values, indices, (a, k, n) -> Selection.select(a, Arrays.copyOf(k, n)));
     }
@@ -1344,7 +1344,7 @@ class PartitionTest {
         return builder.build();
     }
 
-    static Stream<Arguments> testFR() {
+    static Stream<Arguments> testPartitionBigData() {
         final Stream.Builder<Arguments> builder = Stream.builder();
         final UniformRandomProvider rng = RandomSource.XO_SHI_RO_128_PP.create(123);
         // Sizes above the threshold (600) for recursive partitioning
@@ -1360,26 +1360,12 @@ class PartitionTest {
                     new int[] {rng.nextInt(size)}));
             }
         }
-        // Cases for the partition between left and right around t
-        for (final double[] x : new double[][] {
-            {0, 1, 2},
-            {0, 2, 1},
-            {1, 0, 2},
-            {1, 2, 0},
-            {2, 0, 1},
-            {2, 1, 0},
-        }) {
-            builder.add(Arguments.of(x.clone(), new int[] {0}));
-            builder.add(Arguments.of(x.clone(), new int[] {1}));
-            builder.add(Arguments.of(x.clone(), new int[] {2}));
-        }
-        // Hit FR sub-sampling conditions.
+        // Hit Floyd-Rivest sub-sampling conditions.
         // Close to edge but outside edge select size.
         final int n = 7000;
         final double[] x = IntStream.range(0, n).asDoubleStream().toArray();
         builder.add(Arguments.of(x.clone(), new int[] {20}));
         builder.add(Arguments.of(x, new int[] {n - 1 - 20}));
-
         return builder.build();
     }
 
