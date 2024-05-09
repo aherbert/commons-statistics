@@ -38,11 +38,29 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * k=4,8 : [0, 1, 2, 1], [2], [3, 3, 2], [5], [6, 7, 7, 7, 7]
  * </pre>
  *
- * <p>This implementation can select on multiple indices. The method will handle duplicate and
- * unordered indices. The method will detect ordered indices (with or without duplicates) and
- * use this during processing. Passing ordered indices is recommended if the order is already
+ * <p>This implementation can select on multiple indices and will handle duplicate and
+ * unordered indices. The method detects ordered indices (with or without duplicates) and
+ * uses this during processing. Passing ordered indices is recommended if the order is already
  * known; for example using uniform spacing through the array data, or to select the top and
  * bottom {@code n} values from the data.
+ *
+ * <p>A quickselect adaptive method is used for single indices. This uses analysis of the
+ * partition sizes after each division to update the algorithm mode. If the partition
+ * containing the target does not sufficiently reduce in size then the algorithm is
+ * progressively changed to use partitions with guaranteed margins. This ensures a set fraction
+ * of data is eliminated each step and worse-case linear run time performance. The initial
+ * mode uses Floyd-Rivest sampling and progresses through to adaptive quickselect with
+ * fixed margins. This method can handle a range of indices {@code [ka, kb]} with a small
+ * separation by targeting the start of the range {@code ka} and then selecting the remaining
+ * elements {@code (ka, kb]} that are at the edge of the partition bounded by {@code ka}.
+ *
+ * <p>Multiple keys are partitioned collectively using an introsort method which only recurses
+ * into partitions containing indices. Excess recursion will trigger use of a heapselect
+ * on the remaining range of indices ensuring non-quadratic worse case performance. Any
+ * partition containing a single index, adjacent pair of indices, or range of indices with a
+ * small separation will use the quickselect adaptive method for single keys. Note that the
+ * maximum number of times that {@code n} indices can be split is {@code n - 1} before all
+ * indices are handled as singles.
  *
  * <p>References
  *
@@ -50,17 +68,24 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * using repeat division of the data around a partition element, recursing into the
  * partition that contains {@code k}.
  *
- * <p>Introselect is introduced in Musser [2]. This detects excess recursion in quickselect
- * and reverts to heapselect to achieve an improved worst case bound on selection.
+ * <p>Introsort/select is introduced in Musser [2]. This detects excess recursion in
+ * quicksort/select and reverts to a heapsort or linear select to achieve an improved worst
+ * case bound.
  *
  * <p>Use of dual-pivot quickselect is analysed in Wild et al [3] and shown to require
  * marginally more comparisons than single-pivot quickselect on a uniformly chosen order
- * statistic {@code k} and extremal order statistic (see table 1, page 19). The current
- * implementation uses single-pivot quickselect for single keys, and dual-pivot quickselect
- * to partition multiple indices into single keys.
+ * statistic {@code k} and extremal order statistic (see table 1, page 19). This implementation
+ * uses dual-pivot quickselect to partition a range with multiple indices into smaller ranges
+ * with single indices.
  *
  * <p>Use of sampling to identify a pivot that places {@code k} in the smaller partition is
  * performed in the SELECT algorithm of Floyd and Rivest [4, 5].
+ *
+ * <p>A worst-case linear time algorithm PICK is described in Blum <i>et al</i> [6]. This uses
+ * the median of medians as a partition element for selection which ensures a minimum fraction of
+ * the elements are eliminated per iteration. This was extended to use an asymmetric pivot choice
+ * with efficient placement of the medians sample location in the QuickselectAdpative algorithm of
+ * Alexandrescu [7].
  *
  * <ol>
  * <li>
@@ -82,12 +107,18 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  * <li>Kiwiel (2005)
  * On Floyd and Rivest's SELECT algorithm.
  * Theoretical Computer Science 347, 214-238.
- * <li>Bentley and McIlroy (1993)
- * Engineering a sort function, SOFTWARE—PRACTICE AND EXPERIENCE, VOL.23(11), 1249–1265.
+ * <li>Blum, Floyd, Pratt, Rivest, and Tarjan (1973)
+ * Time bounds for selection.
+ * <a href="https://doi.org/10.1016%2FS0022-0000%2873%2980033-9">
+ * Journal of Computer and System Sciences. 7 (4): 448–461</a>.
+ * <li>Alexandrescu (2016)
+ * Fast Deterministic Selection
+ * <a href="https://arxiv.org/abs/1606.00484">arXiv:1606.00484</a>.
  * <li><a href="https://en.wikipedia.org/wiki/Quickselect">Quickselect (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introsort">Introsort (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Introselect">Introselect (Wikipedia)</a>
  * <li><a href="https://en.wikipedia.org/wiki/Floyd%E2%80%93Rivest_algorithm">Floyd-Rivest algorithm (Wikipedia)</a>
+ * <li><a href="https://en.wikipedia.org/wiki/Median_of_medians">Median of medians (Wikipedia)</a>
  * </ol>
  *
  * @since 1.1
@@ -95,28 +126,54 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
 final class Selection {
     // Implementation Notes
     //
-    // Selection is performed using an introselect variant. Quickselect is used
-    // to recursively divide the range to select the target index. The fall-back on poor
-    // convergence of the quickselect is heapselect.
+    // Selection is performed using a quickselect variant to recursively divide the range
+    // to select the target index, or indices. Partition size or recursion are monitored
+    // will fall-backs on poor convergence of a linearselect (single index) or heapselect.
     //
     // Many implementations were tested, each with strengths and weaknesses on different
     // input data containing random elements, repeat elements, elements with repeat
     // patterns, and constant elements. The final implementation performs well across data
     // types for single and multiple indices with no obvious weakness.
     //
-    // Single indices are selected using a single-pivot quickselect with a Bentley-McIlroy
-    // partition method handling equal values; the partition method is by Kiwiel. Large
-    // ranges used the Floyd-Rivest (FR) algorithm to identify a pivot using sub-sampling.
-    // Small ranges use a median-of-median pivot selection using 3-of-3 samples.
-    // Random sampling is a redundant overhead on fully random data
-    // and will part destroy sorted data. On data that is: partially partitioned;
-    // has many repeat elements; or is structured with repeat patterns, the
-    // shuffle removes side-effects of patterns and stabilises performance. Overhead
-    // is minimised using a fast branchless random index selection; use of more statistically
-    // robust random index selection impacts performance. Sampling is performed on either
-    // side of the target index. This is not a true uniform sample and is increasingly
-    // biased if the target is not centred; this scheme outperforms using a uniform sample
-    // from the entire range.
+    // Single indices are selected using a quickselect adaptive method based on Alexandrescu.
+    // The algorithm is a quickselect around a pivot identified using a
+    // sample-of-sample-of-samples created from the entire range data. This pivot will
+    // have known lower and upper margins and ensures elimination of a minimum fraction of
+    // data at each step. To increase speed the pivot can be identified using less of the data
+    // but without margin guarantees (sampling mode). The algorithm monitors partition sizes
+    // against the known margins. If the reduction in the partition size is not large enough
+    // then the algorithm can disable sampling mode and ensure linear performance by removing
+    // a set fraction of the data each iteration.
+    //
+    // Modifications from Alexandrescu are:
+    // 1. Initialise sampling mode using the Floyd-Rivest (FR) SELECT algorithm.
+    // 2. Adaption is adjusted to force use of the lower margin in the far-step method when
+    //    sampling is disabled.
+    // 3. Change the far-step method to a min-of-4 then median-of-3 into the 2nd 12th-tile.
+    //    The original method uses a lower-median-of-4, min-of-3 into the 4th 12th-tile.
+    // 4. Position the sample around the target k when in sampling mode for the non-far-step
+    //    methods.
+    //
+    // The far step method is used when target k is with 1/12 of the end of the data A.
+    // The differences in the far-step method are:
+    // - The upper margin when not sampling is 8/24 vs. 9/24; the lower margin remains at 1/12.
+    // - The position of the sample is closer to the expected location of k < |A|/12.
+    // - Sampling mode uses a median-of-3 with adaptive k, matching the other step methods.
+    //   Note the original min-of-3 sample is more likely to create a pivot too small if used
+    //   with adaption of k leaving k in the larger partition and a wasted iteration.
+    //
+    // The Floyd-Rivest (FR) SELECT algorithm is preferred for sampling over using quickselect
+    // adaptive sampling. It uses a smaller sample and has improved heuristics to place the sample
+    // pivot. However the FR sample is a small range of the data and pivot selection can be poor
+    // if the sample is not representative. This can be mitigated by creating a random sample
+    // of the entire range for the pivot selection. This implementation does not use random
+    // sampling for the FR mode. Performance is identical on random data (randomisation is a
+    // negligible overhead) and faster on sorted data. Any data not suitable for the FR algorithm
+    // are immediately switched to the quickselect adaptive algorithm with sampling. Performance
+    // across a range of data shows this strategy is approximately mid-way in performance between
+    // FR with random sampling, and quickselect adaptive in sampling mode. The benefit is that
+    // sorted or partially partitioned data are not intentionally unordered as the method will
+    // only move elements known to be incorrectly placed in the array.
     //
     // Multiple indices are selected using a dual-pivot partition method by
     // Yaroslavskiy to divide the interval containing the indices. When indices are effectively
@@ -145,15 +202,14 @@ final class Selection {
     // Small ranges and a target index close to the end are handled using a hybrid of insertion
     // sort and selection (sortselect). This is faster than heapselect for small distance from
     // the edge (m) for a single index and has the advantage of sorting all upstream values from
-    // the target index (heap select requires push-down of each successive value to sort). This
+    // the target index (heapselect requires push-down of each successive value to sort). This
     // allows the dual-pivot quickselect on multiple indices that saturate the range to degrade
     // to a (non-optimised) dual-pivot quicksort. However sortselect is worst case Order(m * (r-l))
-    // so cannot be used when quickselect fails to converge as m may be very large. For larger
-    // distance from the edge a median-of-medians pivot selection provides Order(n) performance
-    // when quickselect progress is slow. When quickselect progress is slow on multiple indices
-    // then heapselect is used as the stopper algorithm when the range is large. If heapselect
-    // is used for small range handling the performance on saturated indices is significantly
-    // slower. Hence the presence of two final selection methods for different purposes.
+    // for range [l, r] so cannot be used when quickselect fails to converge as m may be very large.
+    // Thus heapselect is used as the stopper algorithm when quickselect progress is slow on
+    // multiple indices. If heapselect is used for small range handling the performance on
+    // saturated indices is significantly slower. Hence the presence of two final selection
+    // methods for different purposes.
 
     /** No instances. */
     private Selection() {}
@@ -327,6 +383,7 @@ final class Selection {
             return -1;
         }
 
+        // Interval creation validates the indices are in [left, right]
         final UpdatingInterval keys = IndexIntervals.createUpdatingInterval(left, right, k, n);
 
         // Save number of used indices
