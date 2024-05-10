@@ -724,9 +724,12 @@ final class Partition {
          * final unwinding of the heap to sort the range {@code [ka, kb]};
          * the heap construction is identical. */
         ESH2,
-        /** Use sortselect which uses an insertion sort to maintain {@code k}
+        /** Use sortselect version 1. Uses an insertion sort to maintain {@code k}
          * and all elements closer to the edge as sorted. */
-        ESS;
+        ESS,
+        /** Use sortselect version 2. Differs from {@link #ESS} by a using pointer
+         * into the sorted range to improve insertion speed. */
+        ESS2;
     }
 
     /**
@@ -1617,6 +1620,7 @@ final class Partition {
      * @param v Value.
      * @return {@code this} for chaining
      */
+    // TODO - test variants of this in PartitionTest
     Partition setEdgeSelectStrategy(EdgeSelectStrategy v) {
         switch (v) {
         case ESH:
@@ -1627,6 +1631,9 @@ final class Partition {
             break;
         case ESS:
             edgeSelection = Partition::sortSelectRange;
+            break;
+        case ESS2:
+            edgeSelection = Partition::sortSelectRange2;
             break;
         default:
             throw new IllegalArgumentException("Unknown edge select: " + v);
@@ -2589,6 +2596,168 @@ final class Partition {
                 int j = k;
                 while (++j <= right && v > a[j]) {
                     a[j - 1] = a[j];
+                }
+                a[j - 1] = v;
+                m = a[k];
+            }
+        }
+    }
+
+    /**
+     * Partition the elements between {@code ka} and {@code kb} using a sort select
+     * algorithm. It is assumed {@code left <= ka <= kb <= right}.
+     *
+     * <p>Note: Requires that the range contains no NaN values. Does not respect the
+     * ordering of signed zeros.
+     *
+     * <p>Differs from {@link #sortSelectRange(double[], int, int, int, int)} by using
+     * a pointer to a position in the sorted array to skip ahead during insertion.
+     * This extra complexity does not improve performance.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param ka Lower index to select.
+     * @param kb Upper index to select.
+     */
+    static void sortSelectRange2(double[] a, int left, int right, int ka, int kb) {
+        // Combine the test for right <= left with
+        // avoiding the overhead of sort select on tiny data.
+        if (right - left <= MIN_SORTSELECT_SIZE) {
+            Sorting.sort(a, left, right);
+            return;
+        }
+        // Sort the smallest side
+        if (kb - left < right - ka) {
+            sortSelectLeft2(a, left, right, kb);
+        } else {
+            sortSelectRight2(a, left, right, ka);
+        }
+    }
+
+    /**
+     * Partition the minimum {@code n} elements below {@code k} where
+     * {@code n = k - left + 1}. Uses an insertion sort algorithm.
+     *
+     * <p>Works with any {@code k} in the range {@code left <= k <= right}
+     * and performs a full sort of the range below {@code k}.
+     *
+     * <p>For best performance this should be called with
+     * {@code k - left < right - k}, i.e.
+     * to partition a value in the lower half of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * Does not respect the ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k Index to select.
+     */
+    static void sortSelectLeft2(double[] a, int left, int right, int k) {
+        // Sort
+        for (int i = left; ++i <= k;) {
+            final double v = a[i];
+            // Move preceding higher elements above (if required)
+            if (v < a[i - 1]) {
+                int j = i;
+                while (--j >= left && v < a[j]) {
+                    a[j + 1] = a[j];
+                }
+                a[j + 1] = v;
+            }
+        }
+        // Scan the remaining data and insert
+        // Mitigate worst case performance on descending data by backward sweep
+        double m = a[k];
+        // Pointer to a position in the sorted array
+        final int p = (left + k) >>> 1;
+        for (int i = right + 1; --i > k;) {
+            final double v = a[i];
+            if (v < m) {
+                a[i] = m;
+                int j = k;
+                if (v < a[p]) {
+                    // Skip ahead
+                    //System.arraycopy(a, p, a, p + 1, k - p);
+                    while (j > p) {
+                        // left index is evaluated before right decrement
+                        a[j] = a[--j];
+                    }
+                    // j == p
+                    while (--j >= left && v < a[j]) {
+                        a[j + 1] = a[j];
+                    }
+                } else {
+                    // No bounds check on left: a[p] <= v < a[k]
+                    while (v < a[--j]) {
+                        a[j + 1] = a[j];
+                    }
+                }
+                a[j + 1] = v;
+                m = a[k];
+            }
+        }
+    }
+
+    /**
+     * Partition the maximum {@code n} elements above {@code k} where
+     * {@code n = right - k + 1}. Uses an insertion sort algorithm.
+     *
+     * <p>Works with any {@code k} in the range {@code left <= k <= right}
+     * and can be used to perform a full sort of the range above {@code k}.
+     *
+     * <p>For best performance this should be called with
+     * {@code k - left > right - k}, i.e.
+     * to partition a value in the upper half of the range.
+     *
+     * <p>Note: Requires that the range contains no NaN values.
+     * Does not respect the ordering of signed zeros.
+     *
+     * @param a Data array to use to find out the K<sup>th</sup> value.
+     * @param left Lower bound (inclusive).
+     * @param right Upper bound (inclusive).
+     * @param k Index to select.
+     */
+    static void sortSelectRight2(double[] a, int left, int right, int k) {
+        // Sort
+        for (int i = right; --i >= k;) {
+            final double v = a[i];
+            // Move succeeding lower elements below (if required)
+            if (v > a[i + 1]) {
+                int j = i;
+                while (++j <= right && v > a[j]) {
+                    a[j - 1] = a[j];
+                }
+                a[j - 1] = v;
+            }
+        }
+        // Scan the remaining data and insert
+        // Mitigate worst case performance on descending data by backward sweep
+        double m = a[k];
+        // Pointer to a position in the sorted array
+        final int p = (right + k) >>> 1;
+        for (int i = left - 1; ++i < k;) {
+            final double v = a[i];
+            if (v > m) {
+                a[i] = m;
+                int j = k;
+                if (v > a[p]) {
+                    // Skip ahead
+                    //System.arraycopy(a, p, a, p - 1, p - k);
+                    while (j < p) {
+                        // left index is evaluated before right increment
+                        a[j] = a[++j];
+                    }
+                    // j == p
+                    while (++j <= right && v > a[j]) {
+                        a[j - 1] = a[j];
+                    }
+                } else {
+                    // No bounds check on right: a[k] < v <= a[p]
+                    while (v > a[++j]) {
+                        a[j - 1] = a[j];
+                    }
                 }
                 a[j - 1] = v;
                 m = a[k];

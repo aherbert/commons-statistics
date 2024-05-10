@@ -482,6 +482,13 @@ class PartitionTest {
             Partition::sortSelectRange, values, from, to, k1, k2);
     }
 
+    @ParameterizedTest
+    @MethodSource(value = {"testHeapSelectRange"})
+    void testSortSelectRange2(double[] values, int from, int to, int k1, int k2) {
+        assertPartitionRange(sort(values, from, to),
+            Partition::sortSelectRange2, values, from, to, k1, k2);
+    }
+
     /**
      * Return a copy of the {@code values} sorted.
      *
