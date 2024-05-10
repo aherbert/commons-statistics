@@ -9990,10 +9990,6 @@ final class Partition {
                 f = (r - l + 1) / 9;
                 s = l + (f << 2);
             }
-//          // Floyd-Rivest sample size - crossover when n/12 == 0.5*n^2/3
-//          if (r - l > 216) {
-//              f = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//          }
             // Adaption to target kf'/|A|
             int kp = mode.isAdapt() ? samplingAdapt.mapDistance(k - l, l, r, f) : (f >>> 1);
             // Centre the sample at k
@@ -10053,10 +10049,6 @@ final class Partition {
         int e;
         int p;
         if (far) {
-//            // Floyd-Rivest sample size
-//            if (r - l > 216) {
-//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//            }
             // i in 4th 12th-tile
             s = l + f;
             // Variable adaption
@@ -10067,11 +10059,6 @@ final class Partition {
                 kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
                 // Note: Not possible to centre the sample at k on the far step
             }
-//            // Centre the sample at k
-//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
-//                // Avoid bounds error due to rounding as (k-l)/(r-l) -> 1/12
-//                s = Math.max(k - kp, l + fp);
-//            }
             e = s + fp - 1;
             p = s + kp;
             final int fp2 = fp << 1;
@@ -10089,10 +10076,6 @@ final class Partition {
                 }
             }
         } else {
-//            // Floyd-Rivest sample size
-//            if (r - l > 216) {
-//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//            }
             // i in 5th 12th-tile
             s = l + f + fp;
             // Variable adaption
@@ -10159,10 +10142,6 @@ final class Partition {
         int e;
         int p;
         if (far) {
-//            // Floyd-Rivest sample size
-//            if (r - l > 216) {
-//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//            }
             // i in 9th 12th-tile
             e = r - f;
             // Variable adaption
@@ -10173,11 +10152,6 @@ final class Partition {
                 kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
                 // Note: Not possible to centre the sample at k on the far step
             }
-//            // Centre the sample at k
-//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
-//                // Avoid bounds error due to rounding as (r-k)/(r-l) -> 11/12
-//                e = Math.min(k + kp, r - fp);
-//            }
             s = e - fp + 1;
             p = e - kp;
             final int fp2 = fp << 1;
@@ -10195,10 +10169,6 @@ final class Partition {
                 }
             }
         } else {
-//            // Floyd-Rivest sample size
-//            if (r - l > 216) {
-//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//            }
             // i in 8th 12th-tile
             e = r - f - fp;
             // Variable adaption
@@ -10279,16 +10249,7 @@ final class Partition {
                 }
             }
         } else {
-//            // Floyd-Rivest sample size
-//            if (r - l > 216) {
-//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//            }
             int kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(k - l, l, r, fp) : fp >>> 1;
-//            // Centre the sample at k
-//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
-//                // Avoid bounds error due to rounding as (k-l)/(r-l) -> 1/12
-//                s = Math.max(k - kp, l + fp);
-//            }
             p = s + kp;
         }
         for (int i = s; i <= e; i++) {
@@ -10354,16 +10315,7 @@ final class Partition {
                 }
             }
         } else {
-//            // Floyd-Rivest sample size
-//            if (r - l > 216) {
-//                fp = (int) (Math.pow(r - l, 0.66666666666666666) * 0.5);
-//            }
             int kp = mode.isAdapt() ? samplingEdgeAdapt.mapDistance(r - k, l, r, fp) : fp >>> 1;
-//            // Centre the sample at k
-//            if ((controlFlags & FLAG_QA_SAMPLE_K) != 0) {
-//                // Avoid bounds error due to rounding as (r-k)/(r-l) -> 11/12
-//                e = Math.min(k + kp, r - fp);
-//            }
             p = e - kp;
         }
         for (int i = s; i <= e; i++) {
