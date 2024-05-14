@@ -72,7 +72,7 @@ import org.apache.commons.rng.simple.RandomSource;
  * <p>Confidence bounds for the number of iterations to reduce a partition length by 2<sup>-x</sup>
  * are provided in Valois [6].
  *
- * <p>A worst-case linear time algorithm PICK is described in Blum et al [7]. This uses the median
+ * <p>A worst-case linear time algorithm PICK is described in Blum <i>et al</i> [7]. This uses the median
  * of medians as a partition element for selection which ensures a minimum fraction of the
  * elements are eliminated per iteration. This was extended to use an asymmetric pivot choice
  * with efficient reuse of the medians sample in the QuickselectAdpative algorithm of
