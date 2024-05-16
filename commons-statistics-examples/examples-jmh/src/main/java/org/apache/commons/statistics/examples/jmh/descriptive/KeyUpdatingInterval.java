@@ -200,7 +200,7 @@ final class KeyUpdatingInterval implements UpdatingInterval, SplittingInterval {
             if (kb >= right()) {
                 // No right interval
                 invalidate();
-            } else if (kb >= left()){
+            } else if (kb >= left()) {
                 // Update the left bound.
                 // Search using a scan on the assumption that kb is close to the end
                 // given that ka is less then the end.

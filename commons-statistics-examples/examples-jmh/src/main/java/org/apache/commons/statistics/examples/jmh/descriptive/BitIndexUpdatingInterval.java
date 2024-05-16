@@ -326,7 +326,7 @@ final class BitIndexUpdatingInterval implements UpdatingInterval, SplittingInter
             if (kb >= right) {
                 // No right interval
                 invalidate();
-            } else if (kb >= left){
+            } else if (kb >= left) {
                 // Update the left bound
                 left = nextIndex(kb + 1);
             }

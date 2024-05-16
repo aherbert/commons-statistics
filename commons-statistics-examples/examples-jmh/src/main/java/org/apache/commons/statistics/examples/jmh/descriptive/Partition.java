@@ -4684,17 +4684,15 @@ final class Partition {
                 }
                 introselect(part, a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth);
                 ka = k.left();
-            }
-            if (kb <= p1) {
+            } else if (kb <= p1) {
                 // No right side
                 recursionConsumer.accept(maxDepth);
                 return;
+            } else if (ka <= p1) {
+                ka = k.updateLeft(p1 + 1);
             }
             // Continue on the right side
             l = p1 + 1;
-            if (ka < l) {
-                ka = k.updateLeft(l);
-            }
         }
     }
 
@@ -5585,42 +5583,70 @@ final class Partition {
                 }
                 introselect(part, a, l, p0 - 1, k.splitLeft(p0, p1), maxDepth);
                 ka = k.left();
+            } else if (kb <= p1) {
+                // No middle/right side
+                return;
+            } else if (ka <= p1) {
+                // Advance lower bound
+                ka = k.updateLeft(p1 + 1);
             }
             // Recurse middle if required
-            // Check the interval overlaps the middle; and the middle exists.
-            //                    p0 p1                p2 p3
-            // |l|-----------------|P|------------------|P|----|r|
-            // Eliminate:      ----kb                    ka----
-            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
-                // Advance lower bound
+            if (ka < p2) {
                 l = p1 + 1;
-                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
-                // |l|-----------------|P|------------------|P|----|r|
-                // Eliminate:          ka1                  kb1
-                // Detect this if ka must be advanced and passes p2.
-                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
-                    if (kb <= p3) {
-                        // Entirely in middle
-                        r = p2 - 1;
-                        if (r < kb) {
-                            kb = k.updateRight(r);
-                        }
-                        continue;
+                if (kb <= p3) {
+                    // Entirely in middle
+                    r = p2 - 1;
+                    if (r < kb) {
+                        kb = k.updateRight(r);
                     }
-                    introselect(part, a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
-                    // Here we must process right
-                    ka = k.left();
+                    continue;
                 }
-            }
-            if (kb <= p3) {
+                introselect(part, a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
+                ka = k.left();
+            } else if (kb <= p3) {
                 // No right side
                 return;
+            } else if (ka <= p3) {
+                ka = k.updateLeft(p3 + 1);
             }
             // Continue right
             l = p3 + 1;
-            if (ka < l) {
-                ka = k.updateLeft(l);
-            }
+
+//            // Recurse middle if required
+//            // Check the interval overlaps the middle; and the middle exists.
+//            //                    p0 p1                p2 p3
+//            // |l|-----------------|P|------------------|P|----|r|
+//            // Eliminate:      ----kb                    ka----
+//            if (ka < p2 && kb > p1 && p2 - p1 > 1) {
+//                // Advance lower bound
+//                l = p1 + 1;
+//                // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
+//                // |l|-----------------|P|------------------|P|----|r|
+//                // Eliminate:          ka1                  kb1
+//                // Detect this if ka must be advanced and passes p2.
+//                if (ka >= l || (ka = k.updateLeft(l)) < p2) {
+//                    if (kb <= p3) {
+//                        // Entirely in middle
+//                        r = p2 - 1;
+//                        if (r < kb) {
+//                            kb = k.updateRight(r);
+//                        }
+//                        continue;
+//                    }
+//                    introselect(part, a, l, p2 - 1, k.splitLeft(p2, p3), maxDepth);
+//                    // Here we must process right
+//                    ka = k.left();
+//                }
+//            }
+//            if (kb <= p3) {
+//                // No right side
+//                return;
+//            }
+//            // Continue right
+//            l = p3 + 1;
+//            if (ka < l) {
+//                ka = k.updateLeft(l);
+//            }
         }
     }
 
