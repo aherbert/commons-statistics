@@ -7873,7 +7873,7 @@ final class Partition {
                     continue;
                 }
                 select(a, l, p0 - 1, k.splitLeft(p0, p1), flags);
-                // Here we must process middle and possibly right
+                // Here we must process middle and/or right
                 ka = k.left();
             }
             // Recurse middle if required
@@ -7886,7 +7886,7 @@ final class Partition {
                 l = p1 + 1;
                 // Interval [ka, kb] overlaps the middle but there may be nothing in the interval.
                 // |l|-----------------|P|------------------|P|----|r|
-                // Eliminate:          ka1                  kb1
+                // Eliminate:          ka                    kb
                 // Detect this if ka must be advanced and passes p2.
                 if (ka >= l || (ka = k.updateLeft(l)) < p2) {
                     if (kb <= p3) {
