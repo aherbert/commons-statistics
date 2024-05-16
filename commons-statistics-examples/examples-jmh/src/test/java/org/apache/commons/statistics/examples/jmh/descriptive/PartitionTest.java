@@ -708,6 +708,26 @@ class PartitionTest {
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
+    void testPartitionISBMKeySplitting(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setKeyStrategy(KeyStrategy.KEY_SPLITTING_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionISBMIndexSetSplitting(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(SP, QS, EC, SU)
+            .setKeyStrategy(KeyStrategy.INDEX_SET_SPLITTING_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.UPDATING_INTERVAL)
+            .setSPStrategy(SPStrategy.SBM)
+            ::partitionISP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
     void testPartitionISBMCompressedIndexSet(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
@@ -817,6 +837,24 @@ class PartitionTest {
     void testPartitionIDPIndexSetUpdating(double[] values, int[] indices) {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.INDEX_SET_UPDATING_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            ::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPKeySplitting(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, EC)
+            .setKeyStrategy(KeyStrategy.KEY_SPLITTING_INTERVAL)
+            .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            ::partitionIDP);
+    }
+
+    @ParameterizedTest
+    @MethodSource(value = {"testPartition"})
+    void testPartitionIDPIndexSetSplitting(double[] values, int[] indices) {
+        assertPartition(values, indices, new Partition(DP, QS2, EC)
+            .setKeyStrategy(KeyStrategy.INDEX_SET_SPLITTING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
             ::partitionIDP);
     }

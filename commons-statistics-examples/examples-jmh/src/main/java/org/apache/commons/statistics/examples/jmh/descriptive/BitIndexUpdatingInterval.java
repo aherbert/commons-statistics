@@ -17,7 +17,7 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * An {@link UpdatingInterval} backed by a fixed size of bits.
+ * An {@link UpdatingInterval} and {@link SplittingInterval} backed by a fixed size of bits.
  *
  * <p>This is a specialised class to implement a reduced API similar to a
  * {@link java.util.BitSet}. It uses no bounds range checks and supports only
@@ -31,7 +31,7 @@ package org.apache.commons.statistics.examples.jmh.descriptive;
  *
  * @since 1.1
  */
-final class BitIndexUpdatingInterval implements UpdatingInterval, IntervalAnalysis {
+final class BitIndexUpdatingInterval implements UpdatingInterval, SplittingInterval, IntervalAnalysis {
     /** All 64-bits bits set. */
     private static final long LONG_MASK = -1L;
     /** A bit shift to apply to an integer to divided by 64 (2^6). */
@@ -311,6 +311,43 @@ final class BitIndexUpdatingInterval implements UpdatingInterval, IntervalAnalys
         final int upper = right;
         right = previousIndex(ka - 1);
         return new BitIndexUpdatingInterval(data, offset, nextIndex(kb + 1), upper);
+    }
+
+    @Override
+    public boolean empty() {
+        // Empty when the interval is invalid. Signalled by a negative right bound.
+        return right < 0;
+    }
+
+    @Override
+    public SplittingInterval split(int ka, int kb) {
+        if (ka <= left) {
+            // No left interval
+            if (kb >= right) {
+                // No right interval
+                invalidate();
+            } else if (kb >= left){
+                // Update the left bound
+                left = nextIndex(kb + 1);
+            }
+            return null;
+        }
+        if (kb >= right) {
+            // No right interval.
+            // Find new right bound for the left-side.
+            final int r = ka <= right ? previousIndex(ka - 1) : right;
+            invalidate();
+            return new BitIndexUpdatingInterval(data, offset, left, r);
+        }
+        // Split
+        return (SplittingInterval) splitLeft(ka, kb);
+    }
+
+    /**
+     * Invalidate the interval and mark as empty.
+     */
+    private void invalidate() {
+        right = -1;
     }
 
     @Override

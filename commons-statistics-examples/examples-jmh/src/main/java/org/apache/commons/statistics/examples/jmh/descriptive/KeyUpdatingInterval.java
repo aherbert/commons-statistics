@@ -18,9 +18,9 @@
 package org.apache.commons.statistics.examples.jmh.descriptive;
 
 /**
- * An {@link UpdatingInterval} backed by an array of ordered keys.
+ * An {@link UpdatingInterval} and {@link SplittingInterval} backed by an array of ordered keys.
  */
-final class KeyUpdatingInterval implements UpdatingInterval {
+final class KeyUpdatingInterval implements UpdatingInterval, SplittingInterval {
     /** Size to use a scan of the keys when splitting instead of binary search.
      * Note binary search has an overhead on small size due to the random left/right
      * branching per iteration. It is much faster on very large sizes. */
@@ -179,10 +179,61 @@ final class KeyUpdatingInterval implements UpdatingInterval {
 
     /**
      * Return the current number of indices in the interval.
+     * This is undefined when {@link #empty()}.
      *
      * @return the size
      */
     int size() {
         return r - l + 1;
+    }
+
+    @Override
+    public boolean empty() {
+        // Empty when the interval is invalid. Signalled by a negative right index.
+        return r < 0;
+    }
+
+    @Override
+    public SplittingInterval split(int ka, int kb) {
+        if (ka <= left()) {
+            // No left interval
+            if (kb >= right()) {
+                // No right interval
+                invalidate();
+            } else if (kb >= left()){
+                // Update the left bound.
+                // Search using a scan on the assumption that kb is close to the end
+                // given that ka is less then the end.
+                int i = l;
+                do {
+                    ++i;
+                } while (keys[i] < kb);
+                l = i;
+            }
+            return null;
+        }
+        if (kb >= right()) {
+            // No right interval.
+            // Find new right bound for the left-side.
+            // Search using a scan on the assumption that ka is close to the end
+            // given that kb is greater then the end.
+            int i = r;
+            if (ka <= keys[i]) {
+                do {
+                    --i;
+                } while (keys[i] > ka);
+            }
+            invalidate();
+            return new KeyUpdatingInterval(keys, l, i);
+        }
+        // Split
+        return (SplittingInterval) splitLeft(ka, kb);
+    }
+
+    /**
+     * Invalidate the interval and mark as empty.
+     */
+    private void invalidate() {
+        r = -1;
     }
 }

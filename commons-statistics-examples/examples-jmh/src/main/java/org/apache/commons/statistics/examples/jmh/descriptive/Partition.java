@@ -510,8 +510,12 @@ final class Partition {
         COMPRESSED_INDEX_ITERATOR,
         /** Process using recursion with an {@link IndexSet}-based {@link UpdatingInterval}. */
         INDEX_SET_UPDATING_INTERVAL,
-        /** Sort unique keys and process using recursion with a {@link KeyUpdatingInterval}. */
-        KEY_UPDATING_INTERVAL;
+        /** Sort unique keys and process using recursion with an {@link UpdatingInterval}. */
+        KEY_UPDATING_INTERVAL,
+        /** Process using recursion with an {@link IndexSet}-based {@link SplittingInterval}. */
+        INDEX_SET_SPLITTING_INTERVAL,
+        /** Sort unique keys and process using recursion with a {@link SplittingInterval}. */
+        KEY_SPLITTING_INTERVAL;
     }
 
     /**
@@ -3632,7 +3636,14 @@ final class Partition {
             final UpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET_UPDATING_INTERVAL) {
-            final UpdatingInterval keys = IndexSet.of(k, n).interval();
+            final UpdatingInterval keys = BitIndexUpdatingInterval.of(k, n);
+            introselect(part, a, 0, right, keys, maxDepth);
+        } else if (keyStrategy == KeyStrategy.KEY_SPLITTING_INTERVAL) {
+            final int unique = Sorting.sortIndices(k, n);
+            final SplittingInterval keys = KeyUpdatingInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, maxDepth);
+        } else if (keyStrategy == KeyStrategy.INDEX_SET_SPLITTING_INTERVAL) {
+            final SplittingInterval keys = BitIndexUpdatingInterval.of(k, n);
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
@@ -4697,6 +4708,111 @@ final class Partition {
      * data[i < k] <= data[k] <= data[k < i]
      * }</pre>
      *
+     * <p>This function accepts a {@link SplittingInterval} of indices {@code k} that define the
+     * range of indices to partition. The {@link SplittingInterval} is split as
+     * partitioning divides the range.
+     *
+     * <p>Uses an introselect variant. The quickselect is provided as an argument; the
+     * fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param keys Interval of indices to partition (ordered).
+     * @param maxDepth Maximum depth for recursion.
+     */
+    // package-private for benchmarking
+    void introselect(SPEPartition part, double[] a, int left, int right,
+        SplittingInterval keys, int maxDepth) {
+        // Only one side requires recursion. The other side
+        // can remain within this function call.
+        int l = left;
+        int r = right;
+        SplittingInterval k = keys;
+        int ka = k.left();
+        int kb = k.right();
+        final int[] upper = {0};
+        while (true) {
+            // length - 1
+            final int n = r - l;
+
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2----------
+            //          ----------s4-----------
+            if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
+                edgeSelection.partition(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // Pick a pivot and partition
+            final int p0 = part.partition(a, l, r,
+                pivotingStrategy.pivotIndex(a, l, r, ka),
+                upper);
+            final int p1 = upper[0];
+
+            // Recursion to max depth
+            // Note: Here we possibly branch left and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set on either side.
+            //                   p0 p1
+            // |l|--|ka|--k----k--|P|------k--|kb|------|r|
+            //                 kb  |       ka
+            maxDepth--;
+            final SplittingInterval lk = k.split(p0, p1);
+            // Recurse left side if required
+            if (lk != null) {
+                // Avoid recursive method calls
+                if (k.empty()) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    kb = lk.right();
+                    k = lk;
+                    continue;
+                }
+                introselect(part, a, l, p0 - 1, lk, maxDepth);
+            }
+            if (k.empty()) {
+                // No right side
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+            // Continue on the right side
+            l = p1 + 1;
+            ka = k.left();
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their correctly
+     * sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
      * <p>This function accepts an {@link IndexIterator} of indices {@code k}; for
      * convenience the lower and upper indices of the current interval are passed as the
      * first index {@code ka} and last index {@code kb} of the closed interval of indices
@@ -5002,7 +5118,14 @@ final class Partition {
             final UpdatingInterval keys = KeyUpdatingInterval.of(k, unique);
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_SET_UPDATING_INTERVAL) {
-            final UpdatingInterval keys = IndexSet.of(k, n).interval();
+            final UpdatingInterval keys = BitIndexUpdatingInterval.of(k, n);
+            introselect(part, a, 0, right, keys, maxDepth);
+        } else if (keyStrategy == KeyStrategy.KEY_SPLITTING_INTERVAL) {
+            final int unique = Sorting.sortIndices(k, n);
+            final SplittingInterval keys = KeyUpdatingInterval.of(k, unique);
+            introselect(part, a, 0, right, keys, maxDepth);
+        } else if (keyStrategy == KeyStrategy.INDEX_SET_SPLITTING_INTERVAL) {
+            final SplittingInterval keys = BitIndexUpdatingInterval.of(k, n);
             introselect(part, a, 0, right, keys, maxDepth);
         } else if (keyStrategy == KeyStrategy.INDEX_ITERATOR) {
             final int unique = Sorting.sortIndices(k, n);
@@ -5498,6 +5621,133 @@ final class Partition {
             if (ka < l) {
                 ka = k.updateLeft(l);
             }
+        }
+    }
+
+    /**
+     * Partition the array such that indices {@code k} correspond to their
+     * correctly sorted value in the equivalent fully sorted array.
+     *
+     * <p>For all indices {@code k} and any index {@code i}:
+     *
+     * <pre>{@code
+     * data[i < k] <= data[k] <= data[k < i]
+     * }</pre>
+     *
+     * <p>This function accepts a {@link SplittingInterval} of indices {@code k} that define the
+     * range of indices to partition. The {@link SplittingInterval} is split as
+     * partitioning divides the range.
+     *
+     * <p>Uses an introselect variant. The dual pivot quickselect is provided as an argument;
+     * the fall-back on poor convergence of the quickselect is a heapselect.
+     *
+     * <p>Data are assumed to contain no {@code NaN} values; mixed signed zeros may be
+     * destroyed (the mixture updated during partitioning). The caller is responsible for
+     * counting a mixture of signed zeros and restoring them if required.
+     *
+     * @param part Partition function.
+     * @param a Values.
+     * @param left Lower bound of data (inclusive, assumed to be strictly positive).
+     * @param right Upper bound of data (inclusive, assumed to be strictly positive).
+     * @param k Interval of indices to partition (ordered).
+     * @param maxDepth Maximum depth for recursion.
+     */
+    // package-private for benchmarking
+    void introselect(DPPartition part, double[] a, int left, int right,
+        SplittingInterval k, int maxDepth) {
+        // If partitioning splits the interval then recursion is used for left and/or
+        // right sides and the middle remains within this function. If partitioning does
+        // not split the interval then it remains within this function.
+        int l = left;
+        int r = right;
+        int ka = k.left();
+        int kb = k.right();
+        final int[] upper = {0, 0, 0};
+        while (true) {
+            // length - 1
+            final int n = r - l;
+
+            if (n < minQuickSelectSize) {
+                // Sort selection on small data
+                sortSelectRange(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // It is possible to use heapselect when ka and kb are close to the same end
+            // |l|-----|ka|--------|kb|------|r|
+            //  ---------s2-----------
+            //          ----------s4-----------
+            if (Math.min(kb - l, r - ka) < edgeSelectConstant) {
+                edgeSelection.partition(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            if (maxDepth == 0) {
+                // Too much recursion
+                heapSelectRange(a, l, r, ka, kb);
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+
+            // Pick 2 pivots and partition
+            int p0 = dualPivotingStrategy.pivotIndex(a, l, r, upper);
+            p0 = part.partition(a, l, r, p0, upper[0], upper);
+            final int p1 = upper[0];
+            final int p2 = upper[1];
+            final int p3 = upper[2];
+
+            // Recursion to max depth
+            // Note: Here we possibly branch left, middle and right with multiple keys.
+            // It is possible that the partition has split the keys
+            // and the recursion proceeds with a reduced set in each region.
+            //                   p0 p1               p2 p3
+            // |l|--|ka|--k----k--|P|------k--|kb|----|P|----|r|
+            //                 kb  |      ka
+            // Search previous/next is bounded at ka/kb
+            maxDepth--;
+            SplittingInterval lk = k.split(p0, p1);
+            // Recurse left side if required
+            if (lk != null) {
+                // Avoid recursive method calls
+                if (k.empty()) {
+                    // Entirely on left side
+                    r = p0 - 1;
+                    kb = lk.right();
+                    k = lk;
+                    continue;
+                }
+                introselect(part, a, l, p0 - 1, lk, maxDepth);
+            }
+            if (k.empty()) {
+                // No middle/right side
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+            lk = k.split(p2, p3);
+            // Recurse middle side if required
+            if (lk != null) {
+                // Avoid recursive method calls
+                if (k.empty()) {
+                    // Entirely in middle side
+                    l = p1 + 1;
+                    r = p2 - 1;
+                    ka = lk.left();
+                    kb = lk.right();
+                    k = lk;
+                    continue;
+                }
+                introselect(part, a, p1 + 1, p2 - 1, lk, maxDepth);
+            }
+            if (k.empty()) {
+                // No right side
+                recursionConsumer.accept(maxDepth);
+                return;
+            }
+            // Continue right
+            l = p3 + 1;
+            ka = k.left();
         }
     }
 
