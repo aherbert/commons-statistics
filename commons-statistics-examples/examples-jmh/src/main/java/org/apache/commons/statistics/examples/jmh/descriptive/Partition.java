@@ -1624,7 +1624,6 @@ final class Partition {
      * @param v Value.
      * @return {@code this} for chaining
      */
-    // TODO - test variants of this in PartitionTest
     Partition setEdgeSelectStrategy(EdgeSelectStrategy v) {
         switch (v) {
         case ESH:
@@ -8095,11 +8094,6 @@ final class Partition {
         int kb = k.right();
         final int[] upper = {0, 0, 0};
         while (true) {
-            if (kb - ka < SORTSELECT_SIZE) {
-                // Switch to single-pivot mode with Floyd-Rivest sub-sampling
-                select(a, l, r, ka, kb);
-                return;
-            }
             // Select when ka and kb are close to the same end,
             // or the entire range is small
             // |l|-----|ka|--------|kb|------|r|
@@ -8107,6 +8101,11 @@ final class Partition {
             if (Math.min(kb - l, r - ka) < SORTSELECT_SIZE ||
                 n < (flags & SORTSELECT_MASK)) {
                 sortSelectRange(a, l, r, ka, kb);
+                return;
+            }
+            if (kb - ka < SORTSELECT_SIZE) {
+                // Switch to single-pivot mode with Floyd-Rivest sub-sampling
+                select(a, l, r, ka, kb);
                 return;
             }
             if (flags < 0) {

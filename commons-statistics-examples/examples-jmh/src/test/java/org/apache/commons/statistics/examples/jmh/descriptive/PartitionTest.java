@@ -34,6 +34,7 @@ import java.util.stream.Stream;
 import org.apache.commons.rng.UniformRandomProvider;
 import org.apache.commons.rng.simple.RandomSource;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.AdaptMode;
+import org.apache.commons.statistics.examples.jmh.descriptive.Partition.EdgeSelectStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.ExpandStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.KeyStrategy;
 import org.apache.commons.statistics.examples.jmh.descriptive.Partition.LinearStrategy;
@@ -616,8 +617,8 @@ class PartitionTest {
             new Partition(SP, QS).setKeyStrategy(KeyStrategy.SEQUENTIAL)::partitionSBM);
     }
 
-    // Introselect versions use heap select configuration.
-    // We test the different PairedKeyStrategy options alongside KeyStrategy options.
+    // Introselect versions use standard select configuration.
+    // We test the different PairedKeyStrategy/EdgeSelectStrategy options alongside KeyStrategy options.
 
     @ParameterizedTest
     @MethodSource(value = {"testPartition"})
@@ -625,6 +626,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
             .setSPStrategy(SPStrategy.SP)
             ::partitionISP);
@@ -636,6 +638,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_2)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH2)
             .setRecursionMultiple(5)
             .setRecursionConstant(1)
             .setSPStrategy(SPStrategy.BM)
@@ -648,6 +651,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.ORDERED_KEYS)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS_LEN)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS)
             .setRecursionMultiple(2)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
@@ -659,6 +663,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS2)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -669,6 +674,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -679,6 +685,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
             .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH2)
             .setRecursionMultiple(5)
             .setRecursionConstant(1)
             .setControlFlags(Partition.FLAG_RANDOM_SAMPLING)
@@ -692,6 +699,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.KEY_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -702,6 +710,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.UPDATING_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS2)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -712,6 +721,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.KEY_SPLITTING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -722,6 +732,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(SP, QS, EC, SU)
             .setKeyStrategy(KeyStrategy.INDEX_SET_SPLITTING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.UPDATING_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH)
             .setSPStrategy(SPStrategy.SBM)
             ::partitionISP);
     }
@@ -733,6 +744,7 @@ class PartitionTest {
             .setKeyStrategy(KeyStrategy.COMPRESSED_INDEX_SET)
             .setCompression(1)
             .setPairedKeyStrategy(PairedKeyStrategy.KEY_RANGE)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH2)
             .setRecursionMultiple(5)
             .setRecursionConstant(1)
             .setSPStrategy(SPStrategy.SBM)
@@ -802,6 +814,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.SCANNING_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.PAIRED_KEYS)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH)
             ::partitionIDP);
     }
 
@@ -811,6 +824,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.SEARCH_KEY_SEARCHABLE_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.TWO_KEYS)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH2)
             ::partitionIDP);
     }
 
@@ -820,6 +834,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.INDEX_SET)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS)
             ::partitionIDP);
     }
 
@@ -829,6 +844,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.KEY_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS2)
             ::partitionIDP);
     }
 
@@ -838,6 +854,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.INDEX_SET_UPDATING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH)
             ::partitionIDP);
     }
 
@@ -847,6 +864,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.KEY_SPLITTING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESH2)
             ::partitionIDP);
     }
 
@@ -856,6 +874,7 @@ class PartitionTest {
         assertPartition(values, indices, new Partition(DP, QS2, EC)
             .setKeyStrategy(KeyStrategy.INDEX_SET_SPLITTING_INTERVAL)
             .setPairedKeyStrategy(PairedKeyStrategy.SEARCHABLE_INTERVAL)
+            .setEdgeSelectStrategy(EdgeSelectStrategy.ESS)
             ::partitionIDP);
     }
 
