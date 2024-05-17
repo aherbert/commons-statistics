@@ -1349,13 +1349,15 @@ public class QuantilePerformance {
         /** Distribution mode. K indices can be distributed randomly or uniformly.
          * <ul>
          * <li>"random": distribute k indices randomly
-         * <li>"uniform": distribute k indices uniformly
+         * <li>"uniform": distribute k indices uniformly but with a random start point
          * <li>"index": Use a single index at k
          * <li>"single": Use a single index at k uniformly spaced points. This mode
          * first generates the spacing for the indices. Then samples from that spacing
          * using the configured repeats. Common usage of k=10 will have 10 samples with a
          * single index, each in a different position.
          * </ul>
+         * <p>If the mode ends with a "s" then the indices are sorted. For example "randoms"
+         * will sort the random indices.
          */
         @Param({"random"})
         private String mode;
@@ -1433,7 +1435,7 @@ public class QuantilePerformance {
 
             int index = 0;
             final int noOfSamples = super.size();
-            if ("random".equals(mode)) {
+            if (mode.startsWith("random")) {
                 // random mode creates a permutation of k indices in the length
                 if (k > 1) {
                     final int baseLength = getLength();
@@ -1460,7 +1462,7 @@ public class QuantilePerformance {
                         }
                     }
                 }
-            } else if ("uniform".equals(mode)) {
+            } else if (mode.startsWith("uniform")) {
                 // uniform indices with a random start
                 for (int i = 0; i < noOfSamples; i++) {
                     // Reduce length by the separation
@@ -1476,7 +1478,7 @@ public class QuantilePerformance {
                         indices[index++] = k1;
                     }
                 }
-            } else if ("single".equals(mode)) {
+            } else if (mode.startsWith("single")) {
                 // uniform indices with a random start
                 for (int i = 0; i < noOfSamples; i++) {
                     // Reduce length by the separation
@@ -1529,6 +1531,12 @@ public class QuantilePerformance {
                         k2[(j << 1) + 1] = k1[j] + s;
                     }
                     indices[i] = k2;
+                }
+            }
+            // Optionally sort
+            if (mode.endsWith("s")) {
+                for (int i = 0; i < indices.length; i++) {
+                    Arrays.sort(indices[i]);
                 }
             }
         }
