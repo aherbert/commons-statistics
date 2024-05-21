@@ -64,10 +64,10 @@ interface SplittingInterval {
      *
      * <pre>{@code
      * l-----------ka-kb----------r
-     *      r1 <--|     |--> l1
+     *      ra <--|     |--> lb
      *
-     * r1 < ka
-     * l1 > kb
+     * ra < ka
+     * lb > kb
      * }</pre>
      *
      * <p>If {@code ka <= left} the returned left interval is {@code null}.
