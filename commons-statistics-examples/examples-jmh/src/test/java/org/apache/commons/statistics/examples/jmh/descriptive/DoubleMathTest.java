@@ -61,6 +61,7 @@ class DoubleMathTest {
         builder.add(Arguments.of(-4, 4, 0));
         builder.add(Arguments.of(-0.0, -0.0, -0.0));
         builder.add(Arguments.of(-Double.MAX_VALUE, Double.MAX_VALUE, 0));
+        builder.add(Arguments.of(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE));
         return builder.build();
     }
 
