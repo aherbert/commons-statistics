@@ -33,6 +33,7 @@
   <suppress checks="LineLength" files=".*[/\\]test[/\\].*" />
   <suppress checks="UnnecessaryParentheses" files=".*[/\\]test[/\\].*" />
   <suppress checks="LineLength" files=".*[/\\]test.*.properties" />
+  <suppress checks="LineLength" files=".*[/\\]distribution[/\\]Zeta.java" lines="94-148" />
   <suppress checks="LocalFinalVariableName" files=".*[/\\]HypergeometricDistributionTest.java" />
   <suppress checks="ParameterNumber" files=".*[/\\]TTestTest.java" />
   <suppress checks="ParameterNumber" files=".*[/\\]OneWayAnovaTest.java" />
