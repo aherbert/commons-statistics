@@ -20,9 +20,13 @@ package org.apache.commons.statistics.distribution;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.stream.Stream;
 import org.apache.commons.numbers.fraction.BigFraction;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Test the {@link Zeta} function.
@@ -225,4 +229,42 @@ class ZetaTest {
         }
         Assertions.assertTrue(sum1 < sum2, "2k! / B_2k does not have lower combined error");
     }
+
+    @ParameterizedTest
+    @MethodSource
+    void testSumConvergence(double s, int a, int n) {
+        double sum = 0;
+        int k = 0;
+        //for (; k < n; k++) {
+        for (;; k++) {
+            final double t = Math.pow(a + k, -s);
+            final double updated = sum + t;
+            if (updated == sum) {
+                break;
+            }
+            sum = updated;
+        }
+        final double S = sum;
+        System.out.printf("%s, %d, %d == %s%n", s, a, k, sum);
+        Assertions.assertTrue(k < n, () -> S + " Ulp error: " + (Math.pow(a + n - 1, -s) / Math.ulp(S)));
+    }
+
+    static Stream<Arguments> testSumConvergence() {
+        // As a -> inf the sum requires more iterations as the terms are similar in magnitude
+        return Stream.of(
+            // Convergence from small a
+            Arguments.of(20, 1, 7),
+            Arguments.of(15, 1, 12),
+            Arguments.of(10, 1, 40),
+            Arguments.of(5, 1, 1553),
+            Arguments.of(20, 3, 18),
+            Arguments.of(15, 3, 34),
+            Arguments.of(10, 3, 118),
+            // Convergence from large a
+            Arguments.of(100, 1000, 420),
+            Arguments.of(50, 1000, 966)
+       );
+    }
+
+    // TODO - Test tail convergence when initialised at 0.5 for the sum
 }
