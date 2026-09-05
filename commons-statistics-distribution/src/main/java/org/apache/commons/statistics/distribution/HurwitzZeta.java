@@ -84,14 +84,14 @@ package org.apache.commons.statistics.distribution;
  *
  * @since 1.4
  */
-final class Zeta {
+final class HurwitzZeta {
     /**
      * Precomputed factors for {@code k}-th element of the tail function {@code T}.
      * Uses {@code 2k!} divided by Bernoulli number {@code B_2k}.
      * The table size is suitable for N ~ M ~ P for P-bits of precision (53 entries)
      * as stated in Johansson (2015) section 3.1.
      */
-    static final double[] F = {
+    private static final double[] F = {
         12.0, // 2! / (1 / 6)
         -720.0, // 4! / (-1 / 30)
         30240.0, // 6! / (1 / 42)
@@ -148,7 +148,7 @@ final class Zeta {
     };
 
     /** No instances. */
-    private Zeta() {}
+    private HurwitzZeta() {}
 
     /**
      * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
