@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.stream.Stream;
+import org.apache.commons.numbers.core.DD;
 import org.apache.commons.numbers.fraction.BigFraction;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -337,9 +338,6 @@ class HurwitzZetaTest {
      * @return zeta(s, a)
      */
     static double zeta3(double s, double a, int n, int m) {
-        // TODO: The method is very sensitive to the initial loop over N to create S
-        // The N cannot be too high if using an ascending sum.
-
         double sum = 0;
         // S : k in [0, n-1]
         for (int k = n; --k >= 0;) {
@@ -395,6 +393,82 @@ class HurwitzZetaTest {
     }
 
     /**
+     * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
+     *
+     * @param s Argument {@code s > 1}
+     * @param a Argument {@code a >= 1}
+     * @param n Argument {@code N}
+     * @param m Argument {@code M}
+     * @return zeta(s, a)
+     */
+    static double zeta4(double s, double a, int n, int m) {
+        // S : k in [0, n-1]
+        DD sum = DD.of(Math.pow(a, -s));
+        for (int k = 1; k < n; k++) {
+            // Allow early convergence
+            final double t = Math.pow(a + k, -s);
+            sum = sum.add(t);
+            if (t * 0x1p-16 < sum.lo()) {
+                // Rapidly converging
+                return sum.doubleValue();
+            }
+        }
+        final double apn = a + n;
+        // I : (a+n)^(1-s) / (s-1)
+        sum = sum.add(Math.pow(apn, 1 - s) / (s - 1));
+        // T
+        double p = Math.pow(apn, -s);
+        sum = sum.add(0.5 * p);
+
+        // The following recycles the power term p: (a+n)^-(2k-1+s).
+        // This incorporates the factor for T into the sum terms.
+        // This sets the first power as (a+n)^-(1+s) not (a+n)^-1.
+        // When s is large the loop exits before the rising factorial overflows.
+
+        // Rising factorial term.
+        double f = s;
+        // 2k - 1
+        double k2 = 1;
+        double tsum = 0;
+        for (int i = 0; i < m; i++) {
+            // p = (a+n)^-(2k-1+s)
+            p /= apn;
+            final double t = f * p / F[i];
+            tsum += t;
+            if (tsum + t == tsum) {
+                // additional terms too small
+                break;
+            }
+            p /= apn;
+            // f = s * (s+1) * (s+2) * ... * (s+2k-2)
+            f *= s + k2;
+            k2 += 1.0;
+            f *= s + k2;
+            k2 += 1.0;
+        }
+        return sum.add(tsum).doubleValue();
+    }
+
+    /**
+     * Compute the round-off of the sum of two numbers {@code a} and {@code b} using
+     * Dekker's two-sum algorithm. The values are required to be ordered by magnitude:
+     * {@code |a| >= |b|}.
+     *
+     * <p>If {@code a} is zero and {@code b} is non-zero the returned value is zero.
+     *
+     * @param a First part of sum.
+     * @param b Second part of sum.
+     * @param x Sum.
+     * @return the sum round-off
+     */
+    static double fastTwoSumLow(double a, double b, double x) {
+        // (x, xx) = a + b
+        // bVirtual = x - a
+        // xx = b - bVirtual
+        return b - (x - a);
+    }
+
+    /**
      * Compute the value of the Hurwitz zeta function {@code zeta(x, q)}.
      *
      * @param x Argument {@code x > 1}
@@ -428,6 +502,7 @@ class HurwitzZetaTest {
             a += 1.0;
             b = Math.pow(a, -x);
             s += b;
+            // abs required for convergence of negative q ???
             if (Math.abs(b / s) < 0x1.0p-53)
                 return s;
         }
@@ -629,14 +704,17 @@ class HurwitzZetaTest {
 //        final double v = zeta(s, a, n, m);
 //        final double v = zeta2(s, a, n, m);
       final double v = zeta3(s, a, n, m);
+//      final double v = zeta4(s, a, n, m);
 //        final double v = zetaCephes(s, a);
         TestUtils.assertEquals(z, v, DoubleTolerances.ulps(ulp));
     }
 
     // TODO:
-    // More reference data
     // Run each method and compute the mean and max ULP error
     // Try with different n and m
+
+    // TODO: The method is very sensitive to the initial loop over N to create S
+    // The N cannot be too high if using an ascending sum.
 
     static Stream<Arguments> testZeta() {
         // Reference values using Matlab R2026a Symbolic Math Toolbox
