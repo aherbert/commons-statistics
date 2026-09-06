@@ -20,20 +20,29 @@ package org.apache.commons.statistics.distribution;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.stream.Stream;
 import org.apache.commons.numbers.core.DD;
 import org.apache.commons.numbers.fraction.BigFraction;
+import org.apache.commons.statistics.distribution.ExtendedPrecisionTest.RMS;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvFileSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Test the {@link HurwitzZeta} function.
  */
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class HurwitzZetaTest {
+    private static final int[] M = new int[53];
+
     /**
      * Numerators of the even Bernoulli numbers {@code B_{2k}}.
      * Taken from:
@@ -225,6 +234,9 @@ class HurwitzZetaTest {
         2.023187114193683E84, // 106! / (36373903172617414408151820151593427169231298640581690038930816378281879873386202346572901 / 642)
     };
 
+    /** The sum of the squared ULP error for the zeta computation. */
+    private static final RMS RMS_ZETA = new RMS();
+
     /**
      * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
      *
@@ -247,7 +259,7 @@ class HurwitzZetaTest {
      * @param m Argument {@code M}
      * @return zeta(s, a)
      */
-    static double zeta(double s, double a, int n, int m) {
+    static double zeta1(double s, double a, int n, int m) {
         double sum = 0;
         // S : k in [0, n-1]
         for (int k = n; --k >= 0;) {
@@ -346,22 +358,19 @@ class HurwitzZetaTest {
             // machine epsilon of the ascending series sum.
             sum += Math.pow(a + k, -s);
         }
-//        // S : k in [0, n-1]
-//        double sum = Math.pow(a, -s);
-//        for (int k = 1; k < n; k++) {
-//            // Allow early convergence
-//            final double t = Math.pow(a + k, -s);
-//            sum += t;
-//            if (sum + t == sum) {
-//                return sum;
-//            }
-//        }
+
         final double apn = a + n;
         // I : (a+n)^(1-s) / (s-1)
         sum += Math.pow(apn, 1 - s) / (s - 1);
         // T
         double p = Math.pow(apn, -s);
-        sum += 0.5 * p;
+        //sum += 0.5 * p;
+
+//        double p = Math.pow(apn, -s);
+//        // I : (a+n)^(1-s) / (s-1)
+//        sum += p * apn / (s - 1);
+//        // T
+//        sum += 0.5 * p;
 
         // The following recycles the power term p: (a+n)^-(2k-1+s).
         // This incorporates the factor for T into the sum terms.
@@ -372,14 +381,17 @@ class HurwitzZetaTest {
         double f = s;
         // 2k - 1
         double k2 = 1;
+        double t0 = 0.5 * p;
         double tsum = 0;
-        for (int i = 0; i < m; i++) {
+        int i;
+        for (i = 0; i < m; i++) {
             // p = (a+n)^-(2k-1+s)
             p /= apn;
             final double t = f * p / F[i];
             tsum += t;
-            if (tsum + t == tsum) {
-                // additional terms too small
+//            if (tsum + t == tsum) {
+            if (Math.abs(t) <= sum * 0x1p-63) {
+                // additional terms too small to impact result
                 break;
             }
             p /= apn;
@@ -389,6 +401,8 @@ class HurwitzZetaTest {
             f *= s + k2;
             k2 += 1.0;
         }
+        tsum += t0;
+        //M[i]++;
         return sum + tsum;
     }
 
@@ -636,7 +650,7 @@ class HurwitzZetaTest {
         }
         final double T = sum;
         final double last = t;
-        System.out.printf("Arguments.of(%s, %d, %d, %d), // %s (%s)%n", s, a, n, k + 1, sum, sum * factor);
+//        System.out.printf("Arguments.of(%s, %s, %d, %d), // %s (%s)%n", s, a, n, k + 1, sum, sum * factor);
         Assertions.assertTrue(k < m, () -> T + " Ulp error: " + (last / Math.ulp(T)));
     }
 
@@ -671,7 +685,7 @@ class HurwitzZetaTest {
         }
         final double T = sum;
         final double last = t;
-        System.out.printf("Arguments.of(%s, %d, %d, %d), // %s%n", s, a, n, k + 1, sum);
+//        System.out.printf("Arguments.of(%s, %s, %d, %d), // %s%n", s, a, n, k + 1, sum);
         Assertions.assertTrue(k < m, () -> T + " Ulp error: " + (last / Math.ulp(T)));
     }
 
@@ -699,8 +713,8 @@ class HurwitzZetaTest {
     }
 
     @ParameterizedTest
-    @MethodSource(value="testZeta")
-    void testZeta(double s, double a, int n, int m, double z, int ulp) {
+    @MethodSource(value="testZetaNM")
+    void testZetaNM(double s, double a, int n, int m, double z, int ulp) {
 //        final double v = zeta(s, a, n, m);
 //        final double v = zeta2(s, a, n, m);
       final double v = zeta3(s, a, n, m);
@@ -709,33 +723,103 @@ class HurwitzZetaTest {
         TestUtils.assertEquals(z, v, DoubleTolerances.ulps(ulp));
     }
 
-    // TODO:
-    // Run each method and compute the mean and max ULP error
-    // Try with different n and m
+    @ParameterizedTest
+    @MethodSource(value="testZetaSpot")
+    void testZetaSpot(double s, double a, double z, int ulp) {
+      final double v = zeta3(s, a, 9, 15);
+        TestUtils.assertEquals(z, v, DoubleTolerances.ulps(ulp));
+    }
+
+    // TODO: Add more tests of the 4 different implementations to show the RMS
+
+    @ParameterizedTest
+    @Order(1)
+    @CsvFileSource(resources = "hurwitzzeta.csv")
+    void testZeta(double s, double a, BigDecimal expected) {
+        final double e = expected.doubleValue();
+        double x;
+        x = zeta1(s, a, 10, 15);
+        x = zeta2(s, a, 10, 15);
+        x = zeta3(s, a, 9, 50);
+        x = zeta4(s, a, 25, 25);
+        x = zetaCephes(s, a);
+        TestUtils.assertEquals(e, x, DoubleTolerances.ulps(1000));
+        ExtendedPrecisionTest.addError(x, expected, e, RMS_ZETA);
+    }
+
+    @Test
+    void testZetaPrecision() {
+        // Typical result:   max   385.7193  rms   50.7769
+        // zeta(10, 15)  : max   2.476065502468127  rms  0.6470582801991228
+        // zeta2(10, 15) : max   3.310488824305217  rms  0.7733898042593224
+        // zeta3(10, 15) : max   2.476065502468127  rms  0.6470582801991228
+        // zeta3(10, 15) : max   2.476065502468127  rms  0.6866191635950889 -> recycle power for I
+
+        // Try n in [5, 15]
+        // Original sum += 0.5 * p and compute tsum separately
+        // zeta3(5, 15) : max   max   19.7335748601873  rms  2.3528284545334297
+        // zeta3(6, 15) : max   2.584048726375457  rms  0.6236042604253214
+        // zeta3(7, 15) : max   2.791903146014771  rms  0.6499850930929966
+        // zeta3(8, 15) : max   2.580652115805773  rms  0.6312852837759164
+        // zeta3(9, 15) : max   3.060261764961949  rms  0.6644821802253738
+        // zeta3(10, 15) : max   2.476065502468127  rms  0.6470582801991228  <-- 
+        // zeta3(11, 15) : max   2.574807818152217  rms  0.6743187864622884
+        // zeta3(12, 15) : max   3.060261764961949  rms  0.6758368495156988
+        // zeta3(13, 15) : max   2.707378071179483  rms  0.6731103271921935
+        // zeta3(14, 15) : max   3.060261764961949  rms  0.6597055711502158
+        // zeta3(15, 15) : max   3.060261764961949  rms  0.6680125226098605
+
+        // Original compute tsum starting with 0.5 * p
+        // zeta3(7, 15) : max   2.791903146014771  rms  0.5876378678866944
+        // zeta3(8, 15) : max   2.580652115805773  rms  0.5749635153078054
+        // zeta3(9, 15) : max   2.508462271245726  rms  0.6134195774774032  <--
+        // zeta3(10, 15) : max   2.611701319779453  rms  0.5894364335923582
+        // zeta3(11, 15) : max   2.574807818152217  rms  0.6061356827584877
+        // zeta3(12, 15) : max   3.060261764961949  rms  0.6051882029820226
+
+        // TODO: Test again recycling the power
+
+        // zeta4(25, 25) : max   946.3101188878555  rms  60.79488870541468  -> ???
+        // zetaCephes    : max   9.776665608322459  rms  1.094288510174287
+        System.out.printf("max   %s  rms  %s%n", RMS_ZETA.getMax(), RMS_ZETA.getRMS());
+        for (int i=0; i<M.length; i++) {
+            if (M[i] != 0) {
+                System.out.printf("%d %d%n", i+1, M[i]);
+            }
+        }
+        ExtendedPrecisionTest.assertPrecision(RMS_ZETA, 400, 60);
+    }
 
     // TODO: The method is very sensitive to the initial loop over N to create S
     // The N cannot be too high if using an ascending sum.
 
-    static Stream<Arguments> testZeta() {
-        // Reference values using Matlab R2026a Symbolic Math Toolbox
-        //   vpa(hurwitzZeta(sym(s, 'f'), sym(a, 'f')))
-        // Note: The use of 'f' uses the floating-point conversion as N * 2^e
-        // where N is the mantissa and e is the exponent.
+    static Stream<Arguments> testZetaNM() {
+
 
         return Stream.of(
+            // TODO : add spot checks using maxima within its precision limit
+            // load("bffac");
+            // bfhzeta(bfloat(s), bfloat(a), 30)
+            Arguments.of(1.15991039287692, 8.20343510930023, 9, 15, 4.51104208933922130451950644136e0, 0),
+
+            // Reference values using Matlab R2026a Symbolic Math Toolbox
+            //   vpa(hurwitzZeta(sym(s, 'f'), sym(a, 'f')))
+            // Note: The use of 'f' uses the floating-point conversion as N * 2^e
+            // where N is the mantissa and e is the exponent.
+
             // High N & M do not increase precision
-            Arguments.of(2.345, 12.789, 53, 53, 0.0254390524135780630410689989495, 2),
+            Arguments.of(2.345, 12.789, 53, 53, 0.0254390524135780630410689989495, 3),
             Arguments.of(2.345, 12.789, 25, 25, 0.0254390524135780630410689989495, 2),
             Arguments.of(2.345, 12.789, 15, 15, 0.0254390524135780630410689989495, 1),
             Arguments.of(2.345, 12.789, 8, 8, 0.0254390524135780630410689989495, 1),
-            Arguments.of(1.345, 12.789, 53, 53, 1.2196695365743183226009917322, 0),
+            Arguments.of(1.345, 12.789, 53, 53, 1.2196695365743183226009917322, 1),
             Arguments.of(1.345, 12.789, 25, 25, 1.2196695365743183226009917322, 1),
             Arguments.of(1.345, 12.789, 15, 15, 1.2196695365743183226009917322, 0),
-            Arguments.of(1.345, 12.789, 8, 8, 1.2196695365743183226009917322, 0),
+            Arguments.of(1.345, 12.789, 8, 8, 1.2196695365743183226009917322, 1),
             Arguments.of(1.345, 1278.9, 53, 53, 0.245686258677206272154248922088, 2),
             Arguments.of(1.345, 1278.9, 25, 25, 0.245686258677206272154248922088, 1),
             Arguments.of(1.345, 1278.9, 15, 15, 0.245686258677206272154248922088, 0),
-            Arguments.of(1.345, 1278.9, 8, 8, 0.245686258677206272154248922088, 0),
+            Arguments.of(1.345, 1278.9, 8, 8, 0.245686258677206272154248922088, 1),
             Arguments.of(4.345, 28697.9, 53, 53, 0.000000000000000366539298049937530342298075842, 1),
             Arguments.of(4.345, 28697.9, 25, 25, 0.000000000000000366539298049937530342298075842, 1),
             Arguments.of(4.345, 28697.9, 15, 15, 0.000000000000000366539298049937530342298075842, 1),
@@ -757,7 +841,7 @@ class HurwitzZetaTest {
             Arguments.of(234.5, 17.89, 10, 10, 1.83179298527375942363255194085e-294, 0),
             // small s
             Arguments.of(1.00001, 1.789, 25, 25, 99999.7231466483928005870213366, 1),
-            Arguments.of(1.00001, 1.789, 10, 10, 99999.7231466483928005870213366, 0),
+            Arguments.of(1.00001, 1.789, 10, 10, 99999.7231466483928005870213366, 1),
             Arguments.of(1.00001, 17.89, 25, 25, 99997.1440070978817356297446315, 1),
             Arguments.of(1.00001, 17.89, 10, 10, 99997.1440070978817356297446315, 1),
             Arguments.of(1.00001, 1278562927.89, 25, 25, 99979.0331951153772621341875866, 0),
@@ -768,6 +852,39 @@ class HurwitzZetaTest {
             Arguments.of(1.0000000000000002, 17.89, 10, 10, 4503599627370493.14396697014348, 0),
             Arguments.of(1.0000000000000002, 1278562927.89, 25, 25, 4503599627370475.03099742881301, 0),
             Arguments.of(1.0000000000000002, 1278562927.89, 15, 15, 4503599627370475.03099742881301, 0)
+        );
+    }
+
+    static Stream<Arguments> testZetaSpot() {
+        return Stream.of(
+            // Spot checks using maxima within its precision limit range for (s, a)
+            // load("bffac");
+            // bfhzeta(bfloat(s), bfloat(a), 30);
+            Arguments.of(1.001, 3, 9.99077634929516400548962369402e2, 0),
+            Arguments.of(1.5, 4789, 2.89021565574206183713013018633e-2, 1),
+
+            // Reference values using Matlab R2026a Symbolic Math Toolbox
+            //   vpa(hurwitzZeta(sym(s, 'f'), sym(a, 'f')))
+            // Note: The use of 'f' uses the floating-point conversion as N * 2^e
+            // where N is the mantissa and e is the exponent.
+
+            Arguments.of(2.345, 12.789, 0.0254390524135780630410689989495, 1),
+            Arguments.of(1.345, 12.789, 1.2196695365743183226009917322, 1),
+            Arguments.of(1.345, 1278.9, 0.245686258677206272154248922088, 1),
+            Arguments.of(4.345, 28697.9, 0.000000000000000366539298049937530342298075842, 0),
+            Arguments.of(1.345, 1278562927.9, 0.00209103729002248575358360674936, 0),
+            // large s
+            Arguments.of(23.45, 12.789, 0.0000000000000000000000000134520611728481431909082787144, 0),
+            Arguments.of(23.45, 1278.9, 8.01879331040682555147782226582e-72, 1),
+            Arguments.of(23.45, 1278562927.9, 1.59541010013538002585127908428e-206, 1),
+            Arguments.of(234.5, 12.789, 2.7978232305220904641253847499e-260, 0),
+            Arguments.of(234.5, 17.89, 1.83179298527375942363255194085e-294, 0),
+            // small s
+            Arguments.of(1.00001, 1.789, 99999.7231466483928005870213366, 1),
+            Arguments.of(1.00001, 17.89, 99997.1440070978817356297446315, 1),
+            Arguments.of(1.00001, 1278562927.89, 99979.0331951153772621341875866, 1),
+            Arguments.of(1.0000000000000002, 1.789, 4503599627370495.72314713725233, 0),
+            Arguments.of(1.0000000000000002, 1278562927.89, 4503599627370475.03099742881301, 0)
         );
     }
 }
