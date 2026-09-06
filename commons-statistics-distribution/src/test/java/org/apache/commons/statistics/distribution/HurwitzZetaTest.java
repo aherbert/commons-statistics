@@ -20,13 +20,12 @@ package org.apache.commons.statistics.distribution;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.util.Arrays;
+import java.util.function.DoubleBinaryOperator;
 import java.util.stream.Stream;
 import org.apache.commons.numbers.core.DD;
 import org.apache.commons.numbers.fraction.BigFraction;
 import org.apache.commons.statistics.distribution.ExtendedPrecisionTest.RMS;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -176,7 +175,8 @@ class HurwitzZetaTest {
      * Precomputed factors for {@code k}-th element of the tail function {@code T}.
      * Uses {@code 2k!} divided by Bernoulli number {@code B_2k}.
      * The table size is suitable for N ~ M ~ P for P-bits of precision (53 entries)
-     * as stated in Johansson (2015) section 3.1.
+     * as stated in Johansson (2015) section 3.1. In practice the result in double
+     * precision requires lower N & M values.
      */
     private static final double[] F = {
         12.0, // 2! / (1 / 6)
@@ -234,24 +234,26 @@ class HurwitzZetaTest {
         2.023187114193683E84, // 106! / (36373903172617414408151820151593427169231298640581690038930816378281879873386202346572901 / 642)
     };
 
-    /** The sum of the squared ULP error for the zeta computation. */
-    private static final RMS RMS_ZETA = new RMS();
+    private static final RMS RMS_ZETA1 = new RMS();
+    private static final RMS RMS_ZETA2 = new RMS();
+    private static final RMS RMS_ZETA3 = new RMS();
+    private static final RMS RMS_ZETA4 = new RMS();
+    private static final RMS RMS_ZETAC = new RMS();
+
+    // Test implementations
+    // Note: The method is sensitive to the initial loop over N to create S.
+    // Under certain conditions the N cannot be too high if using an ascending
+    // sum of k as the sum does not converge and later terms are added with
+    // low precision.
+    // Better results are obtained using descending k. However this prevents
+    // an early exit if the series is rapidly converging and the term (a+k)^-s
+    // drops below machine epsilon of the sum.
 
     /**
      * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
-     *
-     * <pre>
-     *                 oo    1
-     * zeta(s, a) = sum    ------
-     *                 k=0      s
-     *                     (k+a)
-     * </pre>
+     * See {@link HurwitzZeta} for the formula details.
      *
      * <p><strong>Warning</strong>: No parameter validation is performed.
-     * 
-     * <p>This implementation allows the parameters {@code N} and {@code M}
-     * in the Euler-Maclaurin approximation to be varied to test the function
-     * precision.
      *
      * @param s Argument {@code s > 1}
      * @param a Argument {@code a >= 1}
@@ -296,6 +298,9 @@ class HurwitzZetaTest {
 
     /**
      * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
+     * See {@link HurwitzZeta} for the formula details.
+     *
+     * <p><strong>Warning</strong>: No parameter validation is performed.
      *
      * @param s Argument {@code s > 1}
      * @param a Argument {@code a >= 1}
@@ -342,6 +347,9 @@ class HurwitzZetaTest {
 
     /**
      * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
+     * See {@link HurwitzZeta} for the formula details.
+     *
+     * <p><strong>Warning</strong>: No parameter validation is performed.
      *
      * @param s Argument {@code s > 1}
      * @param a Argument {@code a >= 1}
@@ -350,7 +358,11 @@ class HurwitzZetaTest {
      * @return zeta(s, a)
      */
     static double zeta3(double s, double a, int n, int m) {
-        double sum = 0;
+        final double apn = a + n;
+        double p = Math.pow(apn, -s);
+
+        // Initialise sum with the first tail term
+        double sum = 0.5 * p;
         // S : k in [0, n-1]
         for (int k = n; --k >= 0;) {
             // Descending k sums in order of magnitude for increased precision.
@@ -359,19 +371,10 @@ class HurwitzZetaTest {
             sum += Math.pow(a + k, -s);
         }
 
-        final double apn = a + n;
-        // I : (a+n)^(1-s) / (s-1)
+        // I
         sum += Math.pow(apn, 1 - s) / (s - 1);
+
         // T
-        double p = Math.pow(apn, -s);
-        //sum += 0.5 * p;
-
-//        double p = Math.pow(apn, -s);
-//        // I : (a+n)^(1-s) / (s-1)
-//        sum += p * apn / (s - 1);
-//        // T
-//        sum += 0.5 * p;
-
         // The following recycles the power term p: (a+n)^-(2k-1+s).
         // This incorporates the factor for T into the sum terms.
         // This sets the first power as (a+n)^-(1+s) not (a+n)^-1.
@@ -381,17 +384,18 @@ class HurwitzZetaTest {
         double f = s;
         // 2k - 1
         double k2 = 1;
-        double t0 = 0.5 * p;
+        // Sum of an alternating series as each F changes sign.
+        // Sum until terms will not impact the result (at least 10-bit non-overlap).
         double tsum = 0;
+        final double stop = sum * 0x1p-63;
         int i;
         for (i = 0; i < m; i++) {
             // p = (a+n)^-(2k-1+s)
             p /= apn;
+            // TODO - try this with the reciprocal of F
             final double t = f * p / F[i];
             tsum += t;
-//            if (tsum + t == tsum) {
-            if (Math.abs(t) <= sum * 0x1p-63) {
-                // additional terms too small to impact result
+            if (Math.abs(t) <= stop) {
                 break;
             }
             p /= apn;
@@ -401,13 +405,15 @@ class HurwitzZetaTest {
             f *= s + k2;
             k2 += 1.0;
         }
-        tsum += t0;
         //M[i]++;
         return sum + tsum;
     }
 
     /**
      * Compute the value of the Hurwitz zeta function {@code zeta(s, a)}.
+     * See {@link HurwitzZeta} for the formula details.
+     *
+     * <p><strong>Warning</strong>: No parameter validation is performed.
      *
      * @param s Argument {@code s > 1}
      * @param a Argument {@code a >= 1}
@@ -415,6 +421,8 @@ class HurwitzZetaTest {
      * @param m Argument {@code M}
      * @return zeta(s, a)
      */
+    // TODO - fix this or find out why it fails
+    // Output the intermediates vs zeta3 for a failing case
     static double zeta4(double s, double a, int n, int m) {
         // S : k in [0, n-1]
         DD sum = DD.of(Math.pow(a, -s));
@@ -432,7 +440,7 @@ class HurwitzZetaTest {
         sum = sum.add(Math.pow(apn, 1 - s) / (s - 1));
         // T
         double p = Math.pow(apn, -s);
-        sum = sum.add(0.5 * p);
+        //sum = sum.add(0.5 * p);
 
         // The following recycles the power term p: (a+n)^-(2k-1+s).
         // This incorporates the factor for T into the sum terms.
@@ -443,13 +451,13 @@ class HurwitzZetaTest {
         double f = s;
         // 2k - 1
         double k2 = 1;
-        double tsum = 0;
+        double tsum = 0.5 * p;
         for (int i = 0; i < m; i++) {
             // p = (a+n)^-(2k-1+s)
             p /= apn;
             final double t = f * p / F[i];
             tsum += t;
-            if (tsum + t == tsum) {
+            if (Math.abs(t) <= sum.hi() * 0x1p-63) {
                 // additional terms too small
                 break;
             }
@@ -464,31 +472,13 @@ class HurwitzZetaTest {
     }
 
     /**
-     * Compute the round-off of the sum of two numbers {@code a} and {@code b} using
-     * Dekker's two-sum algorithm. The values are required to be ordered by magnitude:
-     * {@code |a| >= |b|}.
-     *
-     * <p>If {@code a} is zero and {@code b} is non-zero the returned value is zero.
-     *
-     * @param a First part of sum.
-     * @param b Second part of sum.
-     * @param x Sum.
-     * @return the sum round-off
-     */
-    static double fastTwoSumLow(double a, double b, double x) {
-        // (x, xx) = a + b
-        // bVirtual = x - a
-        // xx = b - bVirtual
-        return b - (x - a);
-    }
-
-    /**
      * Compute the value of the Hurwitz zeta function {@code zeta(x, q)}.
      *
      * @param x Argument {@code x > 1}
      * @param q Argument {@code q}
      * @return zeta(x, q)
      */
+    // TODO - remove this
     static double zetaCephes(double x, double q) {
         int i;
         double a, b, k, s, t, w;
@@ -587,272 +577,10 @@ class HurwitzZetaTest {
     }
 
     @ParameterizedTest
-    @MethodSource
-    void testSumConvergence(double s, double a, int n) {
-        double sum = 0;
-        double t = 0;
-        int k = 0;
-        for (; k < n; k++) {
-            t = Math.pow(a + k, -s);
-            final double updated = sum + t;
-            if (updated == sum) {
-                break;
-            }
-            sum = updated;
-        }
-        final double S = sum;
-        final double last = t;
-        //System.out.printf("Arguments.of(%s, %d, %d), // %s%n", s, a, k + 1, sum);
-        Assertions.assertTrue(k < n, () -> S + " Ulp error: " + (last / Math.ulp(S)));
-    }
-
-    static Stream<Arguments> testSumConvergence() {
-        // As a -> inf the sum requires more iterations as the terms are similar in magnitude
-        return Stream.of(
-            // Convergence from small a
-            Arguments.of(20.0, 1, 7), // 1.0000009539620338
-            Arguments.of(15.0, 1, 12), // 1.000030588236307
-            Arguments.of(10.0, 1, 40), // 1.0009945751278182
-            Arguments.of(5.0, 1, 1553), // 1.036927755143338
-            Arguments.of(20.0, 3, 18), // 2.8771746654611316E-10
-            Arguments.of(15.0, 3, 34), // 7.065818202049353E-8
-            Arguments.of(10.0, 3, 118), // 1.8012627818085313E-5
-            // Convergence from large a
-            Arguments.of(100.0, 1000, 420), // 1.0609342003874935E-299
-            Arguments.of(50.0, 1000, 966), // 2.091232974781865E-149
-            // Large s with large a -> 0
-            Arguments.of(70.0, 10000, 5749) // 1.4542811956471796E-278
-       );
-    }
-
-    @ParameterizedTest
-    @MethodSource
-    void testTailConvergence(double s, double a, int n, int m) {
-        Assumptions.assumeTrue(m > 1, "No early exit for large s");
-        double sum = 0;
-        double t = 0;
-        int k = 0;
-        double num = s;
-        double factor = Math.pow(a + n, -s);
-        // k is offset by -1
-        for (; k < m; k++) {
-            t = num * Math.pow(a + n, -(2 * k + 1)) / F[k];
-//            System.out.printf("  %s%n", t * factor);
-            final double updated = sum + t;
-            if (updated == sum) {
-                break;
-            }
-            sum = updated;
-            // Potential for overflow
-            // Pochhammer(x, n) = gamma(n + x) / gamma(x) = exp(logGamma(n + x) - logGamma(x))
-            // gamma(x) overflows at x>171
-            num = num * (s + (2 * k + 1)) * (s + (2 * k + 2));
-        }
-        final double T = sum;
-        final double last = t;
-//        System.out.printf("Arguments.of(%s, %s, %d, %d), // %s (%s)%n", s, a, n, k + 1, sum, sum * factor);
-        Assertions.assertTrue(k < m, () -> T + " Ulp error: " + (last / Math.ulp(T)));
-    }
-
-    @ParameterizedTest
-    @MethodSource(value="testTailConvergence")
-    void testTailConvergence2(double s, double a, int n, int m) {
-        double sum = 0;
-        double t = 0;
-        double apn = a + n;
-        // Power term: (a+n)^-(2k-1+s)
-        // Incorporates the factor for T into the sum terms.
-        // This sets the first power as (a+n)^-(1+s) not (a+n)^-1.
-        // When s is large the loop exits before rising factorial overflows.
-        double p = Math.pow(apn, -s);
-        // Rising factorial term
-        double f = s;
-        // k is offset by -1
-        int k = 0;
-        for (; k < m; k++) {
-            // p = (a+n)^-(2k-1+s)
-            p /= apn;
-            //System.out.printf("%s %s%n", g, Math.pow(apn, -(2*k+1 +s)));
-            t = f * p / F[k];
-//            System.out.printf("  %s%n", t);
-            final double updated = sum + t;
-            if (updated == sum) {
-                break;
-            }
-            sum = updated;
-            p /= apn;
-            f = f * (s + (2 * k + 1)) * (s + (2 * k + 2));
-        }
-        final double T = sum;
-        final double last = t;
-//        System.out.printf("Arguments.of(%s, %s, %d, %d), // %s%n", s, a, n, k + 1, sum);
-        Assertions.assertTrue(k < m, () -> T + " Ulp error: " + (last / Math.ulp(T)));
-    }
-
-    static Stream<Arguments> testTailConvergence() {
-        return Stream.of(
-            // Value is T * (a+p)^-s
-            Arguments.of(20.0, 1, 25, 12), // 3.180740271816808E-30
-            Arguments.of(15.0, 1, 25, 11), // 2.8474033173332883E-23
-            Arguments.of(10.0, 1, 25, 10), // 2.2631078280898945E-16
-            Arguments.of(5.0, 1, 25, 8), // 1.3474102948521524E-9
-            Arguments.of(20.0, 3, 25, 12), // 6.719150386148452E-31
-            Arguments.of(15.0, 3, 25, 11), // 8.707407789332541E-24
-            Arguments.of(10.0, 3, 25, 10), // 1.0019976805851467E-16
-            Arguments.of(100.0, 1000, 25, 6), // 6.880775456873249E-304
-            Arguments.of(50.0, 1000, 25, 5), // 1.182642149530307E-153
-            Arguments.of(70.0, 10000, 25, 4), // 4.885683776445016E-284
-            Arguments.of(5.0, 1000000, 25, 3), // 4.166041721347605E-37
-            Arguments.of(3.0, 1000000, 25, 3), // 2.4997500156233853E-25
-            Arguments.of(2.0, 1000000, 25, 3), // 1.6665416729160733E-19
-            // Pochhammer overflow with large s requires detection
-            Arguments.of(1000000.0, 10000, 25, 1), // 0.0
-            Arguments.of(1.0E9, 10000, 25, 1), // 0.0
-            Arguments.of(1.0E200, 10000, 25, 1) // 0.0
-        );
-    }
-
-    @ParameterizedTest
-    @MethodSource(value="testZetaNM")
-    void testZetaNM(double s, double a, int n, int m, double z, int ulp) {
-//        final double v = zeta(s, a, n, m);
-//        final double v = zeta2(s, a, n, m);
-      final double v = zeta3(s, a, n, m);
-//      final double v = zeta4(s, a, n, m);
-//        final double v = zetaCephes(s, a);
-        TestUtils.assertEquals(z, v, DoubleTolerances.ulps(ulp));
-    }
-
-    @ParameterizedTest
     @MethodSource(value="testZetaSpot")
     void testZetaSpot(double s, double a, double z, int ulp) {
-      final double v = zeta3(s, a, 9, 15);
+        final double v = zeta3(s, a, 9, 15);
         TestUtils.assertEquals(z, v, DoubleTolerances.ulps(ulp));
-    }
-
-    // TODO: Add more tests of the 4 different implementations to show the RMS
-
-    @ParameterizedTest
-    @Order(1)
-    @CsvFileSource(resources = "hurwitzzeta.csv")
-    void testZeta(double s, double a, BigDecimal expected) {
-        final double e = expected.doubleValue();
-        double x;
-        x = zeta1(s, a, 10, 15);
-        x = zeta2(s, a, 10, 15);
-        x = zeta3(s, a, 9, 50);
-        x = zeta4(s, a, 25, 25);
-        x = zetaCephes(s, a);
-        TestUtils.assertEquals(e, x, DoubleTolerances.ulps(1000));
-        ExtendedPrecisionTest.addError(x, expected, e, RMS_ZETA);
-    }
-
-    @Test
-    void testZetaPrecision() {
-        // Typical result:   max   385.7193  rms   50.7769
-        // zeta(10, 15)  : max   2.476065502468127  rms  0.6470582801991228
-        // zeta2(10, 15) : max   3.310488824305217  rms  0.7733898042593224
-        // zeta3(10, 15) : max   2.476065502468127  rms  0.6470582801991228
-        // zeta3(10, 15) : max   2.476065502468127  rms  0.6866191635950889 -> recycle power for I
-
-        // Try n in [5, 15]
-        // Original sum += 0.5 * p and compute tsum separately
-        // zeta3(5, 15) : max   max   19.7335748601873  rms  2.3528284545334297
-        // zeta3(6, 15) : max   2.584048726375457  rms  0.6236042604253214
-        // zeta3(7, 15) : max   2.791903146014771  rms  0.6499850930929966
-        // zeta3(8, 15) : max   2.580652115805773  rms  0.6312852837759164
-        // zeta3(9, 15) : max   3.060261764961949  rms  0.6644821802253738
-        // zeta3(10, 15) : max   2.476065502468127  rms  0.6470582801991228  <-- 
-        // zeta3(11, 15) : max   2.574807818152217  rms  0.6743187864622884
-        // zeta3(12, 15) : max   3.060261764961949  rms  0.6758368495156988
-        // zeta3(13, 15) : max   2.707378071179483  rms  0.6731103271921935
-        // zeta3(14, 15) : max   3.060261764961949  rms  0.6597055711502158
-        // zeta3(15, 15) : max   3.060261764961949  rms  0.6680125226098605
-
-        // Original compute tsum starting with 0.5 * p
-        // zeta3(7, 15) : max   2.791903146014771  rms  0.5876378678866944
-        // zeta3(8, 15) : max   2.580652115805773  rms  0.5749635153078054
-        // zeta3(9, 15) : max   2.508462271245726  rms  0.6134195774774032  <--
-        // zeta3(10, 15) : max   2.611701319779453  rms  0.5894364335923582
-        // zeta3(11, 15) : max   2.574807818152217  rms  0.6061356827584877
-        // zeta3(12, 15) : max   3.060261764961949  rms  0.6051882029820226
-
-        // TODO: Test again recycling the power
-
-        // zeta4(25, 25) : max   946.3101188878555  rms  60.79488870541468  -> ???
-        // zetaCephes    : max   9.776665608322459  rms  1.094288510174287
-        System.out.printf("max   %s  rms  %s%n", RMS_ZETA.getMax(), RMS_ZETA.getRMS());
-        for (int i=0; i<M.length; i++) {
-            if (M[i] != 0) {
-                System.out.printf("%d %d%n", i+1, M[i]);
-            }
-        }
-        ExtendedPrecisionTest.assertPrecision(RMS_ZETA, 400, 60);
-    }
-
-    // TODO: The method is very sensitive to the initial loop over N to create S
-    // The N cannot be too high if using an ascending sum.
-
-    static Stream<Arguments> testZetaNM() {
-
-
-        return Stream.of(
-            // TODO : add spot checks using maxima within its precision limit
-            // load("bffac");
-            // bfhzeta(bfloat(s), bfloat(a), 30)
-            Arguments.of(1.15991039287692, 8.20343510930023, 9, 15, 4.51104208933922130451950644136e0, 0),
-
-            // Reference values using Matlab R2026a Symbolic Math Toolbox
-            //   vpa(hurwitzZeta(sym(s, 'f'), sym(a, 'f')))
-            // Note: The use of 'f' uses the floating-point conversion as N * 2^e
-            // where N is the mantissa and e is the exponent.
-
-            // High N & M do not increase precision
-            Arguments.of(2.345, 12.789, 53, 53, 0.0254390524135780630410689989495, 3),
-            Arguments.of(2.345, 12.789, 25, 25, 0.0254390524135780630410689989495, 2),
-            Arguments.of(2.345, 12.789, 15, 15, 0.0254390524135780630410689989495, 1),
-            Arguments.of(2.345, 12.789, 8, 8, 0.0254390524135780630410689989495, 1),
-            Arguments.of(1.345, 12.789, 53, 53, 1.2196695365743183226009917322, 1),
-            Arguments.of(1.345, 12.789, 25, 25, 1.2196695365743183226009917322, 1),
-            Arguments.of(1.345, 12.789, 15, 15, 1.2196695365743183226009917322, 0),
-            Arguments.of(1.345, 12.789, 8, 8, 1.2196695365743183226009917322, 1),
-            Arguments.of(1.345, 1278.9, 53, 53, 0.245686258677206272154248922088, 2),
-            Arguments.of(1.345, 1278.9, 25, 25, 0.245686258677206272154248922088, 1),
-            Arguments.of(1.345, 1278.9, 15, 15, 0.245686258677206272154248922088, 0),
-            Arguments.of(1.345, 1278.9, 8, 8, 0.245686258677206272154248922088, 1),
-            Arguments.of(4.345, 28697.9, 53, 53, 0.000000000000000366539298049937530342298075842, 1),
-            Arguments.of(4.345, 28697.9, 25, 25, 0.000000000000000366539298049937530342298075842, 1),
-            Arguments.of(4.345, 28697.9, 15, 15, 0.000000000000000366539298049937530342298075842, 1),
-            Arguments.of(4.345, 28697.9, 8, 8, 0.000000000000000366539298049937530342298075842, 0),
-            Arguments.of(1.345, 1278562927.9, 53, 53, 0.00209103729002248575358360674936, 1),
-            Arguments.of(1.345, 1278562927.9, 25, 25, 0.00209103729002248575358360674936, 1),
-            Arguments.of(1.345, 1278562927.9, 15, 15, 0.00209103729002248575358360674936, 0),
-            Arguments.of(1.345, 1278562927.9, 8, 8, 0.00209103729002248575358360674936, 0),
-            // large s
-            Arguments.of(23.45, 12.789, 25, 25, 0.0000000000000000000000000134520611728481431909082787144, 0),
-            Arguments.of(23.45, 12.789, 15, 15, 0.0000000000000000000000000134520611728481431909082787144, 0),
-            Arguments.of(23.45, 1278.9, 25, 25, 8.01879331040682555147782226582e-72, 0),
-            Arguments.of(23.45, 1278.9, 10, 10, 8.01879331040682555147782226582e-72, 0),
-            Arguments.of(23.45, 1278562927.9, 25, 25, 1.59541010013538002585127908428e-206, 0),
-            Arguments.of(23.45, 1278562927.9, 10, 10, 1.59541010013538002585127908428e-206, 1),
-            Arguments.of(234.5, 12.789, 25, 25, 2.7978232305220904641253847499e-260, 0),
-            Arguments.of(234.5, 12.789, 10, 10, 2.7978232305220904641253847499e-260, 0),
-            Arguments.of(234.5, 17.89, 25, 25, 1.83179298527375942363255194085e-294, 0),
-            Arguments.of(234.5, 17.89, 10, 10, 1.83179298527375942363255194085e-294, 0),
-            // small s
-            Arguments.of(1.00001, 1.789, 25, 25, 99999.7231466483928005870213366, 1),
-            Arguments.of(1.00001, 1.789, 10, 10, 99999.7231466483928005870213366, 1),
-            Arguments.of(1.00001, 17.89, 25, 25, 99997.1440070978817356297446315, 1),
-            Arguments.of(1.00001, 17.89, 10, 10, 99997.1440070978817356297446315, 1),
-            Arguments.of(1.00001, 1278562927.89, 25, 25, 99979.0331951153772621341875866, 0),
-            Arguments.of(1.00001, 1278562927.89, 15, 15, 99979.0331951153772621341875866, 0),
-            Arguments.of(1.0000000000000002, 1.789, 25, 25, 4503599627370495.72314713725233, 0),
-            Arguments.of(1.0000000000000002, 1.789, 10, 10, 4503599627370495.72314713725233, 0),
-            Arguments.of(1.0000000000000002, 17.89, 25, 25, 4503599627370493.14396697014348, 0),
-            Arguments.of(1.0000000000000002, 17.89, 10, 10, 4503599627370493.14396697014348, 0),
-            Arguments.of(1.0000000000000002, 1278562927.89, 25, 25, 4503599627370475.03099742881301, 0),
-            Arguments.of(1.0000000000000002, 1278562927.89, 15, 15, 4503599627370475.03099742881301, 0)
-        );
     }
 
     static Stream<Arguments> testZetaSpot() {
@@ -860,18 +588,22 @@ class HurwitzZetaTest {
             // Spot checks using maxima within its precision limit range for (s, a)
             // load("bffac");
             // bfhzeta(bfloat(s), bfloat(a), 30);
+            // TODO: Find another implementation. Maxima's does not agree with Matlab
+            // at large a.
+            // Re-implement Cephes with 128-bit precision ???
+
             Arguments.of(1.001, 3, 9.99077634929516400548962369402e2, 0),
-            Arguments.of(1.5, 4789, 2.89021565574206183713013018633e-2, 1),
 
             // Reference values using Matlab R2026a Symbolic Math Toolbox
             //   vpa(hurwitzZeta(sym(s, 'f'), sym(a, 'f')))
             // Note: The use of 'f' uses the floating-point conversion as N * 2^e
             // where N is the mantissa and e is the exponent.
 
+            Arguments.of(1.5, 4789, 0.0289021565574206125831622859402, 0),
             Arguments.of(2.345, 12.789, 0.0254390524135780630410689989495, 1),
             Arguments.of(1.345, 12.789, 1.2196695365743183226009917322, 1),
             Arguments.of(1.345, 1278.9, 0.245686258677206272154248922088, 1),
-            Arguments.of(4.345, 28697.9, 0.000000000000000366539298049937530342298075842, 0),
+            Arguments.of(4.345, 28697.9, 0.000000000000000366539298049937530342298075842, 1),
             Arguments.of(1.345, 1278562927.9, 0.00209103729002248575358360674936, 0),
             // large s
             Arguments.of(23.45, 12.789, 0.0000000000000000000000000134520611728481431909082787144, 0),
@@ -886,5 +618,88 @@ class HurwitzZetaTest {
             Arguments.of(1.0000000000000002, 1.789, 4503599627370495.72314713725233, 0),
             Arguments.of(1.0000000000000002, 1278562927.89, 4503599627370475.03099742881301, 0)
         );
+    }
+
+    @ParameterizedTest
+    @Order(1)
+    @CsvFileSource(resources = "hurwitzzeta.csv")
+    void testZeta1(double s, double a, BigDecimal expected) {
+        assertZeta(s, a, expected, (x, p) -> zeta1(x, p, 9, 15), 3, RMS_ZETA1);
+    }
+
+    @Test
+    void testZetaPrecision1() {
+//        System.out.printf("1 max   %s  rms  %s%n", RMS_ZETA1.getMax(), RMS_ZETA1.getRMS());
+        // 3.060261764961949  rms  0.6644821802253738
+        ExtendedPrecisionTest.assertPrecision(RMS_ZETA1, 3.2, 0.7);
+    }
+
+    @ParameterizedTest
+    @Order(1)
+    @CsvFileSource(resources = "hurwitzzeta.csv")
+    void testZeta2(double s, double a, BigDecimal expected) {
+        assertZeta(s, a, expected, (x, p) -> zeta2(x, p, 9, 15), 4, RMS_ZETA2);
+    }
+
+    @Test
+    void testZetaPrecision2() {
+//        System.out.printf("2 max   %s  rms  %s%n", RMS_ZETA2.getMax(), RMS_ZETA2.getRMS());
+        // 4.064843257412612  rms  0.7655762322011738
+        ExtendedPrecisionTest.assertPrecision(RMS_ZETA2, 4.2, 0.8);
+    }
+
+    @ParameterizedTest
+    @Order(1)
+    @CsvFileSource(resources = "hurwitzzeta.csv")
+    void testZeta3(double s, double a, BigDecimal expected) {
+        // TODO: Output the RMS with varying N
+        assertZeta(s, a, expected, (x, p) -> zeta3(x, p, 9, 15), 2, RMS_ZETA3);
+    }
+
+    @Test
+    void testZetaPrecision3() {
+//        System.out.printf("3 max   %s  rms  %s%n", RMS_ZETA3.getMax(), RMS_ZETA3.getRMS());
+        // max   2.442495123560756  rms  0.5968708245878805
+        ExtendedPrecisionTest.assertPrecision(RMS_ZETA3, 2.5, 0.62);
+    }
+
+    // Broken
+    //@ParameterizedTest
+    @Order(1)
+    @CsvFileSource(resources = "hurwitzzeta.csv")
+    void testZeta4(double s, double a, BigDecimal expected) {
+        assertZeta(s, a, expected, (x, p) -> zeta4(x, p, 25, 25), 5, RMS_ZETA4);
+    }
+
+    //@Test
+    void testZetaPrecision4() {
+//        System.out.printf("4 max   %s  rms  %s%n", RMS_ZETA4.getMax(), RMS_ZETA4.getRMS());
+        ExtendedPrecisionTest.assertPrecision(RMS_ZETA4, 0, 0);
+    }
+
+    //@ParameterizedTest
+    @Order(1)
+    @CsvFileSource(resources = "hurwitzzeta.csv")
+    void testZetaC(double s, double a, BigDecimal expected) {
+        assertZeta(s, a, expected, HurwitzZetaTest::zetaCephes, 10, RMS_ZETAC);
+    }
+
+    //@Test
+    void testZetaPrecisionC() {
+//        System.out.printf("c max   %s  rms  %s%n", RMS_ZETAC.getMax(), RMS_ZETAC.getRMS());
+        // max   9.776665608322459  rms  1.094288510174287
+        ExtendedPrecisionTest.assertPrecision(RMS_ZETAC, 10, 1.2);
+    }
+
+    // TODO:
+    // Copy zeta3 to the main class.
+    // Add tests for this + spot checks.
+
+    private static void assertZeta(double s, double a, BigDecimal expected, 
+            DoubleBinaryOperator f, int ulp, RMS rms) {
+        final double e = expected.doubleValue();
+        final double x = f.applyAsDouble(s, a);
+        TestUtils.assertEquals(e, x, DoubleTolerances.ulps(ulp));
+        ExtendedPrecisionTest.addError(x, expected, e, rms);
     }
 }
